@@ -1,6 +1,36 @@
 <script setup lang="ts">
+import { onMounted, onUnmounted, watch } from 'vue';
 import AppSidebar from './components/layout/AppSidebar.vue';
 import AppHeader from './components/layout/AppHeader.vue';
+import { useDaemonStore } from './stores/daemon';
+import { useConfigStore } from './stores/config';
+
+const daemonStore = useDaemonStore();
+const configStore = useConfigStore();
+
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+function applyTheme(theme: string) {
+  const resolved = theme === 'system'
+    ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    : theme;
+  document.documentElement.setAttribute('data-theme', resolved);
+}
+
+onMounted(async () => {
+  await configStore.load();
+  applyTheme(configStore.config.theme);
+  daemonStore.fetchStatus();
+  pollTimer = setInterval(() => daemonStore.fetchStatus(), 10000);
+});
+
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer);
+});
+
+watch(() => configStore.config.theme, (theme) => {
+  applyTheme(theme);
+});
 </script>
 
 <template>
@@ -17,20 +47,19 @@ import AppHeader from './components/layout/AppHeader.vue';
 
 <style>
 :root {
-  --bg-primary: #1e1e1e;
-  --bg-secondary: #252526;
-  --bg-card: #2d2d2d;
-  --bg-hover: #383838;
-  --text-primary: #cccccc;
-  --text-secondary: #858585;
-  --accent: #569cd6;
-  --accent-hover: #6cb0f0;
-  --selection: #264f78;
-  --status-bar: #007acc;
+  --bg-primary: #1e2029;
+  --bg-secondary: #2d2d33;
+  --bg-card: #383840;
+  --bg-hover: #3d3d46;
+  --text-primary: #f0f0f0;
+  --text-secondary: #a2b0b4;
+  --accent: #cb1b21;
+  --accent-hover: #a51519;
+  --selection: rgba(203, 27, 33, 0.15);
   --success: #4ec9b0;
   --warning: #dcdcaa;
   --error: #f14c4c;
-  --border: #3e3e3e;
+  --border: #3d3d46;
 }
 
 [data-theme="light"] {
@@ -40,10 +69,9 @@ import AppHeader from './components/layout/AppHeader.vue';
   --bg-hover: #e5e7eb;
   --text-primary: #1f2937;
   --text-secondary: #6b7280;
-  --accent: #2563eb;
-  --accent-hover: #3b82f6;
-  --selection: #dbeafe;
-  --status-bar: #2563eb;
+  --accent: #cb1b21;
+  --accent-hover: #a51519;
+  --selection: rgba(203, 27, 33, 0.1);
   --success: #059669;
   --warning: #d97706;
   --error: #dc2626;
@@ -57,7 +85,7 @@ import AppHeader from './components/layout/AppHeader.vue';
 }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Poppins', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   font-size: 14px;
   line-height: 1.5;
   color: var(--text-primary);

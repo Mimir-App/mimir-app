@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import type { ActivityBlock, OdooProject, OdooTask } from '../../lib/types';
 import { useBlocksStore } from '../../stores/blocks';
+import { api } from '../../lib/api';
 
 const props = defineProps<{ block: ActivityBlock }>();
 const emit = defineEmits<{ close: [] }>();
@@ -15,12 +16,9 @@ const tasks = ref<OdooTask[]>([]);
 
 onMounted(async () => {
   try {
-    const { invoke } = await import('@tauri-apps/api/core');
-    projects.value = await invoke<OdooProject[]>('get_odoo_projects');
+    projects.value = await api.getOdooProjects() as OdooProject[];
     if (selectedProject.value) {
-      tasks.value = await invoke<OdooTask[]>('get_odoo_tasks', {
-        projectId: selectedProject.value,
-      });
+      tasks.value = await api.getOdooTasks(selectedProject.value) as OdooTask[];
     }
   } catch {
     // Silently handle — projects will be empty
@@ -32,10 +30,7 @@ async function onProjectChange() {
   tasks.value = [];
   if (selectedProject.value) {
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      tasks.value = await invoke<OdooTask[]>('get_odoo_tasks', {
-        projectId: selectedProject.value,
-      });
+      tasks.value = await api.getOdooTasks(selectedProject.value) as OdooTask[];
     } catch {
       // Silently handle
     }

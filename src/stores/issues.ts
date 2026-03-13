@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { GitLabIssue } from '../lib/types';
 import { computeIssueScore, sortByScore, groupByProject } from '../lib/scoring';
+import { api } from '../lib/api';
 
 export const useIssuesStore = defineStore('issues', () => {
   const issues = ref<GitLabIssue[]>([]);
@@ -34,8 +35,7 @@ export const useIssuesStore = defineStore('issues', () => {
     loading.value = true;
     error.value = null;
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      issues.value = await invoke<GitLabIssue[]>('get_issues');
+      issues.value = await api.getIssues() as GitLabIssue[];
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
     } finally {

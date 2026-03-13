@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { TimesheetEntry } from '../lib/types';
+import { api } from '../lib/api';
 
 export const useTimesheetsStore = defineStore('timesheets', () => {
   const entries = ref<TimesheetEntry[]>([]);
@@ -29,11 +30,10 @@ export const useTimesheetsStore = defineStore('timesheets', () => {
     loading.value = true;
     error.value = null;
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      entries.value = await invoke<TimesheetEntry[]>('get_timesheet_entries', {
-        dateFrom: from ?? dateFrom.value,
-        dateTo: to ?? dateTo.value,
-      });
+      entries.value = await api.getTimesheetEntries(
+        from ?? dateFrom.value,
+        to ?? dateTo.value,
+      ) as TimesheetEntry[];
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
     } finally {

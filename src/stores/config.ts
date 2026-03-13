@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import type { AppConfig } from '../lib/types';
+import { api } from '../lib/api';
 
 const DEFAULT_CONFIG: AppConfig = {
   daemon_port: 9477,
@@ -22,8 +23,7 @@ export const useConfigStore = defineStore('config', () => {
 
   async function load() {
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const result = await invoke<AppConfig>('get_config');
+      const result = await api.getConfig() as AppConfig;
       config.value = result;
       loaded.value = true;
     } catch {
@@ -33,21 +33,18 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   async function save(updates: Partial<AppConfig>) {
-    const { invoke } = await import('@tauri-apps/api/core');
     const newConfig = { ...config.value, ...updates };
-    await invoke('save_config', { config: newConfig });
+    await api.saveConfig(newConfig);
     config.value = newConfig;
   }
 
   async function setGitLabToken(token: string) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('store_credential', { service: 'gitlab', token });
+    await api.storeCredential('gitlab', token);
     config.value.gitlab_token_stored = true;
   }
 
   async function setOdooToken(token: string) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('store_credential', { service: 'odoo', token });
+    await api.storeCredential('odoo', token);
     config.value.odoo_token_stored = true;
   }
 

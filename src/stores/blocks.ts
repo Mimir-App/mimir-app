@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { ActivityBlock } from '../lib/types';
+import { api } from '../lib/api';
 
 export const useBlocksStore = defineStore('blocks', () => {
   const blocks = ref<ActivityBlock[]>([]);
@@ -24,9 +25,8 @@ export const useBlocksStore = defineStore('blocks', () => {
     loading.value = true;
     error.value = null;
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
       const d = date ?? selectedDate.value;
-      blocks.value = await invoke<ActivityBlock[]>('get_blocks', { date: d });
+      blocks.value = await api.getBlocks(d) as ActivityBlock[];
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
     } finally {
@@ -35,25 +35,27 @@ export const useBlocksStore = defineStore('blocks', () => {
   }
 
   async function confirmBlock(blockId: number) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('confirm_block', { blockId });
+    await api.confirmBlock(blockId);
     const block = blocks.value.find(b => b.id === blockId);
     if (block) block.status = 'confirmed';
   }
 
   async function updateBlock(blockId: number, updates: Partial<ActivityBlock>) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    await invoke('update_block', { blockId, updates });
+    await api.updateBlock(blockId, updates);
     const block = blocks.value.find(b => b.id === blockId);
     if (block) Object.assign(block, updates);
   }
 
+  async function deleteBlock(blockId: number) {
+    await api.deleteBlock(blockId);
+    blocks.value = blocks.value.filter(b => b.id !== blockId);
+  }
+
   async function syncToOdoo() {
-    const { invoke } = await import('@tauri-apps/api/core');
     const confirmedIds = blocks.value
       .filter(b => b.status === 'confirmed')
       .map(b => b.id);
-    await invoke('sync_blocks_to_odoo', { blockIds: confirmedIds });
+    await api.syncBlocks(confirmedIds);
     await fetchBlocks();
   }
 
@@ -68,6 +70,7 @@ export const useBlocksStore = defineStore('blocks', () => {
     fetchBlocks,
     confirmBlock,
     updateBlock,
+    deleteBlock,
     syncToOdoo,
   };
 });

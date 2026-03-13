@@ -9,6 +9,8 @@ from mimir_daemon.db import Database
 from mimir_daemon.config import DaemonConfig
 from mimir_daemon.platform.base import PlatformProvider, WindowInfo, SessionEvent
 from mimir_daemon.block_manager import BlockManager
+from mimir_daemon.integrations.registry import IntegrationRegistry
+from mimir_daemon.integrations.mock import MockTimesheetClient
 from mimir_daemon.poller import Poller
 from mimir_daemon.server import create_app
 
@@ -30,12 +32,19 @@ async def db(tmp_path):
 
 
 @pytest.fixture
-def app(db):
+def registry():
+    reg = IntegrationRegistry()
+    reg.set_timesheet_client(MockTimesheetClient())
+    return reg
+
+
+@pytest.fixture
+def app(db, registry):
     config = DaemonConfig(polling_interval=60)
     platform = MockPlatform()
     block_manager = BlockManager(db=db)
     poller = Poller(config=config, db=db, platform=platform, block_manager=block_manager)
-    return create_app(db=db, poller=poller)
+    return create_app(db=db, poller=poller, registry=registry)
 
 
 @pytest_asyncio.fixture
@@ -180,3 +189,81 @@ async def test_set_mode(client):
 
     resp = await client.post("/mode", json={"mode": "invalid"})
     assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_get_odoo_projects(client):
+    """GET /odoo/projects devuelve proyectos mock."""
+    resp = await client.get("/odoo/projects")
+    assert resp.status_code == 200
+    projects = resp.json()
+    assert len(projects) > 0
+    assert "id" in projects[0]
+    assert "name" in projects[0]
+
+
+@pytest.mark.asyncio
+async def test_get_odoo_tasks(client):
+    """GET /odoo/tasks/{id} devuelve tareas mock."""
+    resp = await client.get("/odoo/tasks/1")
+    assert resp.status_code == 200
+    tasks = resp.json()
+    assert len(tasks) > 0
+    assert tasks[0]["project_id"] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_odoo_tasks_empty(client):
+    """GET /odoo/tasks/{id} devuelve lista vacia si no hay tareas."""
+    resp = await client.get("/odoo/tasks/999")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+@pytest.mark.asyncio
+async def test_sync_blocks_success(client, db):
+    """POST /blocks/sync sincroniza bloques con proyecto asignado."""
+    now = datetime.now(timezone.utc).isoformat()
+    block_id = await db.create_block(
+        start_time=now, end_time=now, duration_minutes=60,
+        app_name="code", status="confirmed",
+    )
+    await db.update_block(block_id, odoo_project_id=1, odoo_task_id=101,
+                          user_description="Desarrollo daemon")
+
+    resp = await client.post("/blocks/sync", json={"block_ids": [block_id]})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["synced"] == 1
+    assert len(data["errors"]) == 0
+
+    block = await db.get_block_by_id(block_id)
+    assert block["status"] == "synced"
+    assert block["odoo_entry_id"] is not None
+
+
+@pytest.mark.asyncio
+async def test_sync_blocks_no_project(client, db):
+    """POST /blocks/sync falla si el bloque no tiene proyecto."""
+    now = datetime.now(timezone.utc).isoformat()
+    block_id = await db.create_block(
+        start_time=now, end_time=now, duration_minutes=30,
+        app_name="code", status="confirmed",
+    )
+
+    resp = await client.post("/blocks/sync", json={"block_ids": [block_id]})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["synced"] == 0
+    assert len(data["errors"]) == 1
+
+    block = await db.get_block_by_id(block_id)
+    assert block["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_get_odoo_entries(client):
+    """GET /odoo/entries devuelve entradas en el rango."""
+    resp = await client.get("/odoo/entries?from=2026-03-01&to=2026-03-31")
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)

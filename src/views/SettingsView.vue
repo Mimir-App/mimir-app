@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useConfigStore } from '../stores/config';
+import { useDaemonStore } from '../stores/daemon';
 
 const configStore = useConfigStore();
+const daemonStore = useDaemonStore();
 const gitlabToken = ref('');
 const odooToken = ref('');
 const saving = ref(false);
 const message = ref('');
+const messageType = ref<'success' | 'error'>('success');
+const connectionResult = ref<'ok' | 'fail' | null>(null);
 
 onMounted(() => {
   configStore.load();
@@ -27,12 +31,20 @@ async function saveConfig() {
       odooToken.value = '';
     }
 
-    message.value = 'Configuración guardada';
+    message.value = 'Configuracion guardada';
+    messageType.value = 'success';
   } catch (e) {
     message.value = `Error: ${e}`;
+    messageType.value = 'error';
   } finally {
     saving.value = false;
   }
+}
+
+async function testConnection() {
+  connectionResult.value = null;
+  const ok = await daemonStore.healthCheck();
+  connectionResult.value = ok ? 'ok' : 'fail';
 }
 </script>
 
@@ -46,6 +58,26 @@ async function saveConfig() {
           <span>Puerto</span>
           <input type="number" v-model.number="configStore.config.daemon_port" />
         </label>
+        <div class="field">
+          <span>Conexion</span>
+          <div class="connection-test">
+            <button type="button" class="btn btn-secondary btn-sm" @click="testConnection" :disabled="daemonStore.checking">
+              {{ daemonStore.checking ? 'Probando...' : 'Probar conexion' }}
+            </button>
+            <span v-if="connectionResult === 'ok'" class="conn-ok">Conectado — {{ daemonStore.statusText }}</span>
+            <span v-else-if="connectionResult === 'fail'" class="conn-fail">No se pudo conectar</span>
+            <span v-else-if="daemonStore.connected" class="conn-ok">{{ daemonStore.statusText }}</span>
+            <span v-else class="conn-fail">Desconectado</span>
+          </div>
+        </div>
+        <div class="field" v-if="daemonStore.connected">
+          <span>Estado</span>
+          <div class="daemon-info">
+            <span class="mode-badge" :class="daemonStore.status.mode">{{ daemonStore.modeLabel }}</span>
+            <span class="info-text">{{ daemonStore.status.blocks_today }} bloques hoy</span>
+            <span class="info-text">Uptime: {{ Math.floor(daemonStore.status.uptime_seconds / 60) }}min</span>
+          </div>
+        </div>
       </fieldset>
 
       <!-- GitLab -->
@@ -58,7 +90,7 @@ async function saveConfig() {
         <label class="field">
           <span>Token</span>
           <input type="password" v-model="gitlabToken"
-            :placeholder="configStore.config.gitlab_token_stored ? '••••• (guardado)' : 'Personal Access Token'" />
+            :placeholder="configStore.config.gitlab_token_stored ? '***** (guardado)' : 'Personal Access Token'" />
         </label>
       </fieldset>
 
@@ -70,7 +102,7 @@ async function saveConfig() {
           <input type="url" v-model="configStore.config.odoo_url" placeholder="https://odoo.example.com" />
         </label>
         <label class="field">
-          <span>Versión</span>
+          <span>Version</span>
           <select v-model="configStore.config.odoo_version">
             <option value="v11">v11 (XMLRPC)</option>
             <option value="v16">v16 (OAuth REST)</option>
@@ -85,9 +117,9 @@ async function saveConfig() {
           <input type="text" v-model="configStore.config.odoo_username" />
         </label>
         <label class="field">
-          <span>Contraseña / Token</span>
+          <span>Contrasena / Token</span>
           <input type="password" v-model="odooToken"
-            :placeholder="configStore.config.odoo_token_stored ? '••••• (guardado)' : 'Contraseña o API key'" />
+            :placeholder="configStore.config.odoo_token_stored ? '***** (guardado)' : 'Contrasena o API key'" />
         </label>
       </fieldset>
 
@@ -116,7 +148,7 @@ async function saveConfig() {
         <button type="submit" class="btn btn-primary" :disabled="saving">
           {{ saving ? 'Guardando...' : 'Guardar' }}
         </button>
-        <span v-if="message" class="save-message">{{ message }}</span>
+        <span v-if="message" class="save-message" :class="messageType">{{ message }}</span>
       </div>
     </form>
   </div>
@@ -164,6 +196,58 @@ async function saveConfig() {
   font-size: 13px;
 }
 
+.connection-test {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.conn-ok {
+  color: var(--success);
+  font-size: 12px;
+}
+
+.conn-fail {
+  color: var(--error);
+  font-size: 12px;
+}
+
+.daemon-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.mode-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.mode-badge.active {
+  background: rgba(78, 201, 176, 0.15);
+  color: var(--success);
+}
+
+.mode-badge.silent {
+  background: rgba(220, 220, 170, 0.15);
+  color: var(--warning);
+}
+
+.mode-badge.paused {
+  background: rgba(241, 76, 76, 0.15);
+  color: var(--error);
+}
+
+.info-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .form-actions {
   display: flex;
   align-items: center;
@@ -180,6 +264,11 @@ async function saveConfig() {
   transition: all 0.15s;
 }
 
+.btn-sm {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
 .btn-primary {
   background: var(--accent);
   color: white;
@@ -189,12 +278,29 @@ async function saveConfig() {
   background: var(--accent-hover);
 }
 
+.btn-secondary {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
 .btn:disabled {
   opacity: 0.5;
 }
 
 .save-message {
   font-size: 13px;
+}
+
+.save-message.success {
   color: var(--success);
+}
+
+.save-message.error {
+  color: var(--error);
 }
 </style>

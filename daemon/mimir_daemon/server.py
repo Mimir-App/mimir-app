@@ -8,16 +8,24 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .db import Database
+from .integrations.base import TimesheetEntryData
+from .integrations.registry import IntegrationRegistry
 from .poller import Poller
 
 logger = logging.getLogger(__name__)
 
 
-def create_app(db: Database, poller: Poller, version: str = "0.1.0") -> FastAPI:
+def create_app(
+    db: Database,
+    poller: Poller,
+    registry: IntegrationRegistry | None = None,
+    version: str = "0.1.0",
+) -> FastAPI:
     """Crea la aplicacion FastAPI."""
 
     app = FastAPI(title="Mimir Daemon", version=version)
     start_time = datetime.now(timezone.utc)
+    _registry = registry or IntegrationRegistry()
 
     # CORS para que Tauri pueda conectarse
     app.add_middleware(
@@ -113,10 +121,55 @@ def create_app(db: Database, poller: Poller, version: str = "0.1.0") -> FastAPI:
 
     @app.post("/blocks/sync")
     async def sync_blocks(req: SyncRequest) -> dict:
-        # TODO: integracion con Odoo (Fase 3)
+        """Sincroniza bloques confirmados con Odoo."""
+        client = _registry.timesheet
+        if not client:
+            raise HTTPException(503, "No hay cliente de timesheet configurado")
+
+        synced = 0
+        errors = []
         for block_id in req.block_ids:
-            await db.update_block(block_id, status="synced")
-        return {"synced": len(req.block_ids)}
+            block = await db.get_block_by_id(block_id)
+            if not block:
+                errors.append({"block_id": block_id, "error": "No encontrado"})
+                continue
+
+            if not block.get("odoo_project_id"):
+                errors.append({"block_id": block_id, "error": "Sin proyecto Odoo asignado"})
+                await db.update_block(block_id, status="error", sync_error="Sin proyecto Odoo asignado")
+                continue
+
+            description = (
+                block.get("user_description")
+                or block.get("ai_description")
+                or f"{block.get('app_name', '')} — {block.get('window_title', '')}"
+            )
+
+            entry = TimesheetEntryData(
+                date=block["start_time"][:10],
+                project_id=block["odoo_project_id"],
+                task_id=block.get("odoo_task_id"),
+                description=description,
+                hours=round(block["duration_minutes"] / 60, 2),
+            )
+
+            try:
+                remote_id = await client.create_entry(entry)
+                await db.update_block(
+                    block_id,
+                    status="synced",
+                    odoo_entry_id=remote_id,
+                    sync_error=None,
+                )
+                synced += 1
+                logger.info("Bloque %d sincronizado -> Odoo entry %d", block_id, remote_id)
+            except Exception as e:
+                error_msg = str(e)
+                errors.append({"block_id": block_id, "error": error_msg})
+                await db.update_block(block_id, status="error", sync_error=error_msg)
+                logger.error("Error sincronizando bloque %d: %s", block_id, error_msg)
+
+        return {"synced": synced, "errors": errors}
 
     @app.delete("/blocks/{block_id}")
     async def delete_block(block_id: int) -> dict:
@@ -126,25 +179,31 @@ def create_app(db: Database, poller: Poller, version: str = "0.1.0") -> FastAPI:
         await db.delete_block(block_id)
         return {"status": "deleted"}
 
-    # --- Odoo (stubs) ---
+    # --- Odoo ---
 
     @app.get("/odoo/projects")
     async def get_odoo_projects() -> list:
-        # TODO: implementar con integracion Odoo (Fase 3)
-        return []
+        client = _registry.timesheet
+        if not client:
+            return []
+        return await client.get_projects()
 
     @app.get("/odoo/tasks/{project_id}")
     async def get_odoo_tasks(project_id: int) -> list:
-        # TODO: implementar con integracion Odoo (Fase 3)
-        return []
+        client = _registry.timesheet
+        if not client:
+            return []
+        return await client.get_tasks(project_id)
 
     @app.get("/odoo/entries")
     async def get_odoo_entries(
         date_from: str = Query(alias="from"),
         date_to: str = Query(alias="to"),
     ) -> list:
-        # TODO: implementar con integracion Odoo (Fase 3)
-        return []
+        client = _registry.timesheet
+        if not client:
+            return []
+        return await client.get_entries(date_from, date_to)
 
     # --- GitLab (stubs) ---
 

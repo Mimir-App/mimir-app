@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { DaemonStatus, DaemonMode } from '../lib/types';
+import { api } from '../lib/api';
 
 export const useDaemonStore = defineStore('daemon', () => {
   const status = ref<DaemonStatus>({
@@ -14,6 +15,7 @@ export const useDaemonStore = defineStore('daemon', () => {
 
   const connected = ref(false);
   const error = ref<string | null>(null);
+  const checking = ref(false);
 
   const statusClass = computed(() =>
     connected.value ? 'connected' : 'disconnected'
@@ -34,8 +36,7 @@ export const useDaemonStore = defineStore('daemon', () => {
 
   async function fetchStatus() {
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      const result = await invoke<DaemonStatus>('get_daemon_status');
+      const result = await api.getDaemonStatus() as DaemonStatus;
       status.value = result;
       connected.value = true;
       error.value = null;
@@ -45,10 +46,28 @@ export const useDaemonStore = defineStore('daemon', () => {
     }
   }
 
+  async function healthCheck(): Promise<boolean> {
+    checking.value = true;
+    try {
+      const ok = await api.healthCheck();
+      connected.value = ok;
+      if (ok) {
+        error.value = null;
+        await fetchStatus();
+      }
+      return ok;
+    } catch (e) {
+      connected.value = false;
+      error.value = e instanceof Error ? e.message : String(e);
+      return false;
+    } finally {
+      checking.value = false;
+    }
+  }
+
   async function setMode(mode: DaemonMode) {
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      await invoke('set_daemon_mode', { mode });
+      await api.setDaemonMode(mode);
       status.value.mode = mode;
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
@@ -59,10 +78,12 @@ export const useDaemonStore = defineStore('daemon', () => {
     status,
     connected,
     error,
+    checking,
     statusClass,
     statusText,
     modeLabel,
     fetchStatus,
+    healthCheck,
     setMode,
   };
 });

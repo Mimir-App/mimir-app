@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import type { ActivityBlock } from '../../lib/types';
 import { useBlocksStore } from '../../stores/blocks';
 import SyncStatusBadge from '../shared/SyncStatusBadge.vue';
 import ConfidenceBadge from '../shared/ConfidenceBadge.vue';
+import BlockEditor from './BlockEditor.vue';
 
 const props = defineProps<{ block: ActivityBlock }>();
 const blocksStore = useBlocksStore();
+const editing = ref(false);
 
 const startTime = computed(() => {
   const d = new Date(props.block.start_time);
@@ -21,7 +23,7 @@ const endTime = computed(() => {
 const duration = computed(() => {
   const mins = props.block.duration_minutes;
   const h = Math.floor(mins / 60);
-  const m = mins % 60;
+  const m = Math.round(mins % 60);
   return h > 0 ? `${h}h${m.toString().padStart(2, '0')}m` : `${m}m`;
 });
 
@@ -29,8 +31,16 @@ const description = computed(() =>
   props.block.user_description ?? props.block.ai_description ?? '—'
 );
 
+const canEdit = computed(() =>
+  props.block.status !== 'synced'
+);
+
 function confirm() {
   blocksStore.confirmBlock(props.block.id);
+}
+
+function remove() {
+  blocksStore.deleteBlock(props.block.id);
 }
 </script>
 
@@ -52,15 +62,36 @@ function confirm() {
     <td>{{ block.odoo_project_name ?? '—' }}</td>
     <td>{{ block.odoo_task_name ?? '—' }}</td>
     <td><SyncStatusBadge :status="block.status" /></td>
-    <td>
+    <td class="col-actions">
       <button
         v-if="block.status === 'auto'"
-        class="btn-sm"
+        class="btn-sm btn-confirm"
         @click="confirm"
         title="Confirmar bloque"
       >
         ✓
       </button>
+      <button
+        v-if="canEdit"
+        class="btn-sm btn-edit"
+        @click="editing = !editing"
+        title="Editar bloque"
+      >
+        ✎
+      </button>
+      <button
+        v-if="canEdit"
+        class="btn-sm btn-delete"
+        @click="remove"
+        title="Eliminar bloque"
+      >
+        ✕
+      </button>
+    </td>
+  </tr>
+  <tr v-if="editing" class="editor-row">
+    <td colspan="9">
+      <BlockEditor :block="block" @close="editing = false" />
     </td>
   </tr>
 </template>
@@ -105,17 +136,49 @@ function confirm() {
   white-space: nowrap;
 }
 
-.btn-sm {
-  background: var(--accent);
-  color: white;
-  border: none;
-  border-radius: 3px;
-  padding: 2px 8px;
-  cursor: pointer;
-  font-size: 12px;
+.col-actions {
+  white-space: nowrap;
 }
 
-.btn-sm:hover {
-  background: var(--accent-hover);
+.btn-sm {
+  border: none;
+  border-radius: 3px;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 12px;
+  margin-right: 2px;
+}
+
+.btn-confirm {
+  background: var(--success);
+  color: white;
+}
+
+.btn-confirm:hover {
+  opacity: 0.85;
+}
+
+.btn-edit {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.btn-edit:hover {
+  background: var(--bg-hover);
+}
+
+.btn-delete {
+  background: transparent;
+  color: var(--error);
+}
+
+.btn-delete:hover {
+  background: rgba(241, 76, 76, 0.15);
+}
+
+.editor-row td {
+  padding: 0 8px 8px;
+  border-bottom: 1px solid var(--border);
 }
 </style>

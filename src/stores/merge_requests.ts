@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { GitLabMergeRequest } from '../lib/types';
 import { computeMRScore, sortByScore, groupByProject } from '../lib/scoring';
+import { api } from '../lib/api';
 
 export const useMergeRequestsStore = defineStore('merge_requests', () => {
   const mergeRequests = ref<GitLabMergeRequest[]>([]);
@@ -34,8 +35,7 @@ export const useMergeRequestsStore = defineStore('merge_requests', () => {
     loading.value = true;
     error.value = null;
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      mergeRequests.value = await invoke<GitLabMergeRequest[]>('get_merge_requests');
+      mergeRequests.value = await api.getMergeRequests() as GitLabMergeRequest[];
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
     } finally {

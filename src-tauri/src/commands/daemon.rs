@@ -14,6 +14,11 @@ pub async fn get_daemon_status() -> Result<DaemonStatus, String> {
 }
 
 #[tauri::command]
+pub async fn daemon_health_check() -> Result<bool, String> {
+    Ok(get_client().health_check().await)
+}
+
+#[tauri::command]
 pub async fn set_daemon_mode(mode: String) -> Result<(), String> {
     #[derive(serde::Serialize)]
     struct ModeReq { mode: String }
@@ -32,7 +37,12 @@ pub async fn confirm_block(block_id: i64) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn update_block(block_id: i64, updates: BlockUpdate) -> Result<(), String> {
-    get_client().post_empty(&format!("/blocks/{}/update", block_id), &updates).await
+    get_client().put(&format!("/blocks/{}", block_id), &updates).await
+}
+
+#[tauri::command]
+pub async fn delete_block(block_id: i64) -> Result<(), String> {
+    get_client().delete(&format!("/blocks/{}", block_id)).await
 }
 
 #[tauri::command]

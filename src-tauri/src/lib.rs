@@ -11,10 +11,12 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             // Daemon proxy
             daemon::get_daemon_status,
+            daemon::daemon_health_check,
             daemon::set_daemon_mode,
             daemon::get_blocks,
             daemon::confirm_block,
             daemon::update_block,
+            daemon::delete_block,
             daemon::sync_blocks_to_odoo,
             daemon::get_odoo_projects,
             daemon::get_odoo_tasks,

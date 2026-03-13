@@ -2,20 +2,22 @@
 import { onMounted, computed } from 'vue';
 import { useBlocksStore } from '../stores/blocks';
 import { useDaemonStore } from '../stores/daemon';
+import { useConfigStore } from '../stores/config';
 import { useIssuesStore } from '../stores/issues';
 
 const blocksStore = useBlocksStore();
 const daemonStore = useDaemonStore();
+const configStore = useConfigStore();
 const issuesStore = useIssuesStore();
 
+const dailyTarget = computed(() => configStore.config.daily_hour_target || 8);
+
 const hoursProgress = computed(() => {
-  const target = 8;
   const current = blocksStore.totalHoursToday;
-  return Math.min((current / target) * 100, 100);
+  return Math.min((current / dailyTarget.value) * 100, 100);
 });
 
 onMounted(() => {
-  daemonStore.fetchStatus();
   blocksStore.fetchBlocks();
   issuesStore.fetchIssues();
 });
@@ -50,7 +52,7 @@ onMounted(() => {
         <h3 class="card-title">Horas Hoy</h3>
         <div class="hours-display">
           <span class="hours-value">{{ blocksStore.totalHoursToday.toFixed(1) }}</span>
-          <span class="hours-target">/ 8h</span>
+          <span class="hours-target">/ {{ dailyTarget }}h</span>
         </div>
         <div class="progress-bar">
           <div class="progress-fill" :style="{ width: hoursProgress + '%' }"></div>

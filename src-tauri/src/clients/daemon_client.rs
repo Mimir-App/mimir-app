@@ -79,6 +79,43 @@ impl DaemonClient {
         Ok(())
     }
 
+    pub async fn put<B: serde::Serialize>(
+        &self,
+        path: &str,
+        body: &B,
+    ) -> Result<(), String> {
+        let url = format!("{}{}", self.base_url, path);
+        let resp = self
+            .client
+            .put(&url)
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| format!("Error de conexión con daemon: {}", e))?;
+
+        if !resp.status().is_success() {
+            return Err(format!("Daemon respondió con status {}", resp.status()));
+        }
+
+        Ok(())
+    }
+
+    pub async fn delete(&self, path: &str) -> Result<(), String> {
+        let url = format!("{}{}", self.base_url, path);
+        let resp = self
+            .client
+            .delete(&url)
+            .send()
+            .await
+            .map_err(|e| format!("Error de conexión con daemon: {}", e))?;
+
+        if !resp.status().is_success() {
+            return Err(format!("Daemon respondió con status {}", resp.status()));
+        }
+
+        Ok(())
+    }
+
     pub async fn health_check(&self) -> bool {
         self.get::<serde_json::Value>("/health").await.is_ok()
     }
