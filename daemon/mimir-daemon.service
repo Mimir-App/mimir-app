@@ -1,0 +1,13 @@
+[Unit]
+Description=Mimir Activity Capture Daemon
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/share/mimir/venv/bin/python -m mimir_daemon
+Restart=on-failure
+RestartSec=5
+Environment=DISPLAY=:0
+
+[Install]
+WantedBy=default.target

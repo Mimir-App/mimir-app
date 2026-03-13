@@ -1,0 +1,132 @@
+/** Tipos compartidos de Mimir */
+
+// --- Bloques de actividad ---
+
+export type BlockStatus = 'auto' | 'confirmed' | 'synced' | 'error';
+
+export interface ActivityBlock {
+  id: number;
+  start_time: string;       // ISO 8601
+  end_time: string;         // ISO 8601
+  duration_minutes: number;
+  app_name: string;
+  window_title: string;
+  project_path: string | null;
+  git_branch: string | null;
+  git_remote: string | null;
+  ai_description: string | null;
+  ai_confidence: number | null;  // 0.0 - 1.0
+  user_description: string | null;
+  odoo_project_id: number | null;
+  odoo_task_id: number | null;
+  odoo_project_name: string | null;
+  odoo_task_name: string | null;
+  status: BlockStatus;
+  sync_error: string | null;
+  odoo_entry_id: number | null;
+}
+
+// --- GitLab ---
+
+export interface GitLabIssue {
+  id: number;
+  iid: number;
+  title: string;
+  description: string | null;
+  state: string;
+  web_url: string;
+  project_path: string;
+  labels: string[];
+  assignees: GitLabUser[];
+  milestone: string | null;
+  due_date: string | null;
+  created_at: string;
+  updated_at: string;
+  user_notes_count: number;
+  has_conflicts: boolean;
+  score: number;
+  manual_priority: number | null;
+}
+
+export interface GitLabMergeRequest {
+  id: number;
+  iid: number;
+  title: string;
+  description: string | null;
+  state: string;
+  web_url: string;
+  project_path: string;
+  labels: string[];
+  assignees: GitLabUser[];
+  reviewers: GitLabUser[];
+  source_branch: string;
+  target_branch: string;
+  has_conflicts: boolean;
+  pipeline_status: string | null;
+  created_at: string;
+  updated_at: string;
+  user_notes_count: number;
+  score: number;
+  manual_priority: number | null;
+}
+
+export interface GitLabUser {
+  id: number;
+  username: string;
+  name: string;
+  avatar_url: string;
+}
+
+// --- Odoo ---
+
+export interface OdooProject {
+  id: number;
+  name: string;
+}
+
+export interface OdooTask {
+  id: number;
+  name: string;
+  project_id: number;
+}
+
+export interface TimesheetEntry {
+  id: number;
+  date: string;
+  project_id: number;
+  project_name: string;
+  task_id: number | null;
+  task_name: string | null;
+  description: string;
+  hours: number;
+  employee_id: number;
+}
+
+// --- Daemon ---
+
+export type DaemonMode = 'active' | 'silent' | 'paused';
+
+export interface DaemonStatus {
+  running: boolean;
+  mode: DaemonMode;
+  uptime_seconds: number;
+  last_poll: string | null;
+  blocks_today: number;
+  version: string;
+}
+
+// --- Config ---
+
+export interface AppConfig {
+  daemon_port: number;
+  gitlab_url: string;
+  gitlab_token_stored: boolean;
+  odoo_url: string;
+  odoo_version: 'v11' | 'v16';
+  odoo_db: string;
+  odoo_username: string;
+  odoo_token_stored: boolean;
+  theme: 'dark' | 'light' | 'system';
+  refresh_interval_seconds: number;
+  daily_hour_target: number;
+}
