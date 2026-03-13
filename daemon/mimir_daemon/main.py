@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import signal
 import sys
 
 import uvicorn
@@ -17,12 +16,14 @@ from .tray import TrayIcon
 
 logger = logging.getLogger("mimir_daemon")
 
+VERSION = "0.1.0"
+
 
 async def run_daemon() -> None:
     """Arranca el daemon completo."""
-    # Cargar configuración
+    # Cargar configuracion
     config = DaemonConfig.load()
-    config.save()  # Persiste defaults si no existía
+    config.save()  # Persiste defaults si no existia
 
     # Configurar logging
     logging.basicConfig(
@@ -30,7 +31,7 @@ async def run_daemon() -> None:
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    logger.info("Iniciando Mimir Daemon v0.1.0")
+    logger.info("Iniciando Mimir Daemon v%s", VERSION)
 
     # Inicializar componentes
     db = Database(config.db_path)
@@ -44,6 +45,9 @@ async def run_daemon() -> None:
         inherit_threshold=config.inherit_threshold,
     )
 
+    # Recuperar bloques abiertos de sesion anterior
+    await block_manager.recover_open_blocks()
+
     poller = Poller(
         config=config,
         db=db,
@@ -52,7 +56,7 @@ async def run_daemon() -> None:
     )
 
     # Crear servidor HTTP
-    app = create_app(db=db, poller=poller)
+    app = create_app(db=db, poller=poller, version=VERSION)
 
     # Tray icon
     tray = TrayIcon(
@@ -83,6 +87,10 @@ async def run_daemon() -> None:
     finally:
         poller.stop()
         poller_task.cancel()
+        try:
+            await poller_task
+        except asyncio.CancelledError:
+            pass
         tray.stop()
         await platform.teardown()
         await db.close()

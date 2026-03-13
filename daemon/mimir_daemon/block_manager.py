@@ -1,4 +1,4 @@
-"""Gestión de bloques de actividad con herencia de contexto."""
+"""Gestion de bloques de actividad con herencia de contexto."""
 
 import logging
 from datetime import datetime, timezone, timedelta
@@ -9,17 +9,66 @@ from .context_enricher import EnrichedContext
 
 logger = logging.getLogger(__name__)
 
+# Umbral de similitud: si cambia app O proyecto, se crea bloque nuevo
+_CONTEXT_CHANGE_FIELDS = ("app_name", "project_path")
+
 
 class BlockManager:
-    """Gestiona la creación y mantenimiento de bloques de actividad."""
+    """Gestiona la creacion y mantenimiento de bloques de actividad."""
 
     def __init__(self, db: Database, inherit_threshold: int = 900) -> None:
         self._db = db
         self._inherit_threshold = inherit_threshold  # 15 min en segundos
         self._current_block_id: int | None = None
+        self._current_app: str | None = None
+        self._current_project: str | None = None
         self._last_activity: datetime | None = None
         self._poll_count: int = 0
         self._checkpoint_interval: int = 5
+
+    async def recover_open_blocks(self) -> None:
+        """Recupera estado tras reinicio del daemon.
+
+        Si hay bloques abiertos (sin cerrar) de las ultimas horas,
+        cierra los antiguos y continua el mas reciente si es reciente.
+        """
+        open_blocks = await self._db.get_open_blocks()
+        if not open_blocks:
+            logger.info("Sin bloques abiertos previos")
+            return
+
+        now = datetime.now(timezone.utc)
+        max_age = timedelta(hours=1)
+
+        for block in open_blocks:
+            end_time = datetime.fromisoformat(block["end_time"])
+            if end_time.tzinfo is None:
+                end_time = end_time.replace(tzinfo=timezone.utc)
+            age = now - end_time
+
+            if age > max_age:
+                # Bloque viejo: cerrarlo
+                await self._db.update_block(
+                    block["id"],
+                    status="closed",
+                )
+                logger.info(
+                    "Bloque #%d cerrado (antiguedad: %s)",
+                    block["id"],
+                    age,
+                )
+            else:
+                # Bloque reciente: continuar
+                self._current_block_id = block["id"]
+                self._current_app = block.get("app_name")
+                self._current_project = block.get("project_path")
+                self._last_activity = end_time
+                logger.info(
+                    "Retomando bloque #%d (%s - %s)",
+                    block["id"],
+                    self._current_app,
+                    self._current_project,
+                )
 
     async def process_poll(
         self,
@@ -49,6 +98,9 @@ class BlockManager:
             if elapsed > self._inherit_threshold:
                 await self._close_current_block()
                 should_new_block = True
+            elif self._is_context_change(window, context):
+                await self._close_current_block()
+                should_new_block = True
 
         if should_new_block:
             await self._create_block(window, context, now)
@@ -57,9 +109,30 @@ class BlockManager:
 
         self._last_activity = now
 
-        # Checkpoint periódico
+        # Checkpoint periodico
         if self._poll_count % self._checkpoint_interval == 0:
-            await self._checkpoint()
+            await self._checkpoint(now)
+
+    def _is_context_change(
+        self, window: WindowInfo, context: EnrichedContext
+    ) -> bool:
+        """Detecta si hubo un cambio significativo de contexto."""
+        # Cambio de aplicacion principal
+        if self._current_app and window.app_name != self._current_app:
+            # Algunas apps son "transitivas" (file manager, terminal) - no rompen bloque
+            transient_apps = {"nautilus", "thunar", "nemo", "xterm", "alacritty"}
+            if window.app_name.lower() not in transient_apps:
+                return True
+
+        # Cambio de proyecto (si ambos tienen proyecto)
+        if (
+            self._current_project
+            and context.project_path
+            and context.project_path != self._current_project
+        ):
+            return True
+
+        return False
 
     async def _create_block(
         self,
@@ -80,11 +153,14 @@ class BlockManager:
             git_remote=context.git_remote,
             status="auto",
         )
+        self._current_app = window.app_name
+        self._current_project = context.project_path
         logger.info(
-            "Nuevo bloque #%d: %s - %s",
+            "Nuevo bloque #%d: %s - %s [%s]",
             self._current_block_id,
             window.app_name,
-            window.window_title[:50],
+            window.window_title[:60],
+            context.project_path or "sin proyecto",
         )
 
     async def _update_current_block(
@@ -97,44 +173,59 @@ class BlockManager:
         if self._current_block_id is None:
             return
 
-        # Obtener bloque actual para calcular duración
-        blocks = await self._db.get_blocks_by_date(now.strftime("%Y-%m-%d"))
-        current = next(
-            (b for b in blocks if b["id"] == self._current_block_id), None
-        )
-        if not current:
+        # Calcular duracion desde el start_time del bloque
+        block = await self._db.get_block_by_id(self._current_block_id)
+        if not block:
+            self._current_block_id = None
             return
 
-        start = datetime.fromisoformat(current["start_time"])
+        start = datetime.fromisoformat(block["start_time"])
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=timezone.utc)
         duration = (now - start).total_seconds() / 60
 
         await self._db.update_block(
             self._current_block_id,
             end_time=now.isoformat(),
             duration_minutes=round(duration, 1),
-            app_name=window.app_name,
             window_title=window.window_title,
-            project_path=context.project_path or current.get("project_path"),
-            git_branch=context.git_branch or current.get("git_branch"),
-            git_remote=context.git_remote or current.get("git_remote"),
+            project_path=context.project_path or block.get("project_path"),
+            git_branch=context.git_branch or block.get("git_branch"),
+            git_remote=context.git_remote or block.get("git_remote"),
         )
 
     async def _close_current_block(self) -> None:
         """Cierra el bloque actual."""
         if self._current_block_id:
-            logger.info("Cerrando bloque #%d por inactividad", self._current_block_id)
+            await self._db.update_block(
+                self._current_block_id, status="closed"
+            )
+            logger.info(
+                "Bloque #%d cerrado", self._current_block_id
+            )
             self._current_block_id = None
+            self._current_app = None
+            self._current_project = None
 
-    async def _checkpoint(self) -> None:
-        """Checkpoint periódico para persistir estado."""
+    async def _checkpoint(self, now: datetime) -> None:
+        """Checkpoint periodico para persistir estado."""
         if self._current_block_id:
-            logger.debug("Checkpoint: bloque activo #%d", self._current_block_id)
+            await self._db.update_block(
+                self._current_block_id,
+                end_time=now.isoformat(),
+            )
+            logger.debug(
+                "Checkpoint: bloque activo #%d", self._current_block_id
+            )
 
     async def handle_lock(self) -> None:
         """Maneja evento de bloqueo de pantalla."""
-        await self._close_current_block()
+        if self._current_block_id:
+            await self._close_current_block()
         self._last_activity = None
+        logger.info("Sesion bloqueada, bloque cerrado")
 
     async def handle_unlock(self) -> None:
         """Maneja evento de desbloqueo de pantalla."""
         self._last_activity = datetime.now(timezone.utc)
+        logger.info("Sesion desbloqueada")

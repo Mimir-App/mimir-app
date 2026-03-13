@@ -2,6 +2,7 @@
 
 import pytest
 import pytest_asyncio
+from datetime import datetime, timezone
 from httpx import AsyncClient, ASGITransport
 
 from mimir_daemon.db import Database
@@ -50,6 +51,7 @@ async def test_health(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] == "ok"
+    assert "version" in data
 
 
 @pytest.mark.asyncio
@@ -59,6 +61,8 @@ async def test_status(client):
     data = resp.json()
     assert "running" in data
     assert "version" in data
+    assert "blocks_today" in data
+    assert "uptime_seconds" in data
 
 
 @pytest.mark.asyncio
@@ -69,6 +73,103 @@ async def test_get_blocks_empty(client):
 
 
 @pytest.mark.asyncio
+async def test_get_blocks_default_today(client, db):
+    """GET /blocks sin fecha devuelve bloques de hoy."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.create_block(
+        start_time=now, end_time=now, duration_minutes=5,
+        app_name="code", status="auto",
+    )
+    resp = await client.get("/blocks")
+    assert resp.status_code == 200
+    blocks = resp.json()
+    assert len(blocks) == 1
+    assert blocks[0]["app_name"] == "code"
+
+
+@pytest.mark.asyncio
+async def test_get_block_by_id(client, db):
+    """GET /blocks/{id} devuelve un bloque especifico."""
+    now = datetime.now(timezone.utc).isoformat()
+    block_id = await db.create_block(
+        start_time=now, end_time=now, duration_minutes=0,
+        app_name="firefox", status="auto",
+    )
+    resp = await client.get(f"/blocks/{block_id}")
+    assert resp.status_code == 200
+    assert resp.json()["app_name"] == "firefox"
+
+
+@pytest.mark.asyncio
+async def test_get_block_not_found(client):
+    resp = await client.get("/blocks/9999")
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_blocks_summary(client, db):
+    """GET /blocks/summary devuelve estadisticas."""
+    now = datetime.now(timezone.utc).isoformat()
+    await db.create_block(
+        start_time=now, end_time=now, duration_minutes=30,
+        app_name="code", status="auto",
+    )
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    resp = await client.get(f"/blocks/summary?date={today}")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total_blocks"] == 1
+    assert data["total_minutes"] == 30
+
+
+@pytest.mark.asyncio
+async def test_confirm_block(client, db):
+    now = datetime.now(timezone.utc).isoformat()
+    block_id = await db.create_block(
+        start_time=now, end_time=now, duration_minutes=0,
+        app_name="code", status="auto",
+    )
+    resp = await client.post(f"/blocks/{block_id}/confirm")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "confirmed"
+
+    block = await db.get_block_by_id(block_id)
+    assert block["status"] == "confirmed"
+
+
+@pytest.mark.asyncio
+async def test_update_block(client, db):
+    now = datetime.now(timezone.utc).isoformat()
+    block_id = await db.create_block(
+        start_time=now, end_time=now, duration_minutes=0,
+        app_name="code", status="auto",
+    )
+    resp = await client.put(
+        f"/blocks/{block_id}",
+        json={"user_description": "Desarrollo feature X"},
+    )
+    assert resp.status_code == 200
+
+    block = await db.get_block_by_id(block_id)
+    assert block["user_description"] == "Desarrollo feature X"
+
+
+@pytest.mark.asyncio
+async def test_delete_block(client, db):
+    now = datetime.now(timezone.utc).isoformat()
+    block_id = await db.create_block(
+        start_time=now, end_time=now, duration_minutes=0,
+        app_name="code", status="auto",
+    )
+    resp = await client.delete(f"/blocks/{block_id}")
+    assert resp.status_code == 200
+
+    block = await db.get_block_by_id(block_id)
+    assert block is None
+
+
+@pytest.mark.asyncio
 async def test_set_mode(client):
     resp = await client.post("/mode", json={"mode": "paused"})
     assert resp.status_code == 200
@@ -76,3 +177,6 @@ async def test_set_mode(client):
 
     resp = await client.post("/mode", json={"mode": "active"})
     assert resp.status_code == 200
+
+    resp = await client.post("/mode", json={"mode": "invalid"})
+    assert resp.status_code == 400

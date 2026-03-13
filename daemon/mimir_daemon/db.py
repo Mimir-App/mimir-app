@@ -70,20 +70,22 @@ class Database:
         logger.info("Base de datos conectada: %s", self.db_path)
 
     async def close(self) -> None:
-        """Cierra la conexión."""
+        """Cierra la conexion."""
         if self._db:
             await self._db.close()
             self._db = None
 
     @property
     def db(self) -> aiosqlite.Connection:
-        """Retorna la conexión activa."""
+        """Retorna la conexion activa."""
         if self._db is None:
             raise RuntimeError("Database not connected")
         return self._db
 
+    # --- Blocks: queries ---
+
     async def get_blocks_by_date(self, date: str) -> list[dict]:
-        """Obtiene bloques de un día."""
+        """Obtiene bloques de un dia."""
         async with self.db.execute(
             "SELECT * FROM blocks WHERE date(start_time) = ? ORDER BY start_time",
             (date,),
@@ -91,7 +93,50 @@ class Database:
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
 
-    async def create_block(self, **kwargs) -> int:
+    async def get_block_by_id(self, block_id: int) -> dict | None:
+        """Obtiene un bloque por su ID."""
+        async with self.db.execute(
+            "SELECT * FROM blocks WHERE id = ?",
+            (block_id,),
+        ) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def get_open_blocks(self) -> list[dict]:
+        """Obtiene bloques con status 'auto' (no cerrados)."""
+        async with self.db.execute(
+            "SELECT * FROM blocks WHERE status = 'auto' ORDER BY start_time DESC",
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def count_blocks_today(self) -> int:
+        """Cuenta bloques del dia actual."""
+        async with self.db.execute(
+            "SELECT COUNT(*) FROM blocks WHERE date(start_time) = date('now')"
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else 0
+
+    async def get_blocks_summary(self, date: str) -> dict:
+        """Obtiene un resumen estadistico de los bloques de un dia."""
+        blocks = await self.get_blocks_by_date(date)
+        total_minutes = sum(b.get("duration_minutes", 0) for b in blocks)
+        statuses = {}
+        for b in blocks:
+            s = b.get("status", "auto")
+            statuses[s] = statuses.get(s, 0) + 1
+        return {
+            "date": date,
+            "total_blocks": len(blocks),
+            "total_minutes": round(total_minutes, 1),
+            "total_hours": round(total_minutes / 60, 2) if total_minutes else 0,
+            "by_status": statuses,
+        }
+
+    # --- Blocks: mutations ---
+
+    async def create_block(self, **kwargs: object) -> int:
         """Crea un nuevo bloque y retorna su ID."""
         cols = ", ".join(kwargs.keys())
         placeholders = ", ".join("?" for _ in kwargs)
@@ -102,8 +147,10 @@ class Database:
             await self.db.commit()
             return cursor.lastrowid  # type: ignore
 
-    async def update_block(self, block_id: int, **kwargs) -> None:
+    async def update_block(self, block_id: int, **kwargs: object) -> None:
         """Actualiza campos de un bloque."""
+        if not kwargs:
+            return
         sets = ", ".join(f"{k} = ?" for k in kwargs)
         values = list(kwargs.values()) + [block_id]
         await self.db.execute(
@@ -112,10 +159,26 @@ class Database:
         )
         await self.db.commit()
 
-    async def count_blocks_today(self) -> int:
-        """Cuenta bloques del día actual."""
+    async def delete_block(self, block_id: int) -> None:
+        """Elimina un bloque."""
+        await self.db.execute("DELETE FROM blocks WHERE id = ?", (block_id,))
+        await self.db.commit()
+
+    # --- Preferences cache ---
+
+    async def get_preference(self, key: str) -> str | None:
+        """Obtiene un valor de la cache de preferencias."""
         async with self.db.execute(
-            "SELECT COUNT(*) FROM blocks WHERE date(start_time) = date('now')"
+            "SELECT value FROM preferences_cache WHERE key = ?", (key,)
         ) as cursor:
             row = await cursor.fetchone()
-            return row[0] if row else 0
+            return row[0] if row else None
+
+    async def set_preference(self, key: str, value: str) -> None:
+        """Guarda un valor en la cache de preferencias."""
+        await self.db.execute(
+            "INSERT OR REPLACE INTO preferences_cache (key, value, updated_at) "
+            "VALUES (?, ?, datetime('now'))",
+            (key, value),
+        )
+        await self.db.commit()

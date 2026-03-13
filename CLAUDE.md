@@ -1,7 +1,7 @@
 # CLAUDE.md — Mimir
 
-## Descripción
-Mimir es un asistente inteligente de imputación de horas. Captura automáticamente la actividad del empleado, sugiere descripciones con IA, y permite imputar horas a Odoo.
+## Descripcion
+Mimir es un asistente inteligente de imputacion de horas. Captura automaticamente la actividad del empleado, sugiere descripciones con IA, y permite imputar horas a Odoo.
 
 ## Stack
 - **Frontend**: Tauri 2 + Vue 3 + TypeScript + Vite
@@ -13,28 +13,31 @@ Mimir es un asistente inteligente de imputación de horas. Captura automáticame
 
 ```bash
 # Frontend + Tauri
-cd mimir
 npm install
 npm run tauri dev    # Desarrollo con hot reload
 
 # Daemon Python
-cd mimir/daemon
+cd daemon
 python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 python -m mimir_daemon      # Arranca daemon
-pytest tests/               # Tests del daemon
+pytest tests/ -v            # Tests del daemon
+
+# Verificaciones
+npx vue-tsc --noEmit        # TypeScript check
+cd src-tauri && cargo check  # Rust check
 ```
 
 ## Arquitectura
 - `src/` — Frontend Vue 3 + TypeScript
 - `src-tauri/` — Backend Rust (Tauri 2)
 - `daemon/` — Daemon Python (proceso separado)
-- Comunicación daemon ↔ Tauri: HTTP local (localhost:9477)
+- Comunicacion daemon <-> Tauri: HTTP local (localhost:9477)
 
-## Convenciones
-- Docstrings en español
-- Type hints en todo Python
-- TypeScript strict mode
-- Errores nunca crashean: se muestran en UI
-- JSON con `ensure_ascii=False`, UTF-8
+## Progreso
+Ver `PROGRESS.md` para el estado detallado de cada fase.
+
+@.claude/context/architecture.md
+@.claude/context/conventions.md
+@.claude/context/themes.md

@@ -26,15 +26,15 @@ Ultima actualizacion: 2026-03-13
 | Modulo | Fichero | Estado | Notas |
 |---|---|---|---|
 | Entry point | `main.py` | Implementado | Arranca DB + Platform + Poller + Server + Tray |
-| Servidor API | `server.py` | Stubs | FastAPI con endpoints definidos, respuestas vacias |
+| Servidor API | `server.py` | Implementado | CORS, CRUD blocks, summary, mode; stubs Odoo/GitLab |
 | Poller | `poller.py` | Implementado | Ciclo asyncio cada 30s |
-| Block Manager | `block_manager.py` | Implementado | Herencia de contexto, umbral 15min, checkpoints |
-| Context Enricher | `context_enricher.py` | Implementado | /proc, git info |
-| Base de datos | `db.py` | Implementado | aiosqlite (blocks, source_tokens, preferences_cache) |
+| Block Manager | `block_manager.py` | Implementado | Herencia contexto, cambio contexto, recovery, checkpoints |
+| Context Enricher | `context_enricher.py` | Implementado | /proc, git info con cache, SSH detection, alias resolution |
+| Base de datos | `db.py` | Implementado | CRUD completo, summary, open blocks, preferences cache |
 | Config | `config.py` | Implementado | Configuracion del daemon |
 | Tray icon | `tray.py` | Implementado | pystray en ThreadPoolExecutor |
 | Platform base | `platform/base.py` | Implementado | Clase abstracta |
-| Platform Linux | `platform/linux.py` | Implementado | xdotool + D-Bus (basico) |
+| Platform Linux | `platform/linux.py` | Implementado | xdotool (llamadas separadas) + D-Bus logind + /proc directo |
 | Platform Windows | `platform/windows.py` | Stub | NotImplementedError |
 | Source base | `sources/base.py` | Implementado | Interfaces CalendarSource, VCSSource |
 | Source registry | `sources/registry.py` | Implementado | Registro de adaptadores |
@@ -45,7 +45,7 @@ Ultima actualizacion: 2026-03-13
 | Integration Odoo v16 | `integrations/odoo_v16.py` | Stub | REST, sin logica real |
 | AI base | `ai/base.py` | Implementado | Interfaz AIClient |
 | AI Gemini | `ai/gemini.py` | Stub | Heuristico con cache por hash |
-| Tests | `tests/` | 8/8 pasando | Cobertura basica del daemon |
+| Tests | `tests/` | 34/34 pasando | block_manager, server, poller, context_enricher |
 
 ### Frontend Vue 3 + TypeScript (`src/`)
 
@@ -91,19 +91,28 @@ Ultima actualizacion: 2026-03-13
 
 ---
 
-## Fase 1 - Daemon Core PENDIENTE
+## Fase 1 - Daemon Core COMPLETADA
 
+**Fecha:** 2026-03-13
 **Objetivo:** Que el daemon capture actividad real y genere bloques en SQLite.
 
 | Tarea | Estado | Notas |
 |---|---|---|
-| Captura de actividad real en Linux (xdotool funcional) | Pendiente | xdotool basico creado, falta probar end-to-end |
-| D-Bus listener para bloqueo/desbloqueo de sesion | Pendiente | Listener basico creado |
-| Testing end-to-end del poller | Pendiente | Actualmente mock en tests |
-| Verificar systemd user service | Pendiente | |
-| Block manager: agrupacion inteligente por contexto similar | Pendiente | Logica basica implementada, falta pulir |
+| Captura de actividad real en Linux (xdotool funcional) | Completado | Llamadas xdotool separadas (mas fiable), lectura /proc directa |
+| D-Bus listener para bloqueo/desbloqueo de sesion | Completado | logind LockedHint via dbus-next |
+| Context enricher mejorado | Completado | Cache git, deteccion SSH, resolucion alias ~/.ssh/config |
+| Block manager: deteccion cambio de contexto | Completado | Nuevo bloque al cambiar app o proyecto; apps transitivas ignoradas |
+| Block manager: recuperacion tras crash | Completado | Bloques abiertos >1h se cierran; recientes se retoman |
+| Server API mejorada | Completado | CORS, GET/PUT/DELETE por ID, /blocks/summary, validacion 404 |
+| Testing end-to-end del poller | Completado | 6 tests con FakePlatform |
+| Tests context enricher | Completado | git root, SSH alias, defaults |
+| Tests block manager ampliados | Completado | 11 tests (cambio contexto, lock/unlock, recovery) |
+| Tests server ampliados | Completado | 12 tests (CRUD, summary, modes) |
+| Script instalacion systemd | Completado | `daemon/install-service.sh` |
 
-**Criterio de completitud:** Ejecutar el daemon, trabajar unos minutos, y verificar que genera bloques reales en SQLite consultando `curl http://localhost:9477/blocks`.
+**Tests: 34/34 pasando** (antes 8/8)
+
+**Verificacion:** Ejecutar el daemon, trabajar unos minutos, y verificar con `curl http://localhost:9477/blocks`.
 
 ---
 
