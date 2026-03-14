@@ -29,6 +29,14 @@ interface OdooStatus {
   client_type: string | null;
 }
 
+const gitlabIntegrationConfigured = computed((): boolean => {
+  const gitlab = integrationStatus.value?.gitlab;
+  if (gitlab && typeof gitlab === 'object') {
+    return Boolean((gitlab as Record<string, unknown>).configured);
+  }
+  return false;
+});
+
 const odooIntegrationStatus = computed((): OdooStatus => {
   const odoo = integrationStatus.value?.odoo;
   if (odoo && typeof odoo === 'object') {
@@ -179,6 +187,10 @@ async function clearAIToken() {
             <span class="integration-badge"
               :class="odooIntegrationStatus.configured ? 'configured' : 'not-configured'">
               Odoo: {{ odooIntegrationStatus.configured ? 'Conectado' : 'No configurado' }}
+            </span>
+            <span class="integration-badge"
+              :class="gitlabIntegrationConfigured ? 'configured' : 'not-configured'">
+              GitLab: {{ gitlabIntegrationConfigured ? 'Conectado' : 'No configurado' }}
             </span>
           </div>
         </div>

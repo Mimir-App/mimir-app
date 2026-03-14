@@ -13,6 +13,8 @@ from mimir_daemon.integrations.registry import IntegrationRegistry
 from mimir_daemon.integrations.mock import MockTimesheetClient
 from mimir_daemon.poller import Poller
 from mimir_daemon.server import create_app
+from mimir_daemon.sources.registry import SourceRegistry
+from mimir_daemon.sources.base import VCSSource
 
 
 class MockPlatform(PlatformProvider):
@@ -21,6 +23,47 @@ class MockPlatform(PlatformProvider):
 
     async def get_session_events(self):
         return []
+
+
+class MockGitLabSource(VCSSource):
+    """Source GitLab falso para tests."""
+
+    async def get_issues(self):
+        return [
+            {
+                "id": 1, "iid": 42, "title": "Fix login bug",
+                "description": "Login fails on mobile",
+                "state": "opened", "web_url": "https://gitlab.test/issues/42",
+                "project_path": "team/backend",
+                "labels": ["bug", "priority::high"],
+                "assignees": [{"id": 1, "username": "dev1", "name": "Dev One", "avatar_url": ""}],
+                "milestone": None, "due_date": None,
+                "created_at": "2026-03-01T10:00:00Z",
+                "updated_at": "2026-03-13T15:00:00Z",
+                "user_notes_count": 3,
+                "has_conflicts": False,
+                "score": 0, "manual_priority": None,
+            }
+        ]
+
+    async def get_merge_requests(self):
+        return [
+            {
+                "id": 10, "iid": 7, "title": "feat: add auth module",
+                "description": "Implements JWT auth",
+                "state": "opened", "web_url": "https://gitlab.test/mr/7",
+                "project_path": "team/backend",
+                "labels": [],
+                "assignees": [{"id": 1, "username": "dev1", "name": "Dev One", "avatar_url": ""}],
+                "reviewers": [],
+                "source_branch": "feat/auth", "target_branch": "main",
+                "has_conflicts": False, "pipeline_status": "success",
+                "created_at": "2026-03-10T10:00:00Z",
+                "updated_at": "2026-03-13T12:00:00Z",
+                "user_notes_count": 1,
+                "score": 0, "manual_priority": None,
+            }
+        ]
 
 
 @pytest_asyncio.fixture
@@ -39,14 +82,22 @@ def registry():
 
 
 @pytest.fixture
-def app(db, registry):
+def source_registry():
+    reg = SourceRegistry()
+    reg.register_vcs("gitlab", MockGitLabSource())
+    return reg
+
+
+@pytest.fixture
+def app(db, registry, source_registry):
     from mimir_daemon.ai.service import AIService
     config = DaemonConfig(polling_interval=60)
     platform = MockPlatform()
     block_manager = BlockManager(db=db)
     poller = Poller(config=config, db=db, platform=platform, block_manager=block_manager)
     ai_service = AIService(db=db, provider=None)
-    return create_app(db=db, poller=poller, registry=registry, ai_service=ai_service)
+    return create_app(db=db, poller=poller, registry=registry, ai_service=ai_service,
+                      source_registry=source_registry)
 
 
 @pytest_asyncio.fixture
@@ -559,3 +610,55 @@ async def test_config_no_ai_key_exposed(client):
     assert data.get("ai_provider") == "gemini"
     assert data.get("ai_user_role") == "functional"
     assert data.get("ai_configured") is True
+
+
+@pytest.mark.asyncio
+async def test_get_gitlab_issues_with_source(client):
+    """GET /gitlab/issues devuelve issues del source configurado."""
+    resp = await client.get("/gitlab/issues")
+    assert resp.status_code == 200
+    issues = resp.json()
+    assert len(issues) == 1
+    assert issues[0]["title"] == "Fix login bug"
+    assert issues[0]["project_path"] == "team/backend"
+
+
+@pytest.mark.asyncio
+async def test_get_gitlab_merge_requests_with_source(client):
+    """GET /gitlab/merge_requests devuelve MRs del source."""
+    resp = await client.get("/gitlab/merge_requests")
+    assert resp.status_code == 200
+    mrs = resp.json()
+    assert len(mrs) == 1
+    assert mrs[0]["title"] == "feat: add auth module"
+    assert mrs[0]["source_branch"] == "feat/auth"
+
+
+@pytest.mark.asyncio
+async def test_put_config_gitlab(client):
+    """PUT /config con gitlab_url y token configura el source."""
+    resp = await client.put("/config", json={
+        "odoo_url": "", "odoo_version": "v16", "odoo_db": "", "odoo_username": "",
+        "odoo_token": "", "gitlab_url": "https://gitlab.example.com",
+        "gitlab_token": "glpat-test-token",
+        "ai_provider": "none", "ai_api_key": "",
+        "ai_user_role": "technical", "ai_custom_context": "",
+    })
+    assert resp.status_code == 200
+
+    # Verificar integration-status incluye gitlab
+    resp2 = await client.get("/config/integration-status")
+    data = resp2.json()
+    assert "gitlab" in data
+    assert data["gitlab"]["configured"] is True
+
+
+@pytest.mark.asyncio
+async def test_integration_status_includes_gitlab(client):
+    """GET /config/integration-status incluye estado de GitLab."""
+    resp = await client.get("/config/integration-status")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "gitlab" in data
+    # Con el mock source ya registrado en fixture, gitlab está configurado
+    assert data["gitlab"]["configured"] is True

@@ -25,6 +25,10 @@ daemon/**/*.egg-info/
 *.pyc
 *.pyo
 
+# PyInstaller
+daemon/build/
+*.spec.bak
+
 # SQLite
 *.db
 *.sqlite

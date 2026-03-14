@@ -23,13 +23,25 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["deb", "appimage"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libgtk-3-0"],
+        "section": "utils"
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    },
+    "category": "Utility",
+    "shortDescription": "Asistente inteligente de imputacion de horas",
+    "longDescription": "Mimir captura automaticamente la actividad del empleado, sugiere descripciones con IA, y permite imputar horas a Odoo."
   }
 }

@@ -12,6 +12,7 @@ from .db import Database
 from .platform import get_platform_provider
 from .block_manager import BlockManager
 from .integrations.registry import IntegrationRegistry
+from .sources.registry import SourceRegistry
 from .poller import Poller
 from .server import create_app
 from .ai.service import AIService
@@ -87,6 +88,8 @@ async def run_daemon(args: argparse.Namespace) -> None:
     registry = IntegrationRegistry()
     setup_integrations(registry, mock=args.mock)
 
+    source_registry = SourceRegistry()
+
     poller = Poller(
         config=config,
         db=db,
@@ -95,7 +98,10 @@ async def run_daemon(args: argparse.Namespace) -> None:
     )
 
     # Crear servidor HTTP
-    app = create_app(db=db, poller=poller, registry=registry, ai_service=ai_service, version=VERSION)
+    app = create_app(
+        db=db, poller=poller, registry=registry,
+        ai_service=ai_service, source_registry=source_registry, version=VERSION,
+    )
 
     # Tray icon
     tray = TrayIcon(

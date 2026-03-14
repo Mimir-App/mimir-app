@@ -15,6 +15,7 @@ from .db import Database
 from .integrations.base import TimesheetEntryData
 from .integrations.registry import IntegrationRegistry
 from .poller import Poller
+from .sources.registry import SourceRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,7 @@ def create_app(
     poller: Poller,
     registry: IntegrationRegistry | None = None,
     ai_service: "AIService | None" = None,
+    source_registry: SourceRegistry | None = None,
     version: str = "0.1.0",
 ) -> FastAPI:
     """Crea la aplicacion FastAPI."""
@@ -31,6 +33,7 @@ def create_app(
     app = FastAPI(title="Mimir Daemon", version=version)
     start_time = datetime.now(timezone.utc)
     _registry = registry or IntegrationRegistry()
+    _source_registry = source_registry or SourceRegistry()
 
     # Almacena la configuracion recibida desde Tauri
     _app_config: dict = {}
@@ -474,6 +477,16 @@ def create_app(
             ai_service.user_role = req.ai_user_role
             ai_service.user_context = req.ai_custom_context
 
+        # Configurar GitLab source
+        if req.gitlab_url and req.gitlab_token:
+            try:
+                from .sources.gitlab import GitLabSource
+                gitlab_source = GitLabSource(url=req.gitlab_url, token=req.gitlab_token)
+                _source_registry.register_vcs("gitlab", gitlab_source)
+                logger.info("GitLab source configurado: %s", req.gitlab_url)
+            except Exception as e:
+                logger.error("Error configurando GitLab: %s", e)
+
         # Guardar configuracion en preferences cache de la DB
         try:
             safe = {k: v for k, v in config_data.items() if "token" not in k and "password" not in k}
@@ -491,18 +504,29 @@ def create_app(
                 "configured": _registry.timesheet is not None,
                 "client_type": type(_registry.timesheet).__name__ if _registry.timesheet else None,
             },
+            "gitlab": {
+                "configured": "gitlab" in _source_registry._vcs_sources,
+            },
         }
 
-    # --- GitLab (stubs) ---
+    # --- GitLab ---
 
     @app.get("/gitlab/issues")
     async def get_gitlab_issues() -> list:
-        # TODO: implementar con integracion GitLab (Fase 5)
-        return []
+        """Obtiene issues de GitLab."""
+        try:
+            return await _source_registry.get_all_issues()
+        except Exception as e:
+            logger.error("Error obteniendo issues de GitLab: %s", e)
+            return []
 
     @app.get("/gitlab/merge_requests")
     async def get_gitlab_merge_requests() -> list:
-        # TODO: implementar con integracion GitLab (Fase 5)
-        return []
+        """Obtiene merge requests de GitLab."""
+        try:
+            return await _source_registry.get_all_merge_requests()
+        except Exception as e:
+            logger.error("Error obteniendo MRs de GitLab: %s", e)
+            return []
 
     return app

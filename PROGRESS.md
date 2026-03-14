@@ -202,29 +202,56 @@ Ultima actualizacion: 2026-03-13
 
 ---
 
-## Fase 5 - Vistas GitLab PENDIENTE
+## Fase 5 - Vistas GitLab COMPLETADA
 
+**Fecha:** 2026-03-14
 **Objetivo:** Mostrar issues y MRs de GitLab con scoring.
 
 | Tarea | Estado | Notas |
 |---|---|---|
-| Conectar `sources/gitlab.py` con `server.py` | Pendiente | Endpoints stub existen |
-| Portar scoring completo | Pendiente | TypeScript ya implementado en `src/lib/scoring.ts` |
-| Vista Issues funcional | Pendiente | |
-| Vista MRs funcional | Pendiente | |
+| Conectar GitLabSource con server.py | Completado | Endpoints reales via SourceRegistry, error handling robusto |
+| Configurar GitLab via PUT /config | Completado | Crea GitLabSource con url+token, registra en SourceRegistry |
+| Integration-status para GitLab | Completado | GET /config/integration-status incluye estado GitLab |
+| Tests GitLabSource | Completado | 4 tests con mock httpx (issues, MRs, dedup, errors) |
+| Tests server GitLab | Completado | 4 tests (endpoints con/sin source, config, integration-status) |
+| Scoring en frontend | Ya existia | computeIssueScore/computeMRScore en scoring.ts |
+| IssuesView con polling | Completado | Carga + boton refrescar + polling periodico (refresh_interval_seconds) |
+| MergeRequestsView con polling | Completado | Mismo patron, cleanup al desmontar vista |
+| SettingsView estado GitLab | Completado | Badge GitLab en seccion Integraciones |
+
+**Tests: 108/108 pasando** (100 Fase 4 + 4 GitLabSource + 4 server GitLab)
+
+**Verificaciones:**
+- Daemon tests: `cd daemon && .venv/bin/python -m pytest tests/ -v`
+- TypeScript: `npx vue-tsc --noEmit`
+- Rust: `cd src-tauri && cargo check`
 
 ---
 
-## Fase 6 - Dashboard + Polish PENDIENTE
+## Fase 6 - Dashboard + Polish + Empaquetado COMPLETADA
 
-**Objetivo:** Pulido final y dashboard con datos reales.
+**Fecha:** 2026-03-14
+**Objetivo:** Pulido final, dashboard con datos reales, y empaquetado para distribucion.
 
 | Tarea | Estado | Notas |
 |---|---|---|
-| DashboardView conectado a datos reales | Pendiente | |
-| Temas oscuro/claro completos (branding FactorLibre) | Pendiente | |
-| Health check daemon desde Tauri | Pendiente | |
-| Empaquetado PyInstaller | Pendiente | |
+| DashboardView conectado a datos reales | Ya existia | Daemon status, horas hoy, bloques pendientes, top issues |
+| Temas oscuro/claro (branding FactorLibre) | Ya existia | CSS variables, cambio reactivo, selector en Settings |
+| Health check daemon desde Tauri | Ya existia | App.vue: health check al arrancar + polling 10s |
+| PyInstaller spec para daemon | Completado | Binario standalone ~56MB, sin dependencia de Python |
+| install-service.sh actualizado | Completado | Soporta binario PyInstaller, fallback a Python, DBUS_SESSION_BUS_ADDRESS |
+| Tauri bundle config Linux | Completado | .deb y .AppImage, metadata FactorLibre, dependencias declaradas |
+| Script build.sh unificado | Completado | `scripts/build.sh [daemon\|app\|all]` — orquesta PyInstaller + Tauri build |
+| .gitignore artefactos build | Completado | PyInstaller build/, *.spec.bak |
+
+**Tests: 108/108 pasando** (sin cambios funcionales)
+
+**Verificaciones:**
+- Daemon tests: `cd daemon && .venv/bin/python -m pytest tests/ -v`
+- TypeScript: `npx vue-tsc --noEmit`
+- Rust: `cd src-tauri && cargo check`
+- Build daemon: `bash scripts/build.sh daemon`
+- Build completo: `bash scripts/build.sh`
 
 ---
 
