@@ -2,8 +2,9 @@
 # Build completo de Mimir para Linux.
 #
 # Genera:
-#   dist/daemon/mimir-daemon              — Binario standalone del daemon
-#   dist/daemon/install-daemon.sh         — Script instalador del servicio
+#   dist/daemon/mimir-capture             — Binario capture (servicio systemd)
+#   dist/daemon/mimir-server              — Binario server (lanzado por Tauri)
+#   dist/daemon/install-daemon.sh         — Script instalador
 #   src-tauri/target/release/bundle/deb/  — Paquete .deb de la app
 #   src-tauri/target/release/bundle/appimage/ — AppImage de la app
 #
@@ -15,7 +16,7 @@
 #
 # Uso:
 #   bash scripts/build.sh           # Build completo
-#   bash scripts/build.sh daemon    # Solo daemon
+#   bash scripts/build.sh daemon    # Solo capture + server
 #   bash scripts/build.sh app       # Solo app Tauri
 
 set -euo pipefail
@@ -31,7 +32,7 @@ echo "Target: $TARGET"
 echo ""
 
 build_daemon() {
-    echo "--- [daemon] Construyendo daemon (PyInstaller) ---"
+    echo "--- [daemon] Construyendo capture + server (PyInstaller) ---"
     cd "$DAEMON_DIR"
 
     # Crear/activar venv si no existe
@@ -41,20 +42,29 @@ build_daemon() {
     .venv/bin/pip install --quiet --upgrade pip
     .venv/bin/pip install --quiet -e ".[dev]"
 
-    # Build
     mkdir -p "$DIST_DIR"
-    .venv/bin/pyinstaller mimir_daemon.spec \
+
+    # Build capture
+    echo "  Construyendo mimir-capture..."
+    .venv/bin/pyinstaller mimir_capture.spec \
         --distpath "$DIST_DIR" \
-        --workpath /tmp/mimir-build \
-        --clean \
-        --noconfirm
+        --workpath /tmp/mimir-build-capture \
+        --clean --noconfirm 2>&1 | tail -3
+
+    # Build server
+    echo "  Construyendo mimir-server..."
+    .venv/bin/pyinstaller mimir_server.spec \
+        --distpath "$DIST_DIR" \
+        --workpath /tmp/mimir-build-server \
+        --clean --noconfirm 2>&1 | tail -3
 
     # Copiar instalador
     cp "$DAEMON_DIR/install-service.sh" "$DIST_DIR/install-daemon.sh"
     chmod +x "$DIST_DIR/install-daemon.sh"
 
-    echo "Daemon binary: $DIST_DIR/mimir-daemon"
-    echo "Instalador:    $DIST_DIR/install-daemon.sh"
+    echo ""
+    echo "Capture: $DIST_DIR/mimir-capture"
+    echo "Server:  $DIST_DIR/mimir-server"
     echo ""
 }
 
@@ -90,8 +100,13 @@ echo "=== Build completado ==="
 echo ""
 echo "Artefactos:"
 
-if [ -f "$DIST_DIR/mimir-daemon" ]; then
-    echo "  Daemon:    $DIST_DIR/mimir-daemon ($(du -h "$DIST_DIR/mimir-daemon" | cut -f1))"
+if [ -f "$DIST_DIR/mimir-capture" ]; then
+    echo "  Capture:   $DIST_DIR/mimir-capture ($(du -h "$DIST_DIR/mimir-capture" | cut -f1))"
+fi
+if [ -f "$DIST_DIR/mimir-server" ]; then
+    echo "  Server:    $DIST_DIR/mimir-server ($(du -h "$DIST_DIR/mimir-server" | cut -f1))"
+fi
+if [ -f "$DIST_DIR/install-daemon.sh" ]; then
     echo "  Installer: $DIST_DIR/install-daemon.sh"
 fi
 
@@ -103,5 +118,5 @@ if [ -d "$PROJECT_DIR/src-tauri/target/release/bundle/appimage" ]; then
 fi
 
 echo ""
-echo "Para instalar el daemon:"
-echo "  $DIST_DIR/install-daemon.sh $DIST_DIR/mimir-daemon"
+echo "Para instalar:"
+echo "  $DIST_DIR/install-daemon.sh"

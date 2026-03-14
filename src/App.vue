@@ -21,13 +21,17 @@ onMounted(async () => {
   await configStore.load();
   applyTheme(configStore.config.theme);
 
-  // Health check al arrancar y si el daemon esta disponible, enviar config
+  // Health check de ambos procesos
+  await daemonStore.captureHealthCheck();
   const ok = await daemonStore.healthCheck();
   if (ok) {
     configStore.pushToDaemon();
   }
 
-  pollTimer = setInterval(() => daemonStore.fetchStatus(), 10000);
+  pollTimer = setInterval(() => {
+    daemonStore.fetchStatus();
+    daemonStore.captureHealthCheck();
+  }, 10000);
 });
 
 onUnmounted(() => {

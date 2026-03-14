@@ -1,17 +1,29 @@
 mod clients;
 mod commands;
 mod models;
+mod server_process;
 
 use commands::{auth, config, daemon};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Arranca mimir-server al iniciar la app
+    server_process::start_server();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                if window.label() == "main" {
+                    server_process::stop_server();
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             // Daemon proxy
             daemon::get_daemon_status,
             daemon::daemon_health_check,
+            daemon::capture_health_check,
             daemon::set_daemon_mode,
             daemon::get_blocks,
             daemon::confirm_block,

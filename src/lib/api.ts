@@ -73,6 +73,16 @@ export const api = {
     }
   },
 
+  async captureHealthCheck(): Promise<boolean> {
+    if (await isTauri()) return tauriInvoke<boolean>('capture_health_check');
+    try {
+      const resp = await fetch('http://127.0.0.1:9476/health');
+      return resp.ok;
+    } catch {
+      return false;
+    }
+  },
+
   async setDaemonMode(mode: string) {
     if (await isTauri()) return tauriInvoke('set_daemon_mode', { mode });
     return httpPost('/mode', { mode });

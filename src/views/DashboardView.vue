@@ -26,23 +26,25 @@ onMounted(() => {
 <template>
   <div class="dashboard">
     <div class="dashboard-grid">
-      <!-- Estado del daemon -->
+      <!-- Estado de los procesos -->
       <div class="card">
-        <h3 class="card-title">Estado del Daemon</h3>
+        <h3 class="card-title">Estado de Servicios</h3>
         <div class="daemon-info">
           <div class="info-row">
-            <span class="label">Estado</span>
+            <span class="label">Captura</span>
+            <span class="value" :class="daemonStore.captureConnected ? 'connected' : 'disconnected'">
+              {{ daemonStore.captureConnected ? 'Activo' : 'Inactivo' }}
+            </span>
+          </div>
+          <div class="info-row">
+            <span class="label">Servidor</span>
             <span class="value" :class="daemonStore.statusClass">
-              {{ daemonStore.connected ? 'Conectado' : 'Desconectado' }}
+              {{ daemonStore.connected ? 'Activo' : 'Inactivo' }}
             </span>
           </div>
           <div class="info-row">
             <span class="label">Modo</span>
             <span class="value">{{ daemonStore.modeLabel }}</span>
-          </div>
-          <div class="info-row">
-            <span class="label">Último poll</span>
-            <span class="value">{{ daemonStore.status.last_poll ?? '—' }}</span>
           </div>
         </div>
       </div>

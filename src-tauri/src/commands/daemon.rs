@@ -24,6 +24,12 @@ pub async fn daemon_health_check() -> Result<bool, String> {
 }
 
 #[tauri::command]
+pub async fn capture_health_check() -> Result<bool, String> {
+    let client = DaemonClient::new(9476);
+    Ok(client.health_check().await)
+}
+
+#[tauri::command]
 pub async fn set_daemon_mode(mode: String) -> Result<(), String> {
     #[derive(serde::Serialize)]
     struct ModeReq { mode: String }
