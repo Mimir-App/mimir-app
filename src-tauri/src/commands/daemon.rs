@@ -85,12 +85,12 @@ pub async fn get_timesheet_entries(
 }
 
 #[tauri::command]
-pub async fn get_issues() -> Result<Vec<GitLabIssue>, String> {
+pub async fn get_issues() -> Result<Vec<serde_json::Value>, String> {
     get_client().get("/gitlab/issues").await
 }
 
 #[tauri::command]
-pub async fn get_merge_requests() -> Result<Vec<GitLabMergeRequest>, String> {
+pub async fn get_merge_requests() -> Result<Vec<serde_json::Value>, String> {
     get_client().get("/gitlab/merge_requests").await
 }
 

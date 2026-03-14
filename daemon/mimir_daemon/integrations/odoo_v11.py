@@ -27,6 +27,12 @@ class OdooV11Client(TimesheetClient):
         self._username = username
         self._password = password
         self._uid: int | None = None
+        self._employee_id: int | None = None
+
+    @property
+    def employee_id(self) -> int | None:
+        """ID del empleado autenticado."""
+        return self._employee_id
 
     async def authenticate(self) -> bool:
         """Autentica via XML-RPC en un hilo separado."""
@@ -34,12 +40,29 @@ class OdooV11Client(TimesheetClient):
             self._uid = await asyncio.to_thread(self._authenticate_sync)
             if self._uid:
                 logger.info("Autenticado en Odoo v11 como uid=%d", self._uid)
+                await self._fetch_employee_id()
                 return True
             logger.error("Autenticación fallida en Odoo v11: uid es None o 0")
             return False
         except Exception as e:
             logger.error("Error de conexión con Odoo v11: %s", e)
             return False
+
+    async def _fetch_employee_id(self) -> None:
+        """Obtiene el employee_id del usuario autenticado."""
+        try:
+            result = await self._execute(
+                "hr.employee", "search_read",
+                [[("user_id", "=", self._uid)]],
+                {"fields": ["id"], "limit": 1},
+            )
+            if result:
+                self._employee_id = result[0]["id"]
+                logger.info("Odoo v11: employee_id=%d", self._employee_id)
+            else:
+                logger.warning("Odoo v11: no se encontró empleado para uid=%d", self._uid)
+        except Exception as e:
+            logger.warning("Odoo v11: error obteniendo employee_id: %s", e)
 
     def _authenticate_sync(self) -> int | None:
         """Autenticación síncrona XMLRPC."""
@@ -130,13 +153,17 @@ class OdooV11Client(TimesheetClient):
     async def get_entries(
         self, date_from: str, date_to: str, employee_id: int | None = None
     ) -> list[dict[str, Any]]:
-        """Obtiene entradas de timesheet en un rango de fechas."""
+        """Obtiene entradas de timesheet en un rango de fechas.
+
+        Si no se pasa employee_id, usa el del usuario autenticado.
+        """
+        eid = employee_id or self._employee_id
         domain: list = [
             ("date", ">=", date_from),
             ("date", "<=", date_to),
         ]
-        if employee_id:
-            domain.append(("employee_id", "=", employee_id))
+        if eid:
+            domain.append(("employee_id", "=", eid))
 
         try:
             result = await self._execute(

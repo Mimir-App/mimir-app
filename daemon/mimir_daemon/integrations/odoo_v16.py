@@ -35,6 +35,13 @@ class OdooV16Client(TimesheetClient):
         )
         self._session_id: str | None = None
         self._authenticated = False
+        self._uid: int | None = None
+        self._employee_id: int | None = None
+
+    @property
+    def employee_id(self) -> int | None:
+        """ID del empleado autenticado."""
+        return self._employee_id
 
     async def authenticate(self) -> bool:
         """Autentica con el servidor Odoo v16.
@@ -47,6 +54,7 @@ class OdooV16Client(TimesheetClient):
             if resp.status_code == 200:
                 self._authenticated = True
                 logger.info("Autenticado en Odoo v16 via REST API")
+                await self._fetch_employee_id()
                 return True
 
             # Fallback: intentar JSONRPC session_info (funciona con API key)
@@ -55,9 +63,12 @@ class OdooV16Client(TimesheetClient):
                 json={"jsonrpc": "2.0", "method": "call", "params": {}},
             )
             data = resp.json()
-            if data.get("result", {}).get("uid"):
+            uid = data.get("result", {}).get("uid")
+            if uid:
                 self._authenticated = True
-                logger.info("Autenticado en Odoo v16 via session JSONRPC")
+                self._uid = uid
+                logger.info("Autenticado en Odoo v16 via session JSONRPC (uid=%d)", uid)
+                await self._fetch_employee_id()
                 return True
 
             logger.error("Autenticación fallida en Odoo v16: uid no recibido")
@@ -68,6 +79,23 @@ class OdooV16Client(TimesheetClient):
         except Exception as e:
             logger.error("Error inesperado autenticando en Odoo v16: %s", e)
             return False
+
+    async def _fetch_employee_id(self) -> None:
+        """Obtiene el employee_id del usuario autenticado."""
+        try:
+            domain = [("user_id", "=", self._uid)] if self._uid else []
+            result = await self._jsonrpc(
+                "hr.employee", "search_read",
+                [domain, ["id"]],
+                {"limit": 1},
+            )
+            if result:
+                self._employee_id = result[0]["id"]
+                logger.info("Odoo v16: employee_id=%d", self._employee_id)
+            else:
+                logger.warning("Odoo v16: no se encontró empleado para uid=%s", self._uid)
+        except Exception as e:
+            logger.warning("Odoo v16: error obteniendo employee_id: %s", e)
 
     async def _jsonrpc(self, model: str, method: str, args: list, kwargs: dict | None = None) -> Any:
         """Ejecuta una llamada JSONRPC a Odoo.
@@ -169,13 +197,17 @@ class OdooV16Client(TimesheetClient):
     async def get_entries(
         self, date_from: str, date_to: str, employee_id: int | None = None
     ) -> list[dict[str, Any]]:
-        """Obtiene entradas de timesheet en un rango de fechas."""
+        """Obtiene entradas de timesheet en un rango de fechas.
+
+        Si no se pasa employee_id, usa el del usuario autenticado.
+        """
+        eid = employee_id or self._employee_id
         domain: list = [
             ("date", ">=", date_from),
             ("date", "<=", date_to),
         ]
-        if employee_id:
-            domain.append(("employee_id", "=", employee_id))
+        if eid:
+            domain.append(("employee_id", "=", eid))
 
         try:
             result = await self._jsonrpc(

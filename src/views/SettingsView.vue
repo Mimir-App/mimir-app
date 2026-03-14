@@ -139,6 +139,89 @@ async function clearOdooToken() {
   }
 }
 
+const testingOdoo = ref(false);
+const odooTestResult = ref<'ok' | 'fail' | null>(null);
+const odooTestMessage = ref('');
+
+const testingGitlab = ref(false);
+const gitlabTestResult = ref<'ok' | 'fail' | null>(null);
+const gitlabTestMessage = ref('');
+
+async function testOdooConnection() {
+  testingOdoo.value = true;
+  odooTestResult.value = null;
+  odooTestMessage.value = '';
+  try {
+    // Guardar token si hay uno nuevo
+    if (odooToken.value) {
+      await configStore.setOdooToken(odooToken.value);
+      odooToken.value = '';
+    }
+    await configStore.save(configStore.config);
+
+    if (!daemonStore.connected) {
+      odooTestResult.value = 'fail';
+      odooTestMessage.value = 'Daemon no conectado';
+      return;
+    }
+
+    const result = await configStore.pushToDaemon();
+    await refreshIntegrationStatus();
+
+    if (result.status === 'ok' && odooIntegrationStatus.value.configured) {
+      odooTestResult.value = 'ok';
+      odooTestMessage.value = 'Conectado a Odoo';
+    } else if (result.status === 'partial') {
+      odooTestResult.value = 'fail';
+      odooTestMessage.value = result.message ?? 'Error de autenticacion';
+    } else {
+      odooTestResult.value = 'fail';
+      odooTestMessage.value = 'No se pudo conectar. Verifica URL, usuario y contrasena.';
+    }
+  } catch (e) {
+    odooTestResult.value = 'fail';
+    odooTestMessage.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    testingOdoo.value = false;
+  }
+}
+
+async function testGitlabConnection() {
+  testingGitlab.value = true;
+  gitlabTestResult.value = null;
+  gitlabTestMessage.value = '';
+  try {
+    // Guardar token si hay uno nuevo
+    if (gitlabToken.value) {
+      await configStore.setGitLabToken(gitlabToken.value);
+      gitlabToken.value = '';
+    }
+    await configStore.save(configStore.config);
+
+    if (!daemonStore.connected) {
+      gitlabTestResult.value = 'fail';
+      gitlabTestMessage.value = 'Daemon no conectado';
+      return;
+    }
+
+    const result = await configStore.pushToDaemon();
+    await refreshIntegrationStatus();
+
+    if (result.status === 'ok' && gitlabIntegrationConfigured.value) {
+      gitlabTestResult.value = 'ok';
+      gitlabTestMessage.value = 'Conectado a GitLab';
+    } else {
+      gitlabTestResult.value = 'fail';
+      gitlabTestMessage.value = 'No se pudo conectar. Verifica URL y token.';
+    }
+  } catch (e) {
+    gitlabTestResult.value = 'fail';
+    gitlabTestMessage.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    testingGitlab.value = false;
+  }
+}
+
 async function clearAIToken() {
   try {
     await configStore.deleteAIToken();
@@ -219,6 +302,17 @@ async function clearAIToken() {
             </button>
           </div>
         </div>
+        <div class="field">
+          <span>Conexion</span>
+          <div class="connection-test">
+            <button type="button" class="btn btn-secondary btn-sm" @click="testGitlabConnection" :disabled="testingGitlab">
+              {{ testingGitlab ? 'Probando...' : 'Probar conexion' }}
+            </button>
+            <span v-if="gitlabTestResult === 'ok'" class="conn-ok">{{ gitlabTestMessage }}</span>
+            <span v-else-if="gitlabTestResult === 'fail'" class="conn-fail">{{ gitlabTestMessage }}</span>
+            <span v-else-if="gitlabIntegrationConfigured" class="conn-ok">Conectado</span>
+          </div>
+        </div>
         <div class="field-hint" v-if="hasGitLabConfig">
           GitLab configurado: {{ configStore.config.gitlab_url }}
         </div>
@@ -260,6 +354,17 @@ async function clearAIToken() {
             >
               Eliminar
             </button>
+          </div>
+        </div>
+        <div class="field">
+          <span>Conexion</span>
+          <div class="connection-test">
+            <button type="button" class="btn btn-secondary btn-sm" @click="testOdooConnection" :disabled="testingOdoo">
+              {{ testingOdoo ? 'Probando...' : 'Probar conexion' }}
+            </button>
+            <span v-if="odooTestResult === 'ok'" class="conn-ok">{{ odooTestMessage }}</span>
+            <span v-else-if="odooTestResult === 'fail'" class="conn-fail">{{ odooTestMessage }}</span>
+            <span v-else-if="odooIntegrationStatus.configured" class="conn-ok">Conectado ({{ odooIntegrationStatus.client_type }})</span>
           </div>
         </div>
         <div class="field-hint" v-if="hasOdooConfig">

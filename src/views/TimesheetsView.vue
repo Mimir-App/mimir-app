@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, watch } from 'vue';
 import { useTimesheetsStore } from '../stores/timesheets';
+import CollapsibleGroup from '../components/shared/CollapsibleGroup.vue';
 
 const tsStore = useTimesheetsStore();
 
@@ -24,6 +25,13 @@ watch([() => tsStore.dateFrom, () => tsStore.dateTo], () => {
         Hasta
         <input type="date" v-model="tsStore.dateTo" class="date-picker" />
       </label>
+      <label>
+        Agrupar por
+        <select v-model="tsStore.groupBy" class="group-select">
+          <option value="date">Fecha</option>
+          <option value="project">Proyecto</option>
+        </select>
+      </label>
       <span class="total-hours">
         Total: <strong>{{ tsStore.totalHours.toFixed(1) }}h</strong>
       </span>
@@ -33,34 +41,34 @@ watch([() => tsStore.dateFrom, () => tsStore.dateTo], () => {
     <div v-if="tsStore.loading" class="loading">Cargando timesheets...</div>
 
     <template v-else>
-      <div
-        v-for="(group, projectName) in tsStore.byProject"
-        :key="projectName"
-        class="project-group"
+      <CollapsibleGroup
+        v-for="(group, key) in tsStore.grouped"
+        :key="key"
+        :label="group.label"
+        :count="group.entries.length"
+        :summary="group.hours.toFixed(1) + 'h'"
       >
-        <h3 class="project-name">
-          {{ projectName }}
-          <span class="project-hours">{{ group.hours.toFixed(1) }}h</span>
-        </h3>
         <table class="ts-table">
           <thead>
             <tr>
-              <th>Fecha</th>
+              <th v-if="tsStore.groupBy !== 'date'">Fecha</th>
+              <th v-if="tsStore.groupBy !== 'project'">Proyecto</th>
               <th>Tarea</th>
-              <th>Descripción</th>
+              <th>Descripcion</th>
               <th class="col-hours">Horas</th>
             </tr>
           </thead>
           <tbody>
             <tr v-for="entry in group.entries" :key="entry.id">
-              <td>{{ entry.date }}</td>
+              <td v-if="tsStore.groupBy !== 'date'">{{ entry.date }}</td>
+              <td v-if="tsStore.groupBy !== 'project'">{{ entry.project_name }}</td>
               <td>{{ entry.task_name ?? '—' }}</td>
               <td>{{ entry.description }}</td>
               <td class="col-hours">{{ entry.hours.toFixed(2) }}</td>
             </tr>
           </tbody>
         </table>
-      </div>
+      </CollapsibleGroup>
 
       <div v-if="tsStore.entries.length === 0" class="empty-state">
         Sin entradas de timesheet
@@ -89,7 +97,8 @@ watch([() => tsStore.dateFrom, () => tsStore.dateTo], () => {
   color: var(--text-secondary);
 }
 
-.date-picker {
+.date-picker,
+.group-select {
   background: var(--bg-card);
   color: var(--text-primary);
   border: 1px solid var(--border);
@@ -107,11 +116,11 @@ watch([() => tsStore.dateFrom, () => tsStore.dateTo], () => {
   color: var(--accent);
 }
 
-.project-group {
+.ts-group {
   margin-bottom: 20px;
 }
 
-.project-name {
+.group-header {
   font-size: 14px;
   font-weight: 600;
   padding: 8px 0;
@@ -122,7 +131,7 @@ watch([() => tsStore.dateFrom, () => tsStore.dateTo], () => {
   justify-content: space-between;
 }
 
-.project-hours {
+.group-hours {
   color: var(--accent);
   font-weight: 500;
 }

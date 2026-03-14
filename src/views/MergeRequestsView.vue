@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref } from 'vue';
 import { useMergeRequestsStore } from '../stores/merge_requests';
 import { useConfigStore } from '../stores/config';
 import FilterBar from '../components/shared/FilterBar.vue';
+import CollapsibleGroup from '../components/shared/CollapsibleGroup.vue';
 import MRTable from '../components/merge_requests/MRTable.vue';
 
 const mrStore = useMergeRequestsStore();
@@ -70,14 +71,14 @@ async function refresh() {
     </div>
 
     <template v-else>
-      <div
+      <CollapsibleGroup
         v-for="(mrs, project) in mrStore.groupedMRs"
         :key="project"
-        class="project-group"
+        :label="String(project)"
+        :count="mrs.length"
       >
-        <h3 class="project-name">{{ project }} ({{ mrs.length }})</h3>
         <MRTable :merge-requests="mrs" />
-      </div>
+      </CollapsibleGroup>
 
       <div v-if="mrStore.filteredMRs.length === 0 && !mrStore.loading" class="empty-state">
         Sin merge requests que mostrar

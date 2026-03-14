@@ -3,6 +3,7 @@ import { onMounted, onUnmounted, ref } from 'vue';
 import { useIssuesStore } from '../stores/issues';
 import { useConfigStore } from '../stores/config';
 import FilterBar from '../components/shared/FilterBar.vue';
+import CollapsibleGroup from '../components/shared/CollapsibleGroup.vue';
 import IssueTable from '../components/issues/IssueTable.vue';
 
 const issuesStore = useIssuesStore();
@@ -70,14 +71,14 @@ async function refresh() {
     </div>
 
     <template v-else>
-      <div
+      <CollapsibleGroup
         v-for="(issues, project) in issuesStore.groupedIssues"
         :key="project"
-        class="project-group"
+        :label="String(project)"
+        :count="issues.length"
       >
-        <h3 class="project-name">{{ project }} ({{ issues.length }})</h3>
         <IssueTable :issues="issues" />
-      </div>
+      </CollapsibleGroup>
 
       <div v-if="issuesStore.filteredIssues.length === 0 && !issuesStore.loading" class="empty-state">
         Sin issues que mostrar
