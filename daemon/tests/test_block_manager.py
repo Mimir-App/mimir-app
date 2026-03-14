@@ -229,3 +229,32 @@ async def test_recover_continues_recent_block(db):
     await manager.recover_open_blocks()
 
     assert manager._current_block_id == block_id
+
+
+# --- Historial de titulos de ventana ---
+
+
+@pytest.mark.asyncio
+async def test_block_tracks_window_titles(db):
+    """BlockManager acumula títulos de ventana únicos."""
+    import json
+    from mimir_daemon.block_manager import BlockManager
+    from mimir_daemon.platform.base import WindowInfo
+    from mimir_daemon.context_enricher import EnrichedContext
+    from datetime import datetime, timezone
+
+    bm = BlockManager(db=db)
+
+    for title in ["models.py — VS Code", "test_models.py — VS Code", "models.py — VS Code"]:
+        window = WindowInfo(pid=100, app_name="code", window_title=title)
+        ctx = EnrichedContext(project_path="/home/user/project", git_branch="main")
+        await bm.process_poll(window, ctx)
+
+    await bm._close_current_block()
+
+    blocks = await db.get_blocks_by_date(datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+    assert len(blocks) == 1
+    titles = json.loads(blocks[0]["window_titles_json"])
+    assert len(titles) == 2
+    assert "models.py — VS Code" in titles
+    assert "test_models.py — VS Code" in titles

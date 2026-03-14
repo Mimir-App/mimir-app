@@ -2,21 +2,32 @@
 import { computed } from 'vue';
 import type { BlockStatus } from '../../lib/types';
 
-const props = defineProps<{ status: BlockStatus }>();
+const props = defineProps<{
+  status: BlockStatus;
+  error?: string | null;
+}>();
 
 const config = computed(() => {
   const map: Record<BlockStatus, { label: string; cls: string }> = {
     auto: { label: 'Auto', cls: 'auto' },
+    closed: { label: 'Cerrado', cls: 'closed' },
     confirmed: { label: 'Confirmado', cls: 'confirmed' },
     synced: { label: 'Enviado', cls: 'synced' },
     error: { label: 'Error', cls: 'error' },
   };
-  return map[props.status];
+  return map[props.status] ?? { label: props.status, cls: 'auto' };
+});
+
+const tooltip = computed(() => {
+  if (props.status === 'error' && props.error) {
+    return `Error: ${props.error}`;
+  }
+  return undefined;
 });
 </script>
 
 <template>
-  <span class="sync-badge" :class="config.cls">{{ config.label }}</span>
+  <span class="sync-badge" :class="config.cls" :title="tooltip">{{ config.label }}</span>
 </template>
 
 <style scoped>
@@ -25,16 +36,18 @@ const config = computed(() => {
   padding: 2px 8px;
   border-radius: 3px;
   font-weight: 500;
+  cursor: default;
 }
 
-.sync-badge.auto {
+.sync-badge.auto,
+.sync-badge.closed {
   background: var(--bg-card);
   color: var(--text-secondary);
 }
 
 .sync-badge.confirmed {
   background: rgba(86, 156, 214, 0.15);
-  color: var(--accent);
+  color: #569cd6;
 }
 
 .sync-badge.synced {
@@ -45,5 +58,6 @@ const config = computed(() => {
 .sync-badge.error {
   background: rgba(241, 76, 76, 0.15);
   color: var(--error);
+  cursor: help;
 }
 </style>

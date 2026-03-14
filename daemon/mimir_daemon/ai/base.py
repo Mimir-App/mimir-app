@@ -14,6 +14,10 @@ class DescriptionRequest:
     git_branch: str | None
     git_remote: str | None
     duration_minutes: float
+    window_titles: list[str] | None = None
+    last_commit_message: str | None = None
+    user_role: str = "technical"
+    user_context: str = ""
 
 
 @dataclass

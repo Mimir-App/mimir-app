@@ -72,3 +72,23 @@ def test_enriched_context_defaults():
 def test_invalidate_git_cache():
     """invalidate_git_cache limpia la cache sin error."""
     invalidate_git_cache()  # No deberia lanzar excepcion
+
+
+@pytest.mark.asyncio
+async def test_enrich_pid_includes_last_commit(tmp_path, monkeypatch):
+    """enrich_pid incluye el último commit message."""
+    from mimir_daemon.context_enricher import enrich_pid, invalidate_git_cache
+    invalidate_git_cache()
+
+    import subprocess
+    subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.email", "test@test.com"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "Test"], check=True, capture_output=True)
+    (tmp_path / "file.txt").write_text("hello")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "."], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-m", "feat: initial commit"], check=True, capture_output=True)
+
+    monkeypatch.setattr("mimir_daemon.context_enricher._read_proc_cwd", lambda pid: str(tmp_path))
+
+    ctx = await enrich_pid(1234)
+    assert ctx.last_commit_message == "feat: initial commit"

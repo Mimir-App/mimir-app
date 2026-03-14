@@ -1,22 +1,26 @@
 import { ref, watch } from 'vue';
 import type { OdooProject, OdooTask } from '../lib/types';
+import { api } from '../lib/api';
 
 /**
  * Composable para cargar proyectos y tareas de Odoo.
+ * Usa la capa de abstraccion api.ts (Tauri invoke o HTTP directo).
  */
 export function useOdooProjects() {
   const projects = ref<OdooProject[]>([]);
   const tasks = ref<OdooTask[]>([]);
   const selectedProjectId = ref<number | null>(null);
   const loading = ref(false);
+  const error = ref<string | null>(null);
 
   async function loadProjects() {
     loading.value = true;
+    error.value = null;
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      projects.value = await invoke<OdooProject[]>('get_odoo_projects');
-    } catch {
+      projects.value = await api.getOdooProjects() as OdooProject[];
+    } catch (e) {
       projects.value = [];
+      error.value = e instanceof Error ? e.message : String(e);
     } finally {
       loading.value = false;
     }
@@ -24,8 +28,7 @@ export function useOdooProjects() {
 
   async function loadTasks(projectId: number) {
     try {
-      const { invoke } = await import('@tauri-apps/api/core');
-      tasks.value = await invoke<OdooTask[]>('get_odoo_tasks', { projectId });
+      tasks.value = await api.getOdooTasks(projectId) as OdooTask[];
     } catch {
       tasks.value = [];
     }
@@ -39,5 +42,5 @@ export function useOdooProjects() {
     }
   });
 
-  return { projects, tasks, selectedProjectId, loading, loadProjects };
+  return { projects, tasks, selectedProjectId, loading, error, loadProjects };
 }

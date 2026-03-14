@@ -1,11 +1,18 @@
 """Gestion de bloques de actividad con herencia de contexto."""
 
+from __future__ import annotations
+
+import json
 import logging
 from datetime import datetime, timezone, timedelta
+from typing import TYPE_CHECKING
 
 from .db import Database
 from .platform.base import WindowInfo
 from .context_enricher import EnrichedContext
+
+if TYPE_CHECKING:
+    from .ai.service import AIService
 
 logger = logging.getLogger(__name__)
 
@@ -16,15 +23,23 @@ _CONTEXT_CHANGE_FIELDS = ("app_name", "project_path")
 class BlockManager:
     """Gestiona la creacion y mantenimiento de bloques de actividad."""
 
-    def __init__(self, db: Database, inherit_threshold: int = 900) -> None:
+    def __init__(
+        self,
+        db: Database,
+        inherit_threshold: int = 900,
+        ai_service: AIService | None = None,
+    ) -> None:
         self._db = db
         self._inherit_threshold = inherit_threshold  # 15 min en segundos
+        self._ai_service = ai_service
         self._current_block_id: int | None = None
         self._current_app: str | None = None
         self._current_project: str | None = None
         self._last_activity: datetime | None = None
         self._poll_count: int = 0
         self._checkpoint_interval: int = 5
+        self._window_titles: list[str] = []
+        self._max_titles: int = 20
 
     async def recover_open_blocks(self) -> None:
         """Recupera estado tras reinicio del daemon.
@@ -155,6 +170,7 @@ class BlockManager:
         )
         self._current_app = window.app_name
         self._current_project = context.project_path
+        self._window_titles = [window.window_title]
         logger.info(
             "Nuevo bloque #%d: %s - %s [%s]",
             self._current_block_id,
@@ -184,6 +200,10 @@ class BlockManager:
             start = start.replace(tzinfo=timezone.utc)
         duration = (now - start).total_seconds() / 60
 
+        if window.window_title not in self._window_titles:
+            if len(self._window_titles) < self._max_titles:
+                self._window_titles.append(window.window_title)
+
         await self._db.update_block(
             self._current_block_id,
             end_time=now.isoformat(),
@@ -197,15 +217,49 @@ class BlockManager:
     async def _close_current_block(self) -> None:
         """Cierra el bloque actual."""
         if self._current_block_id:
+            if self._window_titles:
+                await self._db.update_block(
+                    self._current_block_id,
+                    window_titles_json=json.dumps(self._window_titles, ensure_ascii=False),
+                )
             await self._db.update_block(
                 self._current_block_id, status="closed"
             )
             logger.info(
                 "Bloque #%d cerrado", self._current_block_id
             )
+            # Generar descripción IA
+            if self._ai_service:
+                try:
+                    block = await self._db.get_block_by_id(self._current_block_id)
+                    if block and not block.get("user_description"):
+                        from .ai.base import DescriptionRequest
+                        request = DescriptionRequest(
+                            app_name=block.get("app_name", ""),
+                            window_title=block.get("window_title", ""),
+                            project_path=block.get("project_path"),
+                            git_branch=block.get("git_branch"),
+                            git_remote=block.get("git_remote"),
+                            duration_minutes=block.get("duration_minutes", 0),
+                            window_titles=json.loads(block["window_titles_json"])
+                            if block.get("window_titles_json") else None,
+                        )
+                        result = await self._ai_service.generate(request)
+                        await self._db.update_block(
+                            self._current_block_id,
+                            ai_description=result.description,
+                            ai_confidence=result.confidence,
+                        )
+                        logger.info(
+                            "Descripción IA para bloque #%d: %s (%.1f)",
+                            self._current_block_id, result.description, result.confidence,
+                        )
+                except Exception as e:
+                    logger.error("Error generando descripción IA: %s", e)
             self._current_block_id = None
             self._current_app = None
             self._current_project = None
+            self._window_titles = []
 
     async def _checkpoint(self, now: datetime) -> None:
         """Checkpoint periodico para persistir estado."""

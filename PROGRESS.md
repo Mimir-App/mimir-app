@@ -116,42 +116,89 @@ Ultima actualizacion: 2026-03-13
 
 ---
 
-## Fase 2 - Config + Auth + Comunicacion PENDIENTE
+## Fase 2 - Config + Auth + Comunicacion COMPLETADA
 
+**Fecha:** 2026-03-13
 **Objetivo:** Conectar el frontend Tauri con el daemon real.
 
 | Tarea | Estado | Notas |
 |---|---|---|
-| Integrar keyring real en Rust | Pendiente | Crate `keyring` ya en Cargo.toml |
-| Conectar frontend con daemon real | Pendiente | Stores ya tienen invoke calls |
-| SettingsView funcional end-to-end | Pendiente | |
-| Health check daemon desde Tauri | Pendiente | |
+| Integrar keyring real en Rust | Completado | store/get/delete credential via keyring crate, tokens seguros en keyring del sistema |
+| Conectar frontend con daemon real | Completado | Puerto leido de config, DaemonClient usa puerto configurable, api.ts dual mode Tauri/HTTP |
+| SettingsView funcional end-to-end | Completado | Formulario completo: Daemon, GitLab, Odoo, General. Tokens en keyring, push config al daemon |
+| Health check daemon desde Tauri | Completado | Health check al arrancar App.vue, polling cada 10s, test connection en Settings |
+| Push config al daemon | Completado | PUT /config envia credenciales y configura integraciones Odoo en tiempo real |
+| Endpoint /config en daemon | Completado | GET/PUT /config, GET /config/integration-status |
+| Borrar credenciales | Completado | deleteCredential en keyring, botones en SettingsView |
+| useOdooProjects via api.ts | Completado | Migrado de invoke directo a capa api.ts |
+| Tests config endpoints | Completado | 6 tests nuevos: config GET/PUT, tokens no expuestos, integration status |
+
+**Tests: 46/46 pasando** (40 existentes + 6 nuevos de config endpoints)
+
+**Verificaciones:**
+- Daemon tests: `pytest tests/ -v`
+- TypeScript: `npx vue-tsc --noEmit`
+- Rust: `cargo check`
 
 ---
 
-## Fase 3 - Revisar Dia + Imputacion Odoo PENDIENTE
+## Fase 3 - Revisar Dia + Imputacion Odoo COMPLETADA
 
+**Fecha:** 2026-03-13
 **Objetivo:** Flujo completo de captura a imputacion en Odoo.
 
 | Tarea | Estado | Notas |
 |---|---|---|
-| Conectar `odoo_v11.py` con `server.py` | Pendiente | Stubs vacios en server.py |
-| Conectar `odoo_v16.py` con `server.py` | Pendiente | Stubs vacios en server.py |
-| Implementar endpoints reales de Odoo | Pendiente | |
-| BlockEditor con dropdowns de proyectos/tareas | Pendiente | |
-| Flujo: captura -> revision -> confirmacion -> envio Odoo | Pendiente | |
+| Implementar `odoo_v11.py` completo | Completado | XMLRPC via asyncio.to_thread, error handling robusto, logging completo |
+| Implementar `odoo_v16.py` completo | Completado | REST/JSONRPC via httpx async, error handling robusto, logging completo |
+| Conectar clientes Odoo con `server.py` | Completado | GET /odoo/projects, GET /odoo/tasks/{id}, GET /odoo/entries con error handling |
+| Sync lifecycle completo | Completado | pending -> sent (con remote_id) o error (con sync_error); update si ya existe remote_id |
+| Endpoint retry sync | Completado | POST /blocks/{id}/retry para reintentar bloques con error |
+| Editar bloque tras sync | Completado | PUT /blocks/{id} marca bloques synced como confirmed para reenvio |
+| BlockEditor con dropdowns funcionales | Completado | Proyectos/tareas de Odoo, filtro de busqueda, guardar + confirmar |
+| ReviewDayView funcional | Completado | Navegacion por fecha, confirmar todos, enviar a Odoo, estadisticas |
+| BlockRow con retry y tooltips | Completado | Boton reintentar para errores, tooltip en SyncStatusBadge |
+| SyncStatusBadge mejorado | Completado | Soporte para estados auto/closed/confirmed/synced/error con tooltips |
+| Comando Tauri retry_sync_block | Completado | Proxy HTTP para reintento individual |
+| Tests Odoo v11 | Completado | 14 tests con mock de XMLRPC |
+| Tests Odoo v16 | Completado | 15 tests con mock de httpx |
+| Tests server (sync flow) | Completado | 7 tests nuevos: retry, update synced, sync no client, etc. |
+
+**Tests: 86/86 pasando** (45 Fase 2 + 14 Odoo v11 + 18 Odoo v16 + 9 server nuevos)
+
+**Verificaciones:**
+- Daemon tests: `cd daemon && pytest tests/ -v`
+- TypeScript: `npx vue-tsc --noEmit`
+- Rust: `cd src-tauri && cargo check`
 
 ---
 
-## Fase 4 - Descripciones IA PENDIENTE
+## Fase 4 - Descripciones IA COMPLETADA
 
+**Fecha:** 2026-03-14
 **Objetivo:** Generar descripciones automaticas para los bloques de tiempo.
 
 | Tarea | Estado | Notas |
 |---|---|---|
-| Implementar llamada real a Gemini API | Pendiente | Stub heuristico existe |
-| Cache por hash de senales | Pendiente | Estructura creada |
-| Lazy loading de descripciones en frontend | Pendiente | |
+| EnrichedContext con last_commit_message | Completado | git log -1 --format=%s al enriquecer contexto |
+| Historial de titulos de ventana | Completado | BlockManager acumula titulos unicos (max 20), guarda en window_titles_json |
+| Tabla ai_cache en SQLite | Completado | Cache por hash de senales (SHA-256), evita llamadas repetidas |
+| AIService orquestador | Completado | Cache -> provider -> fallback heuristico; nunca bloquea cierre de bloque |
+| Providers Gemini/Claude/OpenAI | Completado | Patron adaptador, 3 implementaciones con SDK real + mocks en tests |
+| Integracion en block lifecycle | Completado | Genera descripcion al cerrar bloque automaticamente |
+| Endpoint generate-description | Completado | POST /blocks/{id}/generate-description para regenerar bajo demanda |
+| Configuracion IA en PUT /config | Completado | ai_provider, ai_api_key, ai_user_role, ai_custom_context |
+| Frontend tipos + api.ts | Completado | AppConfig extendido, generateDescription en api |
+| SettingsView seccion IA | Completado | Proveedor, API key, perfil usuario, contexto adicional |
+| BlockEditor boton regenerar | Completado | Boton "Generar con IA" en editor de bloques |
+| Tauri command generate_block_description | Completado | Proxy HTTP + campos IA en push_config_to_daemon |
+
+**Tests: 100/100 pasando** (88 Fase 3 + 1 context_enricher + 1 block_manager + 4 ai_service + 4 ai_providers + 2 server)
+
+**Verificaciones:**
+- Daemon tests: `cd daemon && .venv/bin/python -m pytest tests/ -v`
+- TypeScript: `npx vue-tsc --noEmit`
+- Rust: `cd src-tauri && cargo check`
 
 ---
 

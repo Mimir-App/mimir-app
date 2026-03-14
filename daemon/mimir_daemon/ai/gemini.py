@@ -1,65 +1,70 @@
-"""Proveedor de descripciones IA usando Gemini (stub MVP)."""
+"""Proveedor de descripciones IA usando Google Gemini."""
 
-import hashlib
 import logging
-from typing import Any
+
+import google.generativeai as genai
 
 from .base import DescriptionProvider, DescriptionRequest, DescriptionResult
 
 logger = logging.getLogger(__name__)
 
+SYSTEM_PROMPT = (
+    "Genera una descripción concisa (1 línea, máximo 120 caracteres) de la actividad "
+    "laboral basándote en las señales proporcionadas. Responde SOLO con la descripción, "
+    "sin explicaciones ni formato adicional. Idioma: español."
+)
+
+
+def _build_user_prompt(request: DescriptionRequest) -> str:
+    """Construye el prompt de usuario con las señales del bloque."""
+    parts = [f"App: {request.app_name}"]
+    if request.project_path:
+        project = request.project_path.rsplit("/", 1)[-1]
+        parts.append(f"Proyecto: {project}")
+    if request.git_branch:
+        parts.append(f"Rama: {request.git_branch}")
+    parts.append(f"Duración: {request.duration_minutes:.0f}min")
+    if request.window_titles:
+        titles = ", ".join(request.window_titles[:10])
+        parts.append(f"Archivos/ventanas: {titles}")
+    elif request.window_title:
+        parts.append(f"Ventana: {request.window_title}")
+    if request.last_commit_message:
+        parts.append(f'Último commit: "{request.last_commit_message}"')
+
+    prompt = f"Perfil: {request.user_role}\n"
+    if request.user_context:
+        prompt += f"Contexto: {request.user_context}\n"
+    prompt += "\nSeñales:\n" + "\n".join(f"- {p}" for p in parts)
+    return prompt
+
 
 class GeminiProvider(DescriptionProvider):
     """Proveedor de descripciones usando Google Gemini API."""
 
-    def __init__(self, api_key: str) -> None:
-        self._api_key = api_key
-        self._cache: dict[str, DescriptionResult] = {}
-
-    def _compute_hash(self, request: DescriptionRequest) -> str:
-        """Computa hash de las señales para cache."""
-        signals = f"{request.app_name}|{request.window_title}|{request.project_path}|{request.git_branch}"
-        return hashlib.sha256(signals.encode()).hexdigest()[:16]
-
-    async def generate(self, request: DescriptionRequest) -> DescriptionResult:
-        """Genera descripción con Gemini, usando cache por hash de señales."""
-        cache_key = self._compute_hash(request)
-
-        if cache_key in self._cache:
-            result = self._cache[cache_key]
-            return DescriptionResult(
-                description=result.description,
-                confidence=result.confidence,
-                cached=True,
-            )
-
-        # TODO: implementar llamada real a Gemini API
-        # Por ahora, generar descripción heurística
-        description = self._heuristic_description(request)
-        result = DescriptionResult(
-            description=description,
-            confidence=0.5,
-            cached=False,
+    def __init__(self, api_key: str, model: str = "gemini-2.0-flash") -> None:
+        genai.configure(api_key=api_key)
+        self._model = genai.GenerativeModel(
+            model_name=model,
+            system_instruction=SYSTEM_PROMPT,
         )
 
-        self._cache[cache_key] = result
-        return result
+    async def generate(self, request: DescriptionRequest) -> DescriptionResult:
+        """Genera descripción con Gemini."""
+        prompt = _build_user_prompt(request)
+        logger.debug("Gemini prompt: %s", prompt)
 
-    def _heuristic_description(self, request: DescriptionRequest) -> str:
-        """Genera descripción heurística como fallback."""
-        parts = []
+        response = await self._model.generate_content_async(prompt)
+        text = (response.text or "").strip()
 
-        if request.git_branch and request.project_path:
-            project = request.project_path.split("/")[-1] if "/" in request.project_path else request.project_path
-            parts.append(f"Trabajo en {project}")
-            if request.git_branch not in ("main", "master"):
-                parts.append(f"rama {request.git_branch}")
-        elif request.app_name:
-            parts.append(f"Usando {request.app_name}")
+        if not text:
+            logger.warning("Gemini devolvió respuesta vacía")
+            return DescriptionResult(
+                description=f"Actividad en {request.app_name}",
+                confidence=0.3,
+            )
 
-        if request.window_title:
-            title_parts = request.window_title.split(" - ")
-            if len(title_parts) > 1:
-                parts.append(title_parts[0][:50])
+        if len(text) > 120:
+            text = text[:117] + "..."
 
-        return " — ".join(parts) if parts else f"Actividad en {request.app_name}"
+        return DescriptionResult(description=text, confidence=0.8)

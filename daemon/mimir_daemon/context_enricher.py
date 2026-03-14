@@ -21,6 +21,7 @@ class EnrichedContext:
     git_remote: str | None = None
     project_path: str | None = None
     ssh_host: str | None = None
+    last_commit_message: str | None = None
     extra: dict[str, str] = field(default_factory=dict)
 
 
@@ -42,6 +43,7 @@ async def enrich_pid(pid: int) -> EnrichedContext:
             branch, remote = await _get_git_info(str(git_root))
             ctx.git_branch = branch
             ctx.git_remote = remote
+            ctx.last_commit_message = await _get_last_commit_message(str(git_root))
         else:
             ctx.project_path = ctx.cwd
 
@@ -124,6 +126,11 @@ async def _get_git_info(git_root: str) -> tuple[str | None, str | None]:
 
     _git_cache[git_root] = (branch, remote)
     return branch, remote
+
+
+async def _get_last_commit_message(git_root: str) -> str | None:
+    """Obtiene el mensaje del último commit."""
+    return await _run_git(git_root, "log", "-1", "--format=%s")
 
 
 async def _run_git(cwd: str, *args: str) -> str | None:

@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS blocks (
     status TEXT NOT NULL DEFAULT 'auto',
     sync_error TEXT,
     odoo_entry_id INTEGER,
+    window_titles_json TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -49,6 +50,14 @@ CREATE TABLE IF NOT EXISTS preferences_cache (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS ai_cache (
+    signal_hash TEXT PRIMARY KEY,
+    description TEXT NOT NULL,
+    confidence REAL NOT NULL,
+    provider TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 """
 
@@ -180,5 +189,26 @@ class Database:
             "INSERT OR REPLACE INTO preferences_cache (key, value, updated_at) "
             "VALUES (?, ?, datetime('now'))",
             (key, value),
+        )
+        await self.db.commit()
+
+    # --- AI cache ---
+
+    async def get_ai_cache(self, signal_hash: str) -> dict | None:
+        """Obtiene una descripción cacheada por hash de señales."""
+        async with self.db.execute(
+            "SELECT * FROM ai_cache WHERE signal_hash = ?", (signal_hash,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def set_ai_cache(
+        self, signal_hash: str, description: str, confidence: float, provider: str
+    ) -> None:
+        """Guarda una descripción en la cache."""
+        await self.db.execute(
+            "INSERT OR REPLACE INTO ai_cache (signal_hash, description, confidence, provider) "
+            "VALUES (?, ?, ?, ?)",
+            (signal_hash, description, confidence, provider),
         )
         await self.db.commit()

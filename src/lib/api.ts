@@ -103,6 +103,11 @@ export const api = {
     return httpPost('/blocks/sync', { block_ids: blockIds });
   },
 
+  async retrySync(blockId: number) {
+    if (await isTauri()) return tauriInvoke('retry_sync_block', { blockId });
+    return httpPost(`/blocks/${blockId}/retry`);
+  },
+
   async getOdooProjects() {
     if (await isTauri()) return tauriInvoke('get_odoo_projects');
     return httpGet('/odoo/projects');
@@ -144,6 +149,10 @@ export const api = {
       theme: 'dark',
       refresh_interval_seconds: 300,
       daily_hour_target: 8,
+      ai_provider: 'none',
+      ai_api_key_stored: false,
+      ai_user_role: 'technical',
+      ai_custom_context: '',
     };
   },
 
@@ -155,5 +164,31 @@ export const api = {
   async storeCredential(service: string, token: string) {
     if (await isTauri()) return tauriInvoke('store_credential', { service, token });
     console.warn('[api] storeCredential: no disponible fuera de Tauri');
+  },
+
+  async getCredential(service: string): Promise<string | null> {
+    if (await isTauri()) return tauriInvoke<string | null>('get_credential', { service });
+    return null;
+  },
+
+  async deleteCredential(service: string) {
+    if (await isTauri()) return tauriInvoke('delete_credential', { service });
+    console.warn('[api] deleteCredential: no disponible fuera de Tauri');
+  },
+
+  async pushConfigToDaemon(config: unknown) {
+    if (await isTauri()) return tauriInvoke('push_config_to_daemon', { config });
+    // En navegador, enviar directamente al daemon
+    return httpPut('/config', config);
+  },
+
+  async generateDescription(blockId: number) {
+    if (await isTauri()) return tauriInvoke('generate_block_description', { blockId });
+    return httpPost(`/blocks/${blockId}/generate-description`);
+  },
+
+  async getIntegrationStatus() {
+    if (await isTauri()) return tauriInvoke('get_integration_status');
+    return httpGet('/config/integration-status');
   },
 };

@@ -15,38 +15,114 @@ const DEFAULT_CONFIG: AppConfig = {
   theme: 'dark',
   refresh_interval_seconds: 300,
   daily_hour_target: 8,
+  ai_provider: 'none',
+  ai_api_key_stored: false,
+  ai_user_role: 'technical',
+  ai_custom_context: '',
 };
 
 export const useConfigStore = defineStore('config', () => {
   const config = ref<AppConfig>({ ...DEFAULT_CONFIG });
   const loaded = ref(false);
+  const saving = ref(false);
+  const error = ref<string | null>(null);
 
   async function load() {
     try {
       const result = await api.getConfig() as AppConfig;
       config.value = result;
       loaded.value = true;
-    } catch {
+      error.value = null;
+    } catch (e) {
       config.value = { ...DEFAULT_CONFIG };
       loaded.value = true;
+      error.value = e instanceof Error ? e.message : String(e);
     }
   }
 
   async function save(updates: Partial<AppConfig>) {
-    const newConfig = { ...config.value, ...updates };
-    await api.saveConfig(newConfig);
-    config.value = newConfig;
+    saving.value = true;
+    error.value = null;
+    try {
+      const newConfig = { ...config.value, ...updates };
+      await api.saveConfig(newConfig);
+      config.value = newConfig;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e);
+      throw e;
+    } finally {
+      saving.value = false;
+    }
   }
 
   async function setGitLabToken(token: string) {
     await api.storeCredential('gitlab', token);
     config.value.gitlab_token_stored = true;
+    await api.saveConfig(config.value);
+  }
+
+  async function deleteGitLabToken() {
+    await api.deleteCredential('gitlab');
+    config.value.gitlab_token_stored = false;
+    await api.saveConfig(config.value);
   }
 
   async function setOdooToken(token: string) {
     await api.storeCredential('odoo', token);
     config.value.odoo_token_stored = true;
+    await api.saveConfig(config.value);
   }
 
-  return { config, loaded, load, save, setGitLabToken, setOdooToken };
+  async function deleteOdooToken() {
+    await api.deleteCredential('odoo');
+    config.value.odoo_token_stored = false;
+    await api.saveConfig(config.value);
+  }
+
+  async function pushToDaemon(): Promise<{ status: string; message?: string }> {
+    try {
+      const result = await api.pushConfigToDaemon(config.value) as { status: string; message?: string };
+      return result ?? { status: 'ok' };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return { status: 'error', message: msg };
+    }
+  }
+
+  async function getIntegrationStatus(): Promise<Record<string, unknown>> {
+    try {
+      return await api.getIntegrationStatus() as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  }
+
+  async function setAIToken(token: string) {
+    await api.storeCredential('ai', token);
+    config.value.ai_api_key_stored = true;
+    await api.saveConfig(config.value);
+  }
+
+  async function deleteAIToken() {
+    await api.deleteCredential('ai');
+    config.value.ai_api_key_stored = false;
+    await api.saveConfig(config.value);
+  }
+
+  return {
+    config,
+    loaded,
+    saving,
+    error,
+    load,
+    save,
+    setGitLabToken,
+    deleteGitLabToken,
+    setOdooToken,
+    deleteOdooToken,
+    setAIToken,
+    deleteAIToken,
+    pushToDaemon,
+    getIntegrationStatus,
+  };
 });

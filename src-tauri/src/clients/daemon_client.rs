@@ -100,6 +100,29 @@ impl DaemonClient {
         Ok(())
     }
 
+    pub async fn put_json<T: DeserializeOwned, B: serde::Serialize>(
+        &self,
+        path: &str,
+        body: &B,
+    ) -> Result<T, String> {
+        let url = format!("{}{}", self.base_url, path);
+        let resp = self
+            .client
+            .put(&url)
+            .json(body)
+            .send()
+            .await
+            .map_err(|e| format!("Error de conexión con daemon: {}", e))?;
+
+        if !resp.status().is_success() {
+            return Err(format!("Daemon respondió con status {}", resp.status()));
+        }
+
+        resp.json::<T>()
+            .await
+            .map_err(|e| format!("Error deserializando respuesta: {}", e))
+    }
+
     pub async fn delete(&self, path: &str) -> Result<(), String> {
         let url = format!("{}{}", self.base_url, path);
         let resp = self

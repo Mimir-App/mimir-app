@@ -14,6 +14,7 @@ from .block_manager import BlockManager
 from .integrations.registry import IntegrationRegistry
 from .poller import Poller
 from .server import create_app
+from .ai.service import AIService
 from .tray import TrayIcon
 
 logger = logging.getLogger("mimir_daemon")
@@ -71,9 +72,12 @@ async def run_daemon(args: argparse.Namespace) -> None:
     platform = get_platform_provider()
     await platform.setup()
 
+    ai_service = AIService(db=db, provider=None)
+
     block_manager = BlockManager(
         db=db,
         inherit_threshold=config.inherit_threshold,
+        ai_service=ai_service,
     )
 
     # Recuperar bloques abiertos de sesion anterior
@@ -91,7 +95,7 @@ async def run_daemon(args: argparse.Namespace) -> None:
     )
 
     # Crear servidor HTTP
-    app = create_app(db=db, poller=poller, registry=registry, version=VERSION)
+    app = create_app(db=db, poller=poller, registry=registry, ai_service=ai_service, version=VERSION)
 
     # Tray icon
     tray = TrayIcon(

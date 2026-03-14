@@ -2,7 +2,7 @@
 
 // --- Bloques de actividad ---
 
-export type BlockStatus = 'auto' | 'confirmed' | 'synced' | 'error';
+export type BlockStatus = 'auto' | 'closed' | 'confirmed' | 'synced' | 'error';
 
 export interface ActivityBlock {
   id: number;
@@ -129,4 +129,8 @@ export interface AppConfig {
   theme: 'dark' | 'light' | 'system';
   refresh_interval_seconds: number;
   daily_hour_target: number;
+  ai_provider: 'gemini' | 'claude' | 'openai' | 'none';
+  ai_api_key_stored: boolean;
+  ai_user_role: 'technical' | 'functional' | 'other';
+  ai_custom_context: string;
 }

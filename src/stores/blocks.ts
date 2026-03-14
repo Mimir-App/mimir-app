@@ -55,9 +55,34 @@ export const useBlocksStore = defineStore('blocks', () => {
     const confirmedIds = blocks.value
       .filter(b => b.status === 'confirmed')
       .map(b => b.id);
-    await api.syncBlocks(confirmedIds);
+    if (confirmedIds.length === 0) return;
+    const result = await api.syncBlocks(confirmedIds) as { synced: number; errors: Array<{ block_id: number; error: string }> };
     await fetchBlocks();
+    return result;
   }
+
+  async function retrySync(blockId: number) {
+    try {
+      await api.retrySync(blockId);
+      const block = blocks.value.find(b => b.id === blockId);
+      if (block) {
+        block.status = 'synced';
+        block.sync_error = null;
+      }
+    } catch (e) {
+      // Refrescar para obtener el estado actualizado
+      await fetchBlocks();
+      throw e;
+    }
+  }
+
+  const confirmedBlocks = computed(() =>
+    blocks.value.filter(b => b.status === 'confirmed')
+  );
+
+  const errorBlocks = computed(() =>
+    blocks.value.filter(b => b.status === 'error')
+  );
 
   return {
     blocks,
@@ -65,6 +90,8 @@ export const useBlocksStore = defineStore('blocks', () => {
     loading,
     error,
     pendingBlocks,
+    confirmedBlocks,
+    errorBlocks,
     syncedBlocks,
     totalHoursToday,
     fetchBlocks,
@@ -72,5 +99,6 @@ export const useBlocksStore = defineStore('blocks', () => {
     updateBlock,
     deleteBlock,
     syncToOdoo,
+    retrySync,
   };
 });

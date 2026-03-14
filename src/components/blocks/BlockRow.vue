@@ -9,6 +9,7 @@ import BlockEditor from './BlockEditor.vue';
 const props = defineProps<{ block: ActivityBlock }>();
 const blocksStore = useBlocksStore();
 const editing = ref(false);
+const retrying = ref(false);
 
 const startTime = computed(() => {
   const d = new Date(props.block.start_time);
@@ -28,11 +29,15 @@ const duration = computed(() => {
 });
 
 const description = computed(() =>
-  props.block.user_description ?? props.block.ai_description ?? '—'
+  props.block.user_description ?? props.block.ai_description ?? ''
 );
 
 const canEdit = computed(() =>
   props.block.status !== 'synced'
+);
+
+const canConfirm = computed(() =>
+  props.block.status === 'auto' || props.block.status === 'closed'
 );
 
 function confirm() {
@@ -42,42 +47,71 @@ function confirm() {
 function remove() {
   blocksStore.deleteBlock(props.block.id);
 }
+
+async function retry() {
+  retrying.value = true;
+  try {
+    await blocksStore.retrySync(props.block.id);
+  } catch {
+    // El store ya refresca el estado
+  } finally {
+    retrying.value = false;
+  }
+}
 </script>
 
 <template>
-  <tr class="block-row" :class="{ synced: block.status === 'synced' }">
+  <tr class="block-row" :class="{ synced: block.status === 'synced', 'has-error': block.status === 'error' }">
     <td>{{ startTime }}</td>
     <td>{{ endTime }}</td>
     <td class="col-duration">{{ duration }}</td>
     <td class="col-app">
-      <span class="app-name">{{ block.app_name }}</span>
+      <span class="app-name" :title="block.app_name">{{ block.app_name }}</span>
     </td>
     <td class="col-desc">
-      <span class="description">{{ description }}</span>
+      <span v-if="description" class="description">{{ description }}</span>
+      <span v-else class="no-desc">Sin descripcion</span>
       <ConfidenceBadge
         v-if="block.ai_confidence != null && !block.user_description"
         :confidence="block.ai_confidence"
       />
     </td>
-    <td>{{ block.odoo_project_name ?? '—' }}</td>
-    <td>{{ block.odoo_task_name ?? '—' }}</td>
-    <td><SyncStatusBadge :status="block.status" /></td>
+    <td>
+      <span v-if="block.odoo_project_name" class="project-name">{{ block.odoo_project_name }}</span>
+      <span v-else class="no-project">Sin proyecto</span>
+    </td>
+    <td>
+      <span v-if="block.odoo_task_name">{{ block.odoo_task_name }}</span>
+      <span v-else class="no-task">&mdash;</span>
+    </td>
+    <td>
+      <SyncStatusBadge :status="block.status" :error="block.sync_error" />
+    </td>
     <td class="col-actions">
       <button
-        v-if="block.status === 'auto'"
+        v-if="canConfirm"
         class="btn-sm btn-confirm"
         @click="confirm"
         title="Confirmar bloque"
       >
-        ✓
+        &#x2713;
+      </button>
+      <button
+        v-if="block.status === 'error'"
+        class="btn-sm btn-retry"
+        @click="retry"
+        :disabled="retrying"
+        :title="block.sync_error ? `Reintentar (Error: ${block.sync_error})` : 'Reintentar'"
+      >
+        &#x21bb;
       </button>
       <button
         v-if="canEdit"
         class="btn-sm btn-edit"
         @click="editing = !editing"
-        title="Editar bloque"
+        :title="editing ? 'Cerrar editor' : 'Editar bloque'"
       >
-        ✎
+        &#x270E;
       </button>
       <button
         v-if="canEdit"
@@ -85,7 +119,7 @@ function remove() {
         @click="remove"
         title="Eliminar bloque"
       >
-        ✕
+        &#x2715;
       </button>
     </td>
   </tr>
@@ -109,6 +143,10 @@ function remove() {
 
 .block-row.synced td {
   opacity: 0.6;
+}
+
+.block-row.has-error td {
+  background: rgba(241, 76, 76, 0.03);
 }
 
 .col-duration {
@@ -136,6 +174,30 @@ function remove() {
   white-space: nowrap;
 }
 
+.no-desc {
+  color: var(--text-secondary);
+  font-style: italic;
+  font-size: 12px;
+}
+
+.project-name {
+  display: inline-block;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.no-project {
+  color: var(--text-secondary);
+  font-style: italic;
+  font-size: 12px;
+}
+
+.no-task {
+  color: var(--text-secondary);
+}
+
 .col-actions {
   white-space: nowrap;
 }
@@ -149,12 +211,26 @@ function remove() {
   margin-right: 2px;
 }
 
+.btn-sm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .btn-confirm {
   background: var(--success);
   color: white;
 }
 
 .btn-confirm:hover {
+  opacity: 0.85;
+}
+
+.btn-retry {
+  background: var(--warning);
+  color: #1e2029;
+}
+
+.btn-retry:hover:not(:disabled) {
   opacity: 0.85;
 }
 

@@ -15,6 +15,10 @@ pub struct AppConfig {
     pub theme: String,
     pub refresh_interval_seconds: u32,
     pub daily_hour_target: f64,
+    pub ai_provider: String,
+    pub ai_api_key_stored: bool,
+    pub ai_user_role: String,
+    pub ai_custom_context: String,
 }
 
 impl Default for AppConfig {
@@ -31,6 +35,10 @@ impl Default for AppConfig {
             theme: "dark".to_string(),
             refresh_interval_seconds: 300,
             daily_hour_target: 8.0,
+            ai_provider: "none".to_string(),
+            ai_api_key_stored: false,
+            ai_user_role: "technical".to_string(),
+            ai_custom_context: String::new(),
         }
     }
 }

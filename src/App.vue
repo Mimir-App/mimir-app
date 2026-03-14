@@ -20,7 +20,13 @@ function applyTheme(theme: string) {
 onMounted(async () => {
   await configStore.load();
   applyTheme(configStore.config.theme);
-  daemonStore.fetchStatus();
+
+  // Health check al arrancar y si el daemon esta disponible, enviar config
+  const ok = await daemonStore.healthCheck();
+  if (ok) {
+    configStore.pushToDaemon();
+  }
+
   pollTimer = setInterval(() => daemonStore.fetchStatus(), 10000);
 });
 
