@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec para mimir-daemon."""
+"""PyInstaller spec para mimir-capture."""
 
 from pathlib import Path
 
@@ -24,13 +24,6 @@ a = Analysis(
         "uvicorn.lifespan.on",
         "uvicorn.lifespan.off",
         "mimir_daemon.platform.linux",
-        "mimir_daemon.integrations.odoo_v11",
-        "mimir_daemon.integrations.odoo_v16",
-        "mimir_daemon.integrations.mock",
-        "mimir_daemon.ai.gemini",
-        "mimir_daemon.ai.claude_provider",
-        "mimir_daemon.ai.openai_provider",
-        "mimir_daemon.sources.gitlab",
         "aiosqlite",
         "pystray",
         "PIL",
@@ -51,7 +44,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="mimir-daemon",
+    name="mimir-capture",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

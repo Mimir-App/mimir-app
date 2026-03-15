@@ -2,10 +2,19 @@
 import { onMounted, watch, ref, computed } from 'vue';
 import { useBlocksStore } from '../stores/blocks';
 import { useDaemonStore } from '../stores/daemon';
+import { formatHours } from '../composables/useFormatting';
+import { api } from '../lib/api';
+import type { TimesheetEntry } from '../lib/types';
 import BlockTable from '../components/blocks/BlockTable.vue';
+import CollapsibleGroup from '../components/shared/CollapsibleGroup.vue';
+import StatusBanner from '../components/shared/StatusBanner.vue';
+import LoadingState from '../components/shared/LoadingState.vue';
+import CustomDatePicker from '../components/shared/CustomDatePicker.vue';
 
 const blocksStore = useBlocksStore();
 const daemonStore = useDaemonStore();
+const odooEntries = ref<TimesheetEntry[]>([]);
+const loadingOdoo = ref(false);
 const syncing = ref(false);
 const syncMessage = ref('');
 const syncMessageType = ref<'success' | 'error'>('success');
@@ -28,12 +37,31 @@ const syncedCount = computed(() =>
 
 const odooConnected = computed(() => daemonStore.connected);
 
+async function fetchOdooEntries() {
+  if (!daemonStore.connected) return;
+  loadingOdoo.value = true;
+  try {
+    const date = blocksStore.selectedDate;
+    odooEntries.value = await api.getTimesheetEntries(date, date) as TimesheetEntry[];
+  } catch {
+    odooEntries.value = [];
+  } finally {
+    loadingOdoo.value = false;
+  }
+}
+
+const odooTotalHours = computed(() =>
+  odooEntries.value.reduce((sum, e) => sum + e.hours, 0)
+);
+
 onMounted(() => {
   blocksStore.fetchBlocks();
+  fetchOdooEntries();
 });
 
 watch(() => blocksStore.selectedDate, () => {
   blocksStore.fetchBlocks();
+  fetchOdooEntries();
   syncMessage.value = '';
 });
 
@@ -74,6 +102,7 @@ async function syncToOdoo() {
 function refresh() {
   syncMessage.value = '';
   blocksStore.fetchBlocks();
+  fetchOdooEntries();
 }
 
 function prevDay() {
@@ -102,11 +131,7 @@ const isToday = computed(() =>
     <div class="review-toolbar">
       <div class="date-nav">
         <button class="btn btn-ghost" @click="prevDay" title="Dia anterior">&lt;</button>
-        <input
-          type="date"
-          v-model="blocksStore.selectedDate"
-          class="date-picker"
-        />
+        <CustomDatePicker v-model="blocksStore.selectedDate" />
         <button class="btn btn-ghost" @click="nextDay" title="Dia siguiente">&gt;</button>
         <button
           v-if="!isToday"
@@ -120,7 +145,7 @@ const isToday = computed(() =>
       <div class="toolbar-stats">
         <span>{{ blocksStore.blocks.length }} bloques</span>
         <span class="separator">|</span>
-        <span>{{ blocksStore.totalHoursToday.toFixed(1) }}h total</span>
+        <span>{{ formatHours(blocksStore.totalHoursToday) }} total</span>
         <template v-if="autoBlocksCount > 0">
           <span class="separator">|</span>
           <span class="pending-count">{{ autoBlocksCount }} pendientes</span>
@@ -136,6 +161,10 @@ const isToday = computed(() =>
         <template v-if="syncedCount > 0">
           <span class="separator">|</span>
           <span class="synced-count">{{ syncedCount }} enviados</span>
+        </template>
+        <template v-if="odooEntries.length > 0">
+          <span class="separator">|</span>
+          <span class="odoo-count">Odoo: {{ formatHours(odooTotalHours) }}</span>
         </template>
       </div>
       <div class="toolbar-actions">
@@ -160,22 +189,47 @@ const isToday = computed(() =>
       </div>
     </div>
 
-    <div v-if="syncMessage" class="sync-banner" :class="syncMessageType">
+    <StatusBanner v-if="syncMessage" :type="syncMessageType" dismissible @dismiss="syncMessage = ''">
       {{ syncMessage }}
-      <button class="banner-close" @click="syncMessage = ''">&times;</button>
-    </div>
+    </StatusBanner>
 
-    <div v-if="blocksStore.error" class="error-banner">
-      {{ blocksStore.error }}
-    </div>
+    <StatusBanner v-if="blocksStore.error" type="error">{{ blocksStore.error }}</StatusBanner>
 
-    <div v-if="!odooConnected && blocksStore.blocks.length > 0" class="warning-banner">
+    <StatusBanner v-if="!odooConnected && blocksStore.blocks.length > 0" type="warning">
       Daemon no conectado. Los bloques se pueden revisar pero no enviar a Odoo.
-    </div>
+    </StatusBanner>
 
-    <div v-if="blocksStore.loading" class="loading">Cargando bloques...</div>
+    <LoadingState v-if="blocksStore.loading" text="Cargando bloques..." />
 
     <BlockTable v-else :blocks="blocksStore.blocks" />
+
+    <!-- Entradas de Odoo -->
+    <CollapsibleGroup
+      v-if="odooEntries.length > 0 || loadingOdoo"
+      label="Imputaciones en Odoo"
+      :count="odooEntries.length"
+      :summary="formatHours(odooTotalHours)"
+    >
+      <LoadingState v-if="loadingOdoo" text="Cargando entradas de Odoo..." />
+      <table v-else class="odoo-table">
+        <thead>
+          <tr>
+            <th class="col-project">Proyecto</th>
+            <th class="col-task">Tarea</th>
+            <th>Descripcion</th>
+            <th class="col-hours">Horas</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="entry in odooEntries" :key="entry.id" class="odoo-row">
+            <td>{{ entry.project_name }}</td>
+            <td>{{ entry.task_name ?? '—' }}</td>
+            <td>{{ entry.description }}</td>
+            <td class="col-hours">{{ formatHours(entry.hours) }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </CollapsibleGroup>
   </div>
 </template>
 
@@ -239,6 +293,11 @@ const isToday = computed(() =>
   color: var(--success);
 }
 
+.odoo-count {
+  color: var(--accent);
+  font-weight: 500;
+}
+
 .toolbar-actions {
   display: flex;
   gap: 8px;
@@ -290,65 +349,37 @@ const isToday = computed(() =>
   background: var(--bg-hover);
 }
 
-.sync-banner {
-  padding: 10px 14px;
-  border-radius: 4px;
+.odoo-table {
+  width: 100%;
+  border-collapse: collapse;
   font-size: 13px;
-  margin-bottom: 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
-.sync-banner.success {
-  background: rgba(78, 201, 176, 0.1);
-  border: 1px solid var(--success);
-  color: var(--success);
-}
-
-.sync-banner.error {
-  background: rgba(241, 76, 76, 0.1);
-  border: 1px solid var(--error);
-  color: var(--error);
-}
-
-.banner-close {
-  background: none;
-  border: none;
-  color: inherit;
-  font-size: 18px;
-  cursor: pointer;
-  padding: 0 4px;
-  opacity: 0.7;
-}
-
-.banner-close:hover {
-  opacity: 1;
-}
-
-.error-banner {
-  padding: 10px 14px;
-  background: rgba(241, 76, 76, 0.1);
-  border: 1px solid var(--error);
-  border-radius: 4px;
-  color: var(--error);
-  font-size: 13px;
-  margin-bottom: 12px;
-}
-
-.warning-banner {
-  padding: 10px 14px;
-  background: rgba(220, 220, 170, 0.1);
-  border: 1px solid var(--warning);
-  border-radius: 4px;
-  color: var(--warning);
-  font-size: 13px;
-  margin-bottom: 12px;
-}
-
-.loading {
-  text-align: center;
-  padding: 40px;
+.odoo-table th {
+  text-align: left;
+  padding: 10px 8px;
   color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 13px;
+  border-bottom: 2px solid var(--border);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
+
+.odoo-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.odoo-row td {
+  opacity: 0.85;
+}
+
+.odoo-row:hover td {
+  background: var(--bg-hover);
+}
+
+.odoo-table .col-project { min-width: 120px; }
+.odoo-table .col-task { min-width: 120px; }
+.odoo-table .col-hours { text-align: right; min-width: 60px; }
 </style>

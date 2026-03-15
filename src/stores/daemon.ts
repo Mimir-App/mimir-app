@@ -14,6 +14,7 @@ export const useDaemonStore = defineStore('daemon', () => {
   });
 
   const connected = ref(false);
+  const captureConnected = ref(false);
   const error = ref<string | null>(null);
   const checking = ref(false);
 
@@ -65,6 +66,17 @@ export const useDaemonStore = defineStore('daemon', () => {
     }
   }
 
+  async function captureHealthCheck(): Promise<boolean> {
+    try {
+      const ok = await api.captureHealthCheck();
+      captureConnected.value = ok;
+      return ok;
+    } catch {
+      captureConnected.value = false;
+      return false;
+    }
+  }
+
   async function setMode(mode: DaemonMode) {
     try {
       await api.setDaemonMode(mode);
@@ -82,8 +94,10 @@ export const useDaemonStore = defineStore('daemon', () => {
     statusClass,
     statusText,
     modeLabel,
+    captureConnected,
     fetchStatus,
     healthCheck,
+    captureHealthCheck,
     setMode,
   };
 });

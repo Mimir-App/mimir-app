@@ -1,16 +1,15 @@
 #!/bin/bash
-# Instala el daemon Mimir como servicio de usuario systemd.
+# Instala mimir-capture como servicio systemd y mimir-server en ~/.local/bin.
 #
 # Uso:
-#   bash install-service.sh [ruta-al-binario]
-#
-# Si no se pasa ruta, busca el binario en dist/mimir-daemon o usa python como fallback.
+#   bash install-daemon.sh                    # Busca binarios en dist/daemon/
+#   bash install-daemon.sh /ruta/al/dir       # Busca binarios en el directorio dado
 #
 # Desinstalar:
-#   systemctl --user stop mimir-daemon
-#   systemctl --user disable mimir-daemon
-#   rm ~/.config/systemd/user/mimir-daemon.service
-#   rm -f ~/.local/bin/mimir-daemon
+#   systemctl --user stop mimir-capture
+#   systemctl --user disable mimir-capture
+#   rm ~/.config/systemd/user/mimir-capture.service
+#   rm -f ~/.local/bin/mimir-capture ~/.local/bin/mimir-server
 
 set -euo pipefail
 
@@ -18,58 +17,82 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 INSTALL_DIR="$HOME/.local/bin"
 SERVICE_DIR="$HOME/.config/systemd/user"
-SERVICE_FILE="$SERVICE_DIR/mimir-daemon.service"
+SERVICE_FILE="$SERVICE_DIR/mimir-capture.service"
 CONFIG_DIR="$HOME/.config/mimir"
 
-echo "=== Mimir Daemon - Instalador ==="
+echo "=== Mimir - Instalador ==="
 
-# Determinar ejecutable
-BINARY_ARG="${1:-}"
-EXEC_START=""
+# Determinar directorio de binarios
+BIN_DIR="${1:-$SCRIPT_DIR}"
+if [ ! -d "$BIN_DIR" ]; then
+    BIN_DIR="$PROJECT_DIR/dist/daemon"
+fi
 
-if [ -n "$BINARY_ARG" ] && [ -f "$BINARY_ARG" ]; then
-    echo "Usando binario proporcionado: $BINARY_ARG"
-    mkdir -p "$INSTALL_DIR"
-    cp "$BINARY_ARG" "$INSTALL_DIR/mimir-daemon"
-    chmod +x "$INSTALL_DIR/mimir-daemon"
-    EXEC_START="$INSTALL_DIR/mimir-daemon"
-elif [ -f "$PROJECT_DIR/dist/mimir-daemon" ]; then
-    echo "Usando binario PyInstaller: $PROJECT_DIR/dist/mimir-daemon"
-    mkdir -p "$INSTALL_DIR"
-    cp "$PROJECT_DIR/dist/mimir-daemon" "$INSTALL_DIR/mimir-daemon"
-    chmod +x "$INSTALL_DIR/mimir-daemon"
-    EXEC_START="$INSTALL_DIR/mimir-daemon"
+CAPTURE_BIN=""
+SERVER_BIN=""
+CAPTURE_EXEC=""
+
+# Buscar binarios
+if [ -f "$BIN_DIR/mimir-capture" ]; then
+    CAPTURE_BIN="$BIN_DIR/mimir-capture"
+elif [ -f "$SCRIPT_DIR/mimir-capture" ]; then
+    CAPTURE_BIN="$SCRIPT_DIR/mimir-capture"
+fi
+
+if [ -f "$BIN_DIR/mimir-server" ]; then
+    SERVER_BIN="$BIN_DIR/mimir-server"
+elif [ -f "$SCRIPT_DIR/mimir-server" ]; then
+    SERVER_BIN="$SCRIPT_DIR/mimir-server"
+fi
+
+mkdir -p "$INSTALL_DIR"
+mkdir -p "$CONFIG_DIR"
+
+# Instalar capture
+if [ -n "$CAPTURE_BIN" ]; then
+    cp "$CAPTURE_BIN" "$INSTALL_DIR/mimir-capture"
+    chmod +x "$INSTALL_DIR/mimir-capture"
+    CAPTURE_EXEC="$INSTALL_DIR/mimir-capture"
+    echo "Capture instalado: $INSTALL_DIR/mimir-capture"
 else
-    # Fallback: usar python con venv
+    # Fallback: python
     VENV_DIR="$SCRIPT_DIR/.venv"
     if [ ! -d "$VENV_DIR" ]; then
         echo "Creando entorno virtual..."
         python3 -m venv "$VENV_DIR"
     fi
-    echo "Instalando dependencias..."
     "$VENV_DIR/bin/pip" install --quiet --upgrade pip
     "$VENV_DIR/bin/pip" install --quiet -e "$SCRIPT_DIR"
-    EXEC_START="$VENV_DIR/bin/python -m mimir_daemon"
-    echo "Usando Python (fallback): $EXEC_START"
+    CAPTURE_EXEC="$VENV_DIR/bin/python -m mimir_daemon"
+    echo "Capture (Python fallback): $CAPTURE_EXEC"
 fi
 
-echo "Ejecutable: $EXEC_START"
+# Instalar server
+if [ -n "$SERVER_BIN" ]; then
+    cp "$SERVER_BIN" "$INSTALL_DIR/mimir-server"
+    chmod +x "$INSTALL_DIR/mimir-server"
+    echo "Server instalado: $INSTALL_DIR/mimir-server"
+else
+    echo "AVISO: mimir-server no encontrado. La app Tauri usara Python como fallback."
+fi
 
-# Crear directorio config
-mkdir -p "$CONFIG_DIR"
+# Parar servicio viejo si existe
+systemctl --user stop mimir-daemon 2>/dev/null || true
+systemctl --user disable mimir-daemon 2>/dev/null || true
+systemctl --user stop mimir-capture 2>/dev/null || true
 
 # Crear directorio systemd
 mkdir -p "$SERVICE_DIR"
 
-# Generar service file
+# Generar service file para capture
 cat > "$SERVICE_FILE" << EOF
 [Unit]
-Description=Mimir Activity Capture Daemon
+Description=Mimir Activity Capture
 After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=$EXEC_START
+ExecStart=$CAPTURE_EXEC
 Restart=on-failure
 RestartSec=5
 Environment=DISPLAY=:0
@@ -84,15 +107,16 @@ echo "Service file creado: $SERVICE_FILE"
 
 # Recargar y habilitar
 systemctl --user daemon-reload
-systemctl --user enable mimir-daemon
-systemctl --user restart mimir-daemon
+systemctl --user enable mimir-capture
+systemctl --user restart mimir-capture
 
 echo ""
 echo "=== Instalacion completada ==="
-echo "Estado: $(systemctl --user is-active mimir-daemon)"
+echo "Capture: $(systemctl --user is-active mimir-capture)"
 echo ""
 echo "Comandos utiles:"
-echo "  systemctl --user status mimir-daemon    # Ver estado"
-echo "  systemctl --user restart mimir-daemon   # Reiniciar"
-echo "  journalctl --user -u mimir-daemon -f    # Ver logs"
-echo "  curl http://127.0.0.1:9477/health       # Health check"
+echo "  systemctl --user status mimir-capture     # Estado de captura"
+echo "  systemctl --user restart mimir-capture    # Reiniciar captura"
+echo "  journalctl --user -u mimir-capture -f     # Logs de captura"
+echo "  curl http://127.0.0.1:9476/health         # Health check captura"
+echo "  curl http://127.0.0.1:9477/health         # Health check servidor (cuando la app esta abierta)"

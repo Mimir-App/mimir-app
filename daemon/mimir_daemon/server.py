@@ -14,15 +14,13 @@ from pydantic import BaseModel
 from .db import Database
 from .integrations.base import TimesheetEntryData
 from .integrations.registry import IntegrationRegistry
-from .poller import Poller
 from .sources.registry import SourceRegistry
 
 logger = logging.getLogger(__name__)
 
 
-def create_app(
+def create_server_app(
     db: Database,
-    poller: Poller,
     registry: IntegrationRegistry | None = None,
     ai_service: "AIService | None" = None,
     source_registry: SourceRegistry | None = None,
@@ -30,7 +28,7 @@ def create_app(
 ) -> FastAPI:
     """Crea la aplicacion FastAPI."""
 
-    app = FastAPI(title="Mimir Daemon", version=version)
+    app = FastAPI(title="Mimir Server", version=version)
     start_time = datetime.now(timezone.utc)
     _registry = registry or IntegrationRegistry()
     _source_registry = source_registry or SourceRegistry()
@@ -58,28 +56,13 @@ def create_app(
         uptime = int((now - start_time).total_seconds())
         blocks_today = await db.count_blocks_today()
         return {
-            "running": poller.is_running,
-            "mode": "paused" if poller._paused else "active",
+            "running": True,
+            "mode": "active",
             "uptime_seconds": uptime,
-            "last_poll": poller.last_poll.isoformat() if poller.last_poll else None,
+            "last_poll": None,
             "blocks_today": blocks_today,
             "version": version,
         }
-
-    # --- Mode ---
-
-    class ModeRequest(BaseModel):
-        mode: str
-
-    @app.post("/mode")
-    async def set_mode(req: ModeRequest) -> dict:
-        if req.mode == "paused":
-            poller.pause()
-        elif req.mode in ("active", "silent"):
-            poller.resume()
-        else:
-            raise HTTPException(400, f"Modo no valido: {req.mode}")
-        return {"mode": req.mode}
 
     # --- Blocks ---
 
@@ -361,6 +344,45 @@ def create_app(
         except Exception as e:
             logger.error("Error obteniendo entradas de Odoo: %s", e)
             return []
+
+    # --- Attendance ---
+
+    @app.get("/odoo/attendance/today")
+    async def get_today_attendance() -> dict:
+        """Obtiene el fichaje de hoy."""
+        client = _registry.timesheet
+        if not client:
+            return {"attendance": None}
+        try:
+            att = await client.get_today_attendance()
+            return {"attendance": att}
+        except Exception as e:
+            logger.error("Error obteniendo attendance: %s", e)
+            return {"attendance": None}
+
+    @app.post("/odoo/attendance/checkin")
+    async def attendance_checkin() -> dict:
+        """Fichar entrada."""
+        client = _registry.timesheet
+        if not client:
+            raise HTTPException(503, "No hay cliente de timesheet configurado")
+        try:
+            att_id = await client.check_in()
+            return {"id": att_id, "status": "checked_in"}
+        except Exception as e:
+            raise HTTPException(502, f"Error fichando entrada: {e}")
+
+    @app.post("/odoo/attendance/{attendance_id}/checkout")
+    async def attendance_checkout(attendance_id: int) -> dict:
+        """Fichar salida."""
+        client = _registry.timesheet
+        if not client:
+            raise HTTPException(503, "No hay cliente de timesheet configurado")
+        try:
+            await client.check_out(attendance_id)
+            return {"status": "checked_out"}
+        except Exception as e:
+            raise HTTPException(502, f"Error fichando salida: {e}")
 
     # --- Config (recibe configuracion desde Tauri) ---
 

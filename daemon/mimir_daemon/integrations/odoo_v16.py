@@ -235,6 +235,62 @@ class OdooV16Client(TimesheetClient):
             logger.error("Error obteniendo entradas de Odoo v16: %s", e)
             return []
 
+    async def check_in(self) -> int:
+        """Registra entrada en Odoo."""
+        from datetime import datetime, timezone
+        vals = {
+            "employee_id": self._employee_id,
+            "check_in": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        try:
+            result = await self._jsonrpc("hr.attendance", "create", [vals])
+            logger.info("Attendance check-in creado en Odoo v16: id=%s", result)
+            return result
+        except Exception as e:
+            logger.error("Error creando check-in en Odoo v16: %s", e)
+            raise
+
+    async def check_out(self, attendance_id: int) -> None:
+        """Registra salida en Odoo."""
+        from datetime import datetime, timezone
+        vals = {
+            "check_out": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+        }
+        try:
+            await self._jsonrpc("hr.attendance", "write", [[attendance_id], vals])
+            logger.info("Attendance check-out en Odoo v16: id=%d", attendance_id)
+        except Exception as e:
+            logger.error("Error en check-out Odoo v16 (id=%d): %s", attendance_id, e)
+            raise
+
+    async def get_today_attendance(self) -> dict[str, Any] | None:
+        """Obtiene el attendance de hoy del empleado."""
+        from datetime import datetime, timezone
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        domain = [
+            ("employee_id", "=", self._employee_id),
+            ("check_in", ">=", f"{today} 00:00:00"),
+            ("check_in", "<=", f"{today} 23:59:59"),
+        ]
+        try:
+            result = await self._jsonrpc(
+                "hr.attendance", "search_read",
+                [domain, ["id", "check_in", "check_out", "employee_id"]],
+                {"limit": 1, "order": "check_in desc"},
+            )
+            if result:
+                r = result[0]
+                return {
+                    "id": r["id"],
+                    "check_in": r.get("check_in"),
+                    "check_out": r.get("check_out"),
+                    "employee_id": r["employee_id"][0] if isinstance(r.get("employee_id"), (list, tuple)) else r.get("employee_id"),
+                }
+            return None
+        except Exception as e:
+            logger.error("Error obteniendo attendance de Odoo v16: %s", e)
+            return None
+
     async def close(self) -> None:
         """Cierra el cliente HTTP."""
         await self._client.aclose()

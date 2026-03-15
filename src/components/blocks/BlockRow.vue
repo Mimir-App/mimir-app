@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import type { ActivityBlock } from '../../lib/types';
 import { useBlocksStore } from '../../stores/blocks';
+import { formatHours, formatTime } from '../../composables/useFormatting';
 import SyncStatusBadge from '../shared/SyncStatusBadge.vue';
 import ConfidenceBadge from '../shared/ConfidenceBadge.vue';
 import BlockEditor from './BlockEditor.vue';
@@ -11,22 +12,9 @@ const blocksStore = useBlocksStore();
 const editing = ref(false);
 const retrying = ref(false);
 
-const startTime = computed(() => {
-  const d = new Date(props.block.start_time);
-  return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-});
-
-const endTime = computed(() => {
-  const d = new Date(props.block.end_time);
-  return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-});
-
-const duration = computed(() => {
-  const mins = props.block.duration_minutes;
-  const h = Math.floor(mins / 60);
-  const m = Math.round(mins % 60);
-  return h > 0 ? `${h}h${m.toString().padStart(2, '0')}m` : `${m}m`;
-});
+const startTime = computed(() => formatTime(props.block.start_time));
+const endTime = computed(() => formatTime(props.block.end_time));
+const duration = computed(() => formatHours(props.block.duration_minutes / 60));
 
 const description = computed(() =>
   props.block.user_description ?? props.block.ai_description ?? ''
@@ -61,7 +49,7 @@ async function retry() {
 </script>
 
 <template>
-  <tr class="block-row" :class="{ synced: block.status === 'synced', 'has-error': block.status === 'error' }">
+  <tr class="block-row" :class="{ pending: block.status === 'auto' || block.status === 'closed', confirmed: block.status === 'confirmed', synced: block.status === 'synced', 'has-error': block.status === 'error' }">
     <td>{{ startTime }}</td>
     <td>{{ endTime }}</td>
     <td class="col-duration">{{ duration }}</td>
@@ -141,6 +129,14 @@ async function retry() {
   background: var(--bg-hover);
 }
 
+.block-row.pending td {
+  opacity: 0.5;
+}
+
+.block-row.confirmed td {
+  opacity: 0.85;
+}
+
 .block-row.synced td {
   opacity: 0.6;
 }
@@ -162,13 +158,11 @@ async function retry() {
 }
 
 .col-desc {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  max-width: 300px;
 }
 
 .description {
-  flex: 1;
+  display: inline;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

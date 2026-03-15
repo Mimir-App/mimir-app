@@ -1,0 +1,8 @@
+#!/bin/bash
+if [ "$1" = "remove" ]; then
+    echo ""
+    echo "=== Desinstalando mimir-capture ==="
+    echo "Si el servicio esta activo, desactivalo:"
+    echo "  systemctl --user disable --now mimir-capture"
+    echo ""
+fi

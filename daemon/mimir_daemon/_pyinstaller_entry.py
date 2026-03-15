@@ -1,5 +1,5 @@
-"""Entry point para PyInstaller (usa imports absolutos)."""
+"""Entry point PyInstaller para mimir-capture."""
 
-from mimir_daemon.main import main
+from mimir_daemon.capture import main
 
 main()

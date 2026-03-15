@@ -1,0 +1,13 @@
+Package: mimir-capture
+Version: 0.2.0
+Architecture: amd64
+Depends: mimir, xdotool
+Conflicts: mimir-daemon
+Replaces: mimir-daemon
+Maintainer: Jesus Lorenzo Limon
+Section: utils
+Priority: optional
+Installed-Size: 0
+Description: Mimir Activity Capture daemon
+ Background daemon that captures window activity for Mimir time tracking.
+ Runs as a systemd user service polling every 30 seconds.

@@ -1,6 +1,6 @@
 [project]
 name = "mimir-daemon"
-version = "0.1.0"
+version = "0.2.0"
 description = "Mimir Activity Capture Daemon"
 requires-python = ">=3.10"
 dependencies = [
@@ -24,7 +24,9 @@ dev = [
 ]
 
 [project.scripts]
-mimir-daemon = "mimir_daemon.main:main"
+mimir-capture = "mimir_daemon.capture:main"
+mimir-server = "mimir_daemon.api_server:main"
+mimir-daemon = "mimir_daemon.capture:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

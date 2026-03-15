@@ -118,3 +118,33 @@ class MockTimesheetClient(TimesheetClient):
             e for e in self._entries
             if date_from <= e["date"] <= date_to
         ]
+
+    async def check_in(self) -> int:
+        """Registra entrada mock."""
+        global _next_entry_id
+        att_id = _next_entry_id
+        _next_entry_id += 1
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        self._current_attendance = {
+            "id": att_id,
+            "check_in": now,
+            "check_out": None,
+            "employee_id": 1,
+        }
+        logger.info("Mock: check-in creado id=%d", att_id)
+        return att_id
+
+    async def check_out(self, attendance_id: int) -> None:
+        """Registra salida mock."""
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        if hasattr(self, "_current_attendance") and self._current_attendance and self._current_attendance["id"] == attendance_id:
+            self._current_attendance["check_out"] = now
+        logger.info("Mock: check-out id=%d", attendance_id)
+
+    async def get_today_attendance(self) -> dict[str, Any] | None:
+        """Devuelve el attendance mock de hoy."""
+        if hasattr(self, "_current_attendance") and self._current_attendance:
+            return self._current_attendance
+        return None

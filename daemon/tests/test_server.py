@@ -6,23 +6,11 @@ from datetime import datetime, timezone
 from httpx import AsyncClient, ASGITransport
 
 from mimir_daemon.db import Database
-from mimir_daemon.config import DaemonConfig
-from mimir_daemon.platform.base import PlatformProvider, WindowInfo, SessionEvent
-from mimir_daemon.block_manager import BlockManager
 from mimir_daemon.integrations.registry import IntegrationRegistry
 from mimir_daemon.integrations.mock import MockTimesheetClient
-from mimir_daemon.poller import Poller
-from mimir_daemon.server import create_app
+from mimir_daemon.server import create_server_app
 from mimir_daemon.sources.registry import SourceRegistry
 from mimir_daemon.sources.base import VCSSource
-
-
-class MockPlatform(PlatformProvider):
-    async def get_active_window(self):
-        return None
-
-    async def get_session_events(self):
-        return []
 
 
 class MockGitLabSource(VCSSource):
@@ -91,13 +79,9 @@ def source_registry():
 @pytest.fixture
 def app(db, registry, source_registry):
     from mimir_daemon.ai.service import AIService
-    config = DaemonConfig(polling_interval=60)
-    platform = MockPlatform()
-    block_manager = BlockManager(db=db)
-    poller = Poller(config=config, db=db, platform=platform, block_manager=block_manager)
     ai_service = AIService(db=db, provider=None)
-    return create_app(db=db, poller=poller, registry=registry, ai_service=ai_service,
-                      source_registry=source_registry)
+    return create_server_app(db=db, registry=registry, ai_service=ai_service,
+                             source_registry=source_registry)
 
 
 @pytest_asyncio.fixture
@@ -121,7 +105,7 @@ async def test_status(client):
     resp = await client.get("/status")
     assert resp.status_code == 200
     data = resp.json()
-    assert "running" in data
+    assert data["running"] is True
     assert "version" in data
     assert "blocks_today" in data
     assert "uptime_seconds" in data
@@ -229,19 +213,6 @@ async def test_delete_block(client, db):
 
     block = await db.get_block_by_id(block_id)
     assert block is None
-
-
-@pytest.mark.asyncio
-async def test_set_mode(client):
-    resp = await client.post("/mode", json={"mode": "paused"})
-    assert resp.status_code == 200
-    assert resp.json()["mode"] == "paused"
-
-    resp = await client.post("/mode", json={"mode": "active"})
-    assert resp.status_code == 200
-
-    resp = await client.post("/mode", json={"mode": "invalid"})
-    assert resp.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -427,11 +398,7 @@ async def test_retry_sync_not_found(client):
 @pytest.mark.asyncio
 async def test_sync_blocks_no_client(db):
     """POST /blocks/sync devuelve 503 sin cliente de timesheet."""
-    config = DaemonConfig(polling_interval=60)
-    platform = MockPlatform()
-    block_manager = BlockManager(db=db)
-    poller = Poller(config=config, db=db, platform=platform, block_manager=block_manager)
-    app = create_app(db=db, poller=poller, registry=None)
+    app = create_server_app(db=db, registry=None)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
@@ -524,12 +491,8 @@ async def test_get_integration_status_no_client():
     """GET /config/integration-status sin cliente configurado."""
     db = Database(":memory:")
     await db.connect()
-    config = DaemonConfig(polling_interval=60)
-    platform = MockPlatform()
-    block_manager = BlockManager(db=db)
-    poller = Poller(config=config, db=db, platform=platform, block_manager=block_manager)
     # Sin registry -- no hay cliente de timesheet
-    app = create_app(db=db, poller=poller, registry=None)
+    app = create_server_app(db=db, registry=None)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:

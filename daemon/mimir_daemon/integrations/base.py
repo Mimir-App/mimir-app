@@ -50,3 +50,18 @@ class TimesheetClient(ABC):
     ) -> list[dict[str, Any]]:
         """Obtiene entradas de timesheet en un rango."""
         ...
+
+    @abstractmethod
+    async def check_in(self) -> int:
+        """Registra entrada. Retorna ID del registro de attendance."""
+        ...
+
+    @abstractmethod
+    async def check_out(self, attendance_id: int) -> None:
+        """Registra salida en un registro de attendance existente."""
+        ...
+
+    @abstractmethod
+    async def get_today_attendance(self) -> dict[str, Any] | None:
+        """Obtiene el registro de attendance de hoy (si existe)."""
+        ...

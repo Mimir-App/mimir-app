@@ -1,5 +1,5 @@
 """Permite ejecutar con `python -m mimir_daemon`."""
 
-from .main import main
+from .capture import main
 
 main()
