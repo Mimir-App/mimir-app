@@ -3,6 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct AppConfig {
     pub daemon_port: u16,
     pub gitlab_url: String,
@@ -15,10 +16,17 @@ pub struct AppConfig {
     pub theme: String,
     pub refresh_interval_seconds: u32,
     pub daily_hour_target: f64,
+    pub weekly_hour_targets: Vec<f64>,
     pub ai_provider: String,
     pub ai_api_key_stored: bool,
     pub ai_user_role: String,
     pub ai_custom_context: String,
+    pub hour_format: String,
+    pub date_format: String,
+    pub font_size: u32,
+    pub dashboard_order: Vec<String>,
+    pub dashboard_spans: std::collections::HashMap<String, Vec<u32>>,
+    pub column_widths: std::collections::HashMap<String, u32>,
 }
 
 impl Default for AppConfig {
@@ -35,10 +43,17 @@ impl Default for AppConfig {
             theme: "dark".to_string(),
             refresh_interval_seconds: 300,
             daily_hour_target: 8.0,
+            weekly_hour_targets: vec![8.0, 8.0, 8.0, 8.0, 8.0, 0.0, 0.0],
             ai_provider: "none".to_string(),
             ai_api_key_stored: false,
             ai_user_role: "technical".to_string(),
             ai_custom_context: String::new(),
+            hour_format: "hm".to_string(),
+            date_format: "eu".to_string(),
+            font_size: 14,
+            dashboard_order: vec![],
+            dashboard_spans: std::collections::HashMap::<String, Vec<u32>>::new(),
+            column_widths: std::collections::HashMap::new(),
         }
     }
 }

@@ -15,10 +15,17 @@ const DEFAULT_CONFIG: AppConfig = {
   theme: 'dark',
   refresh_interval_seconds: 300,
   daily_hour_target: 8,
+  weekly_hour_targets: [8, 8, 8, 8, 8, 0, 0] as [number, number, number, number, number, number, number],
   ai_provider: 'none',
   ai_api_key_stored: false,
   ai_user_role: 'technical',
   ai_custom_context: '',
+  hour_format: 'hm',
+  date_format: 'eu',
+  font_size: 14,
+  dashboard_order: [] as string[],
+  dashboard_spans: {} as Record<string, [number, number]>,
+  column_widths: {} as Record<string, number>,
 };
 
 export const useConfigStore = defineStore('config', () => {
@@ -30,7 +37,7 @@ export const useConfigStore = defineStore('config', () => {
   async function load() {
     try {
       const result = await api.getConfig() as AppConfig;
-      config.value = result;
+      config.value = { ...DEFAULT_CONFIG, ...result };
       loaded.value = true;
       error.value = null;
     } catch (e) {

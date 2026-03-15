@@ -1,93 +1,105 @@
 <script setup lang="ts">
+import { toRef } from 'vue';
 import type { GitLabIssue } from '../../lib/types';
+import { formatDate } from '../../composables/useFormatting';
+import { useSortable } from '../../composables/useSortable';
+import { useColumnWidths } from '../../composables/useColumnWidths';
 import ScoreBadge from '../shared/ScoreBadge.vue';
 
-defineProps<{ issues: GitLabIssue[] }>();
+const props = defineProps<{ issues: GitLabIssue[] }>();
+const { toggleSort, sortIcon, sorted } = useSortable(toRef(props, 'issues'), 'score', 'desc');
+const { colStyle, startResize } = useColumnWidths();
 </script>
 
 <template>
-  <table class="issue-table">
+  <table class="data-table">
     <thead>
       <tr>
-        <th class="col-score">Score</th>
-        <th class="col-iid">#</th>
-        <th>Título</th>
-        <th class="col-labels">Labels</th>
-        <th class="col-assignee">Asignado</th>
-        <th class="col-date">Actualizado</th>
+        <th :style="colStyle('score')" class="sortable" @click="toggleSort('score')">Score{{ sortIcon('score') }}</th>
+        <th :style="colStyle('iid')" class="sortable" @click="toggleSort('iid')">#{{ sortIcon('iid') }}</th>
+        <th class="sortable col-expand resizable" @click="toggleSort('title')">
+          Titulo{{ sortIcon('title') }}
+          <span class="resize-handle" @mousedown.stop="startResize('description', $event)"></span>
+        </th>
+        <th :style="colStyle('labels')" class="resizable">
+          Labels
+          <span class="resize-handle" @mousedown.stop="startResize('labels', $event)"></span>
+        </th>
+        <th :style="colStyle('assignee')" class="resizable">
+          Asignado
+          <span class="resize-handle" @mousedown.stop="startResize('assignee', $event)"></span>
+        </th>
+        <th :style="colStyle('date')" class="sortable resizable" @click="toggleSort('updated_at')">
+          Actualizado{{ sortIcon('updated_at') }}
+          <span class="resize-handle" @mousedown.stop="startResize('date', $event)"></span>
+        </th>
       </tr>
     </thead>
     <tbody>
-      <tr v-for="issue in issues" :key="issue.id" class="issue-row">
-        <td><ScoreBadge :score="issue.score" /></td>
-        <td class="col-iid">{{ issue.iid }}</td>
-        <td>
-          <a :href="issue.web_url" target="_blank" class="issue-link">
-            {{ issue.title }}
-          </a>
+      <tr v-for="issue in sorted" :key="issue.id" class="data-row">
+        <td :style="colStyle('score')"><ScoreBadge :score="issue.score" /></td>
+        <td :style="colStyle('iid')" class="muted">{{ issue.iid }}</td>
+        <td class="col-expand">
+          <a :href="issue.web_url" target="_blank" class="link">{{ issue.title }}</a>
         </td>
-        <td class="col-labels">
-          <span v-for="label in issue.labels.slice(0, 3)" :key="label" class="label-tag">
-            {{ label }}
-          </span>
+        <td :style="colStyle('labels')">
+          <span v-for="label in issue.labels.slice(0, 3)" :key="label" class="label-tag">{{ label }}</span>
         </td>
-        <td class="col-assignee">
+        <td :style="colStyle('assignee')">
           <span v-for="a in issue.assignees" :key="a.id">{{ a.username }}</span>
         </td>
-        <td class="col-date">{{ new Date(issue.updated_at).toLocaleDateString('es-ES') }}</td>
+        <td :style="colStyle('date')" class="muted">{{ formatDate(issue.updated_at) }}</td>
       </tr>
     </tbody>
   </table>
 </template>
 
 <style scoped>
-.issue-table {
+.data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  table-layout: fixed;
 }
 
-.issue-table th {
+.data-table th {
   text-align: left;
-  padding: 6px 8px;
+  padding: 10px 8px;
   color: var(--text-secondary);
-  font-weight: 500;
-  font-size: 12px;
-  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  font-size: 13px;
+  border-bottom: 2px solid var(--border);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  position: relative;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.issue-table td {
+.data-table td {
   padding: 6px 8px;
   border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.issue-row:hover td {
-  background: var(--bg-hover);
-}
+.data-row:hover td { background: var(--bg-hover); }
+.col-expand { width: auto; }
+.muted { color: var(--text-secondary); }
 
-.col-score { width: 50px; }
-.col-iid { width: 40px; color: var(--text-secondary); }
-.col-labels { width: 200px; }
-.col-assignee { width: 100px; }
-.col-date { width: 90px; color: var(--text-secondary); font-size: 12px; }
-
-.issue-link {
-  color: var(--text-primary);
-  text-decoration: none;
-}
-
-.issue-link:hover {
-  color: var(--accent);
-  text-decoration: underline;
-}
+.link { color: var(--text-primary); text-decoration: none; overflow: hidden; text-overflow: ellipsis; display: block; }
+.link:hover { color: var(--accent); text-decoration: underline; }
 
 .label-tag {
-  display: inline-block;
-  padding: 1px 6px;
-  margin-right: 4px;
-  background: var(--bg-card);
-  border-radius: 3px;
-  font-size: 11px;
-  color: var(--text-secondary);
+  display: inline-block; padding: 1px 6px; margin-right: 4px;
+  background: var(--bg-card); border-radius: 3px; font-size: 11px; color: var(--text-secondary); white-space: nowrap;
 }
+
+.resizable { position: relative; }
+.resize-handle {
+  position: absolute; right: 0; top: 0; bottom: 0; width: 4px; cursor: col-resize; background: transparent;
+}
+.resize-handle:hover, .resize-handle:active { background: var(--accent); }
 </style>

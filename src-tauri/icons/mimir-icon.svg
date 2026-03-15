@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#2d2d33"/>
+      <stop offset="100%" stop-color="#1e2029"/>
+    </radialGradient>
+    <radialGradient id="iris" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#e8232a"/>
+      <stop offset="70%" stop-color="#cb1b21"/>
+      <stop offset="100%" stop-color="#a51519"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Fondo circular -->
+  <circle cx="256" cy="256" r="250" fill="url(#bg)" stroke="#3d3d46" stroke-width="4"/>
+
+  <!-- Anillo exterior de runas nórdicas -->
+  <!-- ᚨ Ansuz (sabiduría/Odín), ᚲ Kenaz (conocimiento), ᛞ Dagaz (despertar), ᛗ Mannaz (humanidad), ᚱ Raido (viaje), ᛚ Laguz (flujo) -->
+  <g fill="none" stroke="#4d5a70" stroke-width="2" opacity="0.5">
+    <circle cx="256" cy="256" r="230"/>
+    <circle cx="256" cy="256" r="220"/>
+  </g>
+
+  <!-- Runas distribuidas en el anillo -->
+  <g font-family="serif" font-size="28" fill="#a2b0b4" opacity="0.7" text-anchor="middle" dominant-baseline="central">
+    <!-- 8 runas equidistantes -->
+    <text x="256" y="38">&#5765;</text>   <!-- ᚨ Ansuz - arriba -->
+    <text x="410" y="100">&#5770;</text>  <!-- ᚲ Kenaz -->
+    <text x="462" y="256">&#5790;</text>  <!-- ᛞ Dagaz -->
+    <text x="410" y="412">&#5791;</text>  <!-- ᛗ Mannaz -->
+    <text x="256" y="474">&#5777;</text>  <!-- ᚱ Raido - abajo -->
+    <text x="102" y="412">&#5786;</text>  <!-- ᛚ Laguz -->
+    <text x="50" y="256">&#5765;</text>   <!-- ᚨ Ansuz -->
+    <text x="102" y="100">&#5790;</text>  <!-- ᛞ Dagaz -->
+  </g>
+
+  <!-- Lineas rúnicas decorativas entre runas -->
+  <g stroke="#4d5a70" stroke-width="1.5" opacity="0.3">
+    <line x1="170" y1="56" x2="342" y2="56"/>
+    <line x1="440" y1="170" x2="440" y2="342"/>
+    <line x1="342" y1="456" x2="170" y2="456"/>
+    <line x1="72" y1="342" x2="72" y2="170"/>
+  </g>
+
+  <!-- Ojo: forma almendrada -->
+  <g transform="translate(256,256)">
+    <!-- Sombra exterior del ojo -->
+    <ellipse cx="0" cy="0" rx="140" ry="70" fill="none" stroke="#cb1b21" stroke-width="3" opacity="0.3"/>
+
+    <!-- Forma del ojo (párpados) -->
+    <path d="M-130,0 Q-65,-80 0,-85 Q65,-80 130,0 Q65,80 0,85 Q-65,80 -130,0Z"
+          fill="#1e2029" stroke="#a2b0b4" stroke-width="2.5"/>
+
+    <!-- Esclerótica (blanco del ojo) -->
+    <path d="M-120,0 Q-60,-70 0,-75 Q60,-70 120,0 Q60,70 0,75 Q-60,70 -120,0Z"
+          fill="#2d2d33"/>
+
+    <!-- Iris exterior -->
+    <circle cx="0" cy="0" r="55" fill="url(#iris)" opacity="0.9"/>
+
+    <!-- Detalle del iris - anillos -->
+    <circle cx="0" cy="0" r="55" fill="none" stroke="#a51519" stroke-width="1" opacity="0.5"/>
+    <circle cx="0" cy="0" r="42" fill="none" stroke="#e8232a" stroke-width="0.5" opacity="0.4"/>
+
+    <!-- Pupila -->
+    <circle cx="0" cy="0" r="22" fill="#1e2029"/>
+
+    <!-- Reflejo de luz -->
+    <circle cx="-12" cy="-14" r="8" fill="white" opacity="0.25"/>
+    <circle cx="8" cy="-8" r="4" fill="white" opacity="0.15"/>
+
+    <!-- Runa ᚨ Ansuz dentro de la pupila (ojo de Odín) -->
+    <text x="0" y="2" font-family="serif" font-size="20" fill="#cb1b21" opacity="0.6"
+          text-anchor="middle" dominant-baseline="central">&#5765;</text>
+
+    <!-- Líneas decorativas saliendo del ojo (estilo nórdico) -->
+    <g stroke="#a2b0b4" stroke-width="1.5" opacity="0.4">
+      <!-- Extensiones laterales tipo knotwork -->
+      <path d="M130,0 L155,-15 L170,0 L155,15 Z" fill="none"/>
+      <path d="M-130,0 L-155,-15 L-170,0 L-155,15 Z" fill="none"/>
+      <!-- Pequeñas runas en las esquinas del ojo -->
+      <line x1="110" y1="-40" x2="125" y2="-55"/>
+      <line x1="125" y1="-55" x2="115" y2="-60"/>
+      <line x1="-110" y1="-40" x2="-125" y2="-55"/>
+      <line x1="-125" y1="-55" x2="-115" y2="-60"/>
+      <line x1="110" y1="40" x2="125" y2="55"/>
+      <line x1="125" y1="55" x2="115" y2="60"/>
+      <line x1="-110" y1="40" x2="-125" y2="55"/>
+      <line x1="-125" y1="55" x2="-115" y2="60"/>
+    </g>
+  </g>
+
+  <!-- Anillo interior sutil -->
+  <circle cx="256" cy="256" r="195" fill="none" stroke="#cb1b21" stroke-width="1" opacity="0.2"/>
+</svg>

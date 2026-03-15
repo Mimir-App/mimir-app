@@ -128,9 +128,16 @@ export interface AppConfig {
   odoo_token_stored: boolean;
   theme: 'dark' | 'light' | 'system';
   refresh_interval_seconds: number;
-  daily_hour_target: number;
+  daily_hour_target: number; // legacy, se mantiene como fallback
+  weekly_hour_targets: [number, number, number, number, number, number, number]; // lun-dom
   ai_provider: 'gemini' | 'claude' | 'openai' | 'none';
   ai_api_key_stored: boolean;
   ai_user_role: 'technical' | 'functional' | 'other';
   ai_custom_context: string;
+  hour_format: 'decimal' | 'hm' | 'minutes';
+  date_format: 'iso' | 'eu' | 'short' | 'long';
+  font_size: number;
+  dashboard_order: string[];
+  dashboard_spans: Record<string, [number, number]>; // [cols, rows]
+  column_widths: Record<string, number>;
 }

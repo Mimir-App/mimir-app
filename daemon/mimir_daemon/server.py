@@ -345,6 +345,45 @@ def create_server_app(
             logger.error("Error obteniendo entradas de Odoo: %s", e)
             return []
 
+    # --- Attendance ---
+
+    @app.get("/odoo/attendance/today")
+    async def get_today_attendance() -> dict:
+        """Obtiene el fichaje de hoy."""
+        client = _registry.timesheet
+        if not client:
+            return {"attendance": None}
+        try:
+            att = await client.get_today_attendance()
+            return {"attendance": att}
+        except Exception as e:
+            logger.error("Error obteniendo attendance: %s", e)
+            return {"attendance": None}
+
+    @app.post("/odoo/attendance/checkin")
+    async def attendance_checkin() -> dict:
+        """Fichar entrada."""
+        client = _registry.timesheet
+        if not client:
+            raise HTTPException(503, "No hay cliente de timesheet configurado")
+        try:
+            att_id = await client.check_in()
+            return {"id": att_id, "status": "checked_in"}
+        except Exception as e:
+            raise HTTPException(502, f"Error fichando entrada: {e}")
+
+    @app.post("/odoo/attendance/{attendance_id}/checkout")
+    async def attendance_checkout(attendance_id: int) -> dict:
+        """Fichar salida."""
+        client = _registry.timesheet
+        if not client:
+            raise HTTPException(503, "No hay cliente de timesheet configurado")
+        try:
+            await client.check_out(attendance_id)
+            return {"status": "checked_out"}
+        except Exception as e:
+            raise HTTPException(502, f"Error fichando salida: {e}")
+
     # --- Config (recibe configuracion desde Tauri) ---
 
     class AppConfigRequest(BaseModel):

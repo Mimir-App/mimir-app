@@ -3,6 +3,7 @@ import { ref, onMounted, computed } from 'vue';
 import type { ActivityBlock, OdooProject, OdooTask } from '../../lib/types';
 import { useBlocksStore } from '../../stores/blocks';
 import { api } from '../../lib/api';
+import CustomSelect from '../shared/CustomSelect.vue';
 
 const props = defineProps<{ block: ActivityBlock }>();
 const emit = defineEmits<{ close: [] }>();
@@ -18,13 +19,16 @@ const loadingTasks = ref(false);
 const saving = ref(false);
 const generating = ref(false);
 const saveError = ref<string | null>(null);
-const projectFilter = ref('');
 
-const filteredProjects = computed(() => {
-  if (!projectFilter.value) return projects.value;
-  const q = projectFilter.value.toLowerCase();
-  return projects.value.filter(p => p.name.toLowerCase().includes(q));
-});
+const projectOptions = computed(() => [
+  { value: null as number | null, label: loadingProjects.value ? 'Cargando...' : '-- Seleccionar proyecto --' },
+  ...projects.value.map(p => ({ value: p.id as number | null, label: p.name })),
+]);
+
+const taskOptions = computed(() => [
+  { value: null as number | null, label: loadingTasks.value ? 'Cargando...' : '-- Seleccionar tarea --' },
+  ...tasks.value.map(t => ({ value: t.id as number | null, label: t.name })),
+]);
 
 onMounted(async () => {
   loadingProjects.value = true;
@@ -53,12 +57,17 @@ async function loadTasks(projectId: number) {
   }
 }
 
-async function onProjectChange() {
+function onProjectChange(val: string | number | null) {
+  selectedProject.value = val as number | null;
   selectedTask.value = null;
   tasks.value = [];
   if (selectedProject.value) {
-    await loadTasks(selectedProject.value);
+    loadTasks(selectedProject.value);
   }
+}
+
+function onTaskChange(val: string | number | null) {
+  selectedTask.value = val as number | null;
 }
 
 async function regenerateDescription() {
@@ -137,29 +146,27 @@ async function saveAndConfirm() {
           </button>
         </div>
       </label>
-      <label class="field">
+      <div class="field">
         <span class="field-label">Proyecto Odoo</span>
-        <div class="project-select-wrapper">
-          <input
-            v-if="projects.length > 10"
-            type="text"
-            v-model="projectFilter"
-            class="project-search"
-            placeholder="Filtrar proyectos..."
-          />
-          <select v-model="selectedProject" @change="onProjectChange" :disabled="loadingProjects">
-            <option :value="null">{{ loadingProjects ? 'Cargando...' : '-- Seleccionar proyecto --' }}</option>
-            <option v-for="p in filteredProjects" :key="p.id" :value="p.id">{{ p.name }}</option>
-          </select>
-        </div>
-      </label>
-      <label class="field">
+        <CustomSelect
+          :modelValue="selectedProject"
+          @update:modelValue="onProjectChange"
+          :options="projectOptions"
+          :disabled="loadingProjects"
+          :searchable="projects.length > 10"
+          placeholder="-- Seleccionar proyecto --"
+        />
+      </div>
+      <div class="field">
         <span class="field-label">Tarea</span>
-        <select v-model="selectedTask" :disabled="!selectedProject || loadingTasks">
-          <option :value="null">{{ loadingTasks ? 'Cargando...' : '-- Seleccionar tarea --' }}</option>
-          <option v-for="t in tasks" :key="t.id" :value="t.id">{{ t.name }}</option>
-        </select>
-      </label>
+        <CustomSelect
+          :modelValue="selectedTask"
+          @update:modelValue="onTaskChange"
+          :options="taskOptions"
+          :disabled="!selectedProject || loadingTasks"
+          placeholder="-- Seleccionar tarea --"
+        />
+      </div>
     </div>
 
     <div class="editor-context">

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch, onMounted, onUnmounted } from 'vue';
+import { injectCollapseContext } from '../../composables/useCollapseAll';
 
 const props = withDefaults(defineProps<{
   label: string;
@@ -11,6 +12,19 @@ const props = withDefaults(defineProps<{
 });
 
 const isCollapsed = ref(props.collapsed);
+const ctx = injectCollapseContext();
+const groupId = `group-${Math.random().toString(36).slice(2, 9)}`;
+
+if (ctx) {
+  onMounted(() => ctx.register(groupId, isCollapsed));
+  onUnmounted(() => ctx.unregister(groupId));
+
+  watch(ctx.signal, (val) => {
+    if (val !== null) {
+      isCollapsed.value = val;
+    }
+  });
+}
 
 function toggle() {
   isCollapsed.value = !isCollapsed.value;

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GitLabUser {
     #[serde(default)]
@@ -12,6 +13,7 @@ pub struct GitLabUser {
     pub avatar_url: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GitLabIssue {
     #[serde(default)]

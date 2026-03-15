@@ -7,9 +7,7 @@ static SERVER_PROCESS: Mutex<Option<Child>> = Mutex::new(None);
 fn find_server_binary() -> Option<String> {
     let home = std::env::var("HOME").unwrap_or_default();
     let candidates = [
-        // Binario instalado en ~/.local/bin
         format!("{}/.local/bin/mimir-server", home),
-        // Binario en dist/daemon/ (desarrollo)
         "dist/daemon/mimir-server".to_string(),
     ];
 
@@ -19,7 +17,6 @@ fn find_server_binary() -> Option<String> {
         }
     }
 
-    // Relativo al ejecutable actual
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
             let candidate = dir.join("mimir-server");
@@ -36,7 +33,7 @@ fn find_server_binary() -> Option<String> {
 pub fn start_server() {
     let mut guard = SERVER_PROCESS.lock().unwrap();
     if guard.is_some() {
-        return; // Ya está corriendo
+        return;
     }
 
     if let Some(binary) = find_server_binary() {
@@ -50,7 +47,6 @@ pub fn start_server() {
             }
         }
     } else {
-        // Fallback: intentar con python
         match Command::new("python3")
             .args(["-m", "mimir_daemon.api_server"])
             .spawn()
@@ -74,4 +70,55 @@ pub fn stop_server() {
         let _ = child.kill();
         let _ = child.wait();
     }
+}
+
+/// Controla mimir-capture via systemctl --user.
+fn systemctl_capture(action: &str) -> Result<String, String> {
+    let output = Command::new("systemctl")
+        .args(["--user", action, "mimir-capture"])
+        .output()
+        .map_err(|e| format!("Error ejecutando systemctl: {}", e))?;
+
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("systemctl {} fallo: {}", action, stderr))
+    }
+}
+
+// --- Tauri commands ---
+
+#[tauri::command]
+pub fn start_capture_service() -> Result<String, String> {
+    systemctl_capture("start")
+}
+
+#[tauri::command]
+pub fn stop_capture_service() -> Result<String, String> {
+    systemctl_capture("stop")
+}
+
+#[tauri::command]
+pub fn restart_capture_service() -> Result<String, String> {
+    systemctl_capture("restart")
+}
+
+#[tauri::command]
+pub fn start_server_service() -> Result<(), String> {
+    start_server();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn stop_server_service() -> Result<(), String> {
+    stop_server();
+    Ok(())
+}
+
+#[tauri::command]
+pub fn restart_server_service() -> Result<(), String> {
+    stop_server();
+    start_server();
+    Ok(())
 }

@@ -1,8 +1,6 @@
 use crate::clients::daemon_client::DaemonClient;
 use crate::commands::config::{get_config, AppConfig};
 use crate::models::block::{ActivityBlock, BlockUpdate, DaemonStatus};
-use crate::models::issue::GitLabIssue;
-use crate::models::merge_request::GitLabMergeRequest;
 use crate::models::timesheet::{OdooProject, OdooTask, TimesheetEntry};
 
 fn get_client() -> DaemonClient {
@@ -98,6 +96,30 @@ pub async fn get_issues() -> Result<Vec<serde_json::Value>, String> {
 #[tauri::command]
 pub async fn get_merge_requests() -> Result<Vec<serde_json::Value>, String> {
     get_client().get("/gitlab/merge_requests").await
+}
+
+// --- Attendance ---
+
+#[tauri::command]
+pub async fn get_attendance_today() -> Result<serde_json::Value, String> {
+    get_client().get("/odoo/attendance/today").await
+}
+
+#[tauri::command]
+pub async fn attendance_check_in() -> Result<serde_json::Value, String> {
+    get_client()
+        .post::<serde_json::Value, _>("/odoo/attendance/checkin", &())
+        .await
+}
+
+#[tauri::command]
+pub async fn attendance_check_out(attendance_id: i64) -> Result<serde_json::Value, String> {
+    get_client()
+        .post::<serde_json::Value, _>(
+            &format!("/odoo/attendance/{}/checkout", attendance_id),
+            &(),
+        )
+        .await
 }
 
 /// Recupera un token del keyring de forma segura.

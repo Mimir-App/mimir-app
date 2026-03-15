@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Silueta simplificada del ojo de Mimir para sidebar -->
+  <g transform="translate(16,16)">
+    <!-- Forma del ojo -->
+    <path d="M-14,0 Q-7,-9 0,-10 Q7,-9 14,0 Q7,9 0,10 Q-7,9 -14,0Z"
+          fill="currentColor" opacity="0.15"/>
+    <path d="M-14,0 Q-7,-9 0,-10 Q7,-9 14,0 Q7,9 0,10 Q-7,9 -14,0Z"
+          fill="none" stroke="currentColor" stroke-width="1.5"/>
+    <!-- Iris -->
+    <circle cx="0" cy="0" r="5.5" fill="#cb1b21" opacity="0.9"/>
+    <!-- Pupila -->
+    <circle cx="0" cy="0" r="2.2" fill="currentColor"/>
+    <!-- Reflejo -->
+    <circle cx="-1.5" cy="-1.5" r="1" fill="white" opacity="0.3"/>
+  </g>
+</svg>

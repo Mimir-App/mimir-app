@@ -8,7 +8,7 @@ const titles: Record<string, string> = {
   '/review': 'Revisar Día',
   '/issues': 'Issues',
   '/merge-requests': 'Merge Requests',
-  '/timesheets': 'Timesheets',
+  '/timesheets': 'Parte de horas',
   '/settings': 'Ajustes',
 };
 

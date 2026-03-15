@@ -21,6 +21,18 @@ export const useBlocksStore = defineStore('blocks', () => {
     blocks.value.reduce((sum, b) => sum + b.duration_minutes / 60, 0)
   );
 
+  const confirmedHoursToday = computed(() =>
+    blocks.value
+      .filter(b => b.status === 'confirmed' || b.status === 'synced')
+      .reduce((sum, b) => sum + b.duration_minutes / 60, 0)
+  );
+
+  const unconfirmedHoursToday = computed(() =>
+    blocks.value
+      .filter(b => b.status === 'auto' || b.status === 'closed')
+      .reduce((sum, b) => sum + b.duration_minutes / 60, 0)
+  );
+
   async function fetchBlocks(date?: string) {
     loading.value = true;
     error.value = null;
@@ -94,6 +106,8 @@ export const useBlocksStore = defineStore('blocks', () => {
     errorBlocks,
     syncedBlocks,
     totalHoursToday,
+    confirmedHoursToday,
+    unconfirmedHoursToday,
     fetchBlocks,
     confirmBlock,
     updateBlock,

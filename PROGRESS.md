@@ -1,7 +1,7 @@
 # Mimir - Progreso del Proyecto
 
 Asistente inteligente de imputacion de horas para FactorLibre.
-Ultima actualizacion: 2026-03-13
+Ultima actualizacion: 2026-03-15
 
 ---
 
@@ -9,11 +9,12 @@ Ultima actualizacion: 2026-03-13
 
 | Componente | Tecnologia | Estado |
 |---|---|---|
-| Frontend desktop | Tauri 2 + Vue 3 + TypeScript + Vite | Scaffold completo |
-| Backend desktop | Rust (Tauri commands) | Scaffold completo |
-| Daemon local | Python 3.10+ (asyncio + FastAPI + uvicorn) | Scaffold completo |
-| Base de datos local | SQLite (aiosqlite) | Esquema creado |
-| Base de datos config | JSON (Tauri) | Estructura definida |
+| Frontend desktop | Tauri 2 + Vue 3 + TypeScript + Vite | v0.2.0 completo |
+| Backend desktop | Rust (Tauri commands) | v0.2.0 completo |
+| Capture daemon | Python 3.10+ (asyncio + poller + tray) | v0.2.0 completo |
+| Server daemon | Python 3.10+ (FastAPI + uvicorn) | v0.2.0 completo |
+| Base de datos local | SQLite (aiosqlite), compartida capture/server | Operativa |
+| Base de datos config | JSON (Tauri) | Operativa |
 
 ---
 
@@ -112,8 +113,6 @@ Ultima actualizacion: 2026-03-13
 
 **Tests: 34/34 pasando** (antes 8/8)
 
-**Verificacion:** Ejecutar el daemon, trabajar unos minutos, y verificar con `curl http://localhost:9477/blocks`.
-
 ---
 
 ## Fase 2 - Config + Auth + Comunicacion COMPLETADA
@@ -134,11 +133,6 @@ Ultima actualizacion: 2026-03-13
 | Tests config endpoints | Completado | 6 tests nuevos: config GET/PUT, tokens no expuestos, integration status |
 
 **Tests: 46/46 pasando** (40 existentes + 6 nuevos de config endpoints)
-
-**Verificaciones:**
-- Daemon tests: `pytest tests/ -v`
-- TypeScript: `npx vue-tsc --noEmit`
-- Rust: `cargo check`
 
 ---
 
@@ -166,11 +160,6 @@ Ultima actualizacion: 2026-03-13
 
 **Tests: 86/86 pasando** (45 Fase 2 + 14 Odoo v11 + 18 Odoo v16 + 9 server nuevos)
 
-**Verificaciones:**
-- Daemon tests: `cd daemon && pytest tests/ -v`
-- TypeScript: `npx vue-tsc --noEmit`
-- Rust: `cd src-tauri && cargo check`
-
 ---
 
 ## Fase 4 - Descripciones IA COMPLETADA
@@ -195,11 +184,6 @@ Ultima actualizacion: 2026-03-13
 
 **Tests: 100/100 pasando** (88 Fase 3 + 1 context_enricher + 1 block_manager + 4 ai_service + 4 ai_providers + 2 server)
 
-**Verificaciones:**
-- Daemon tests: `cd daemon && .venv/bin/python -m pytest tests/ -v`
-- TypeScript: `npx vue-tsc --noEmit`
-- Rust: `cd src-tauri && cargo check`
-
 ---
 
 ## Fase 5 - Vistas GitLab COMPLETADA
@@ -221,11 +205,6 @@ Ultima actualizacion: 2026-03-13
 
 **Tests: 108/108 pasando** (100 Fase 4 + 4 GitLabSource + 4 server GitLab)
 
-**Verificaciones:**
-- Daemon tests: `cd daemon && .venv/bin/python -m pytest tests/ -v`
-- TypeScript: `npx vue-tsc --noEmit`
-- Rust: `cd src-tauri && cargo check`
-
 ---
 
 ## Fase 6 - Dashboard + Polish + Empaquetado COMPLETADA
@@ -241,17 +220,90 @@ Ultima actualizacion: 2026-03-13
 | PyInstaller spec para daemon | Completado | Binario standalone ~56MB, sin dependencia de Python |
 | install-service.sh actualizado | Completado | Soporta binario PyInstaller, fallback a Python, DBUS_SESSION_BUS_ADDRESS |
 | Tauri bundle config Linux | Completado | .deb y .AppImage, metadata FactorLibre, dependencias declaradas |
-| Script build.sh unificado | Completado | `scripts/build.sh [daemon\|app\|all]` — orquesta PyInstaller + Tauri build |
+| Script build.sh unificado | Completado | `scripts/build.sh [daemon|app|all]` — orquesta PyInstaller + Tauri build |
 | .gitignore artefactos build | Completado | PyInstaller build/, *.spec.bak |
 
 **Tests: 108/108 pasando** (sin cambios funcionales)
+
+---
+
+## v0.2.0 - Refactor capture/server + UI/UX completa
+
+**Fecha:** 2026-03-14 a 2026-03-15
+**Objetivo:** Separar daemon en dos procesos, mejorar toda la UI/UX, y conectar funcionalidades avanzadas.
+
+### Refactor arquitectura capture/server
+
+| Tarea | Estado | Notas |
+|---|---|---|
+| Separar daemon en mimir-capture y mimir-server | Completado | capture: poller+blocks+tray+health (puerto 9476); server: FastAPI completa (puerto 9477) |
+| SQLite compartida entre ambos procesos | Completado | Misma BD, WAL mode para concurrencia |
+| Tauri arranca/mata server como child process | Completado | Server se lanza al iniciar la app y se mata al cerrar |
+| systemd service para capture | Completado | Servicio independiente, siempre corriendo en background |
+| Control de servicios desde frontend | Completado | Iniciar/detener capture y server desde la UI |
+| Script build.sh actualizado | Completado | Targets individuales: capture, server, daemon, app, all |
+
+### Componentes UI/UX nuevos
+
+| Componente | Tipo | Notas |
+|---|---|---|
+| `CustomSelect` | shared | Reemplaza todos los `<select>` nativos, tema oscuro correcto |
+| `CustomDatePicker` | shared | Selector de fecha con navegacion |
+| `CollapsibleGroup` | shared | Grupos colapsables con useCollapseAll |
+| `ViewToolbar` | shared | Header compartido para todas las vistas |
+| `DashboardGrid` | shared | Widgets arrastrables y redimensionables (NxM) |
+| `StatusBanner` | shared | Banner de estado para conexion/servicios |
+| `LoadingState` | shared | Estado de carga consistente |
+| `EmptyState` | shared | Estado vacio consistente |
+| `HelpTooltip` | shared | Tooltips de ayuda en Settings y formularios |
+
+### Composables nuevos
+
+| Composable | Funcion |
+|---|---|
+| `useFormatting` | Formatos configurables de horas y fechas, centralizado |
+| `useSortable` | Sorting por click en cabeceras de tabla |
+| `useCollapseAll` | Colapsar/expandir todos los grupos |
+| `usePolling` | Polling generico con cleanup automatico |
+| `useColumnWidths` | Anchos de columna redimensionables y persistentes |
+| `useTargets` | Objetivos semanales por dia, calculo progreso |
+
+### Funcionalidades nuevas
+
+| Funcionalidad | Estado | Notas |
+|---|---|---|
+| Formatos configurables (horas, fechas) | Completado | Decimal/HH:MM, formato fecha configurable en Settings |
+| Zoom/escala de interfaz | Completado | Ajuste de escala desde Settings |
+| Sidebar colapsable | Completado | Se colapsa para ganar espacio, estado persistente |
+| Dashboard con widgets arrastrables NxM | Completado | Grid redimensionable, posiciones guardadas en config |
+| Fichaje de asistencia Odoo | Completado | Conectado a hr.attendance via API Odoo |
+| Objetivos semanales por dia | Completado | Configuracion de horas objetivo por dia de la semana |
+| Barras de progreso dia/semana/mes | Completado | Progreso visual contra objetivos configurados |
+| Filtro por usuario en timesheets | Completado | Selector de usuario para ver timesheets de otros |
+| Agrupaciones nuevas en tablas | Completado | Por tarea, semana, prioridad, sin agrupar |
+| Sorting por click en cabeceras | Completado | Ascendente/descendente con indicador visual |
+| Columnas redimensionables y persistentes | Completado | Anchos guardados en config, drag para redimensionar |
+| Settings con tabs | Completado | Organizacion por pestanas: General, Odoo, GitLab, IA |
+| Tooltips de ayuda en Settings | Completado | HelpTooltip con explicaciones en cada campo |
+| Botones probar conexion Odoo/GitLab | Completado | Test connection con feedback visual |
+| Tema oscuro corregido para selects | Completado | CustomSelect con estilos dark mode correctos |
+
+### Correcciones
+
+| Bug | Solucion |
+|---|---|
+| keyring sync-secret-service | Configuracion correcta del backend keyring en Linux |
+| GitLab serde_json::Value | Usar serde_json::Value en vez de tipos estrictos para respuestas GitLab |
+| `from __future__ import annotations` | Eliminado en ficheros donde causaba problemas con evaluacion lazy de type hints |
+| provide/inject hierarchy | Corregido orden de provide/inject en componentes anidados |
+
+**Tests: ~110 pasando**
 
 **Verificaciones:**
 - Daemon tests: `cd daemon && .venv/bin/python -m pytest tests/ -v`
 - TypeScript: `npx vue-tsc --noEmit`
 - Rust: `cd src-tauri && cargo check`
-- Build daemon: `bash scripts/build.sh daemon`
-- Build completo: `bash scripts/build.sh`
+- Build: `bash scripts/build.sh`
 
 ---
 
@@ -259,15 +311,19 @@ Ultima actualizacion: 2026-03-13
 
 | Decision | Detalle |
 |---|---|
-| Ubicacion temporal | `mimir/` como subdirectorio de task-management-view. Se creara repo GitHub separado |
-| Comunicacion daemon-Tauri | HTTP localhost:9477 |
-| Arranque daemon | systemd user service + manual + health check |
-| SQLite separados | daemon (bloques) y Tauri (config) |
+| Separacion capture/server | capture (puerto 9476) corre como systemd service; server (puerto 9477) lo lanza Tauri como child process |
+| SQLite compartida | Ambos procesos acceden a la misma BD con WAL mode |
+| Comunicacion daemon-Tauri | HTTP localhost:9477 (server) |
+| Arranque capture | systemd user service, siempre corriendo |
+| Arranque server | Tauri lo lanza/mata como child process |
 | Imputacion Odoo | Batch por defecto |
 | Odoo v11 + v16 | Ambos en MVP (XMLRPC y OAuth respectivamente) |
+| Fichaje asistencia | Conectado a hr.attendance de Odoo |
 | pytest-asyncio 0.24 | Compatible con `asyncio_mode = "auto"` |
 | pystray | En ThreadPoolExecutor para no bloquear asyncio |
-| Stubs | Endpoints FastAPI devuelven listas vacias; preparados para conectar implementaciones reales |
+| Componentizacion agresiva | Todo reutilizable va a components/shared/, nunca duplicar markup |
+| Formatos via useFormatting | Nunca .toFixed() o .toLocaleDateString() directo |
+| Dashboard NxM | Widgets arrastrables con grid redimensionable |
 
 ---
 

@@ -31,41 +31,43 @@ echo "Proyecto: $PROJECT_DIR"
 echo "Target: $TARGET"
 echo ""
 
-build_daemon() {
-    echo "--- [daemon] Construyendo capture + server (PyInstaller) ---"
+ensure_venv() {
     cd "$DAEMON_DIR"
-
-    # Crear/activar venv si no existe
     if [ ! -d ".venv" ]; then
         python3 -m venv .venv
     fi
     .venv/bin/pip install --quiet --upgrade pip
     .venv/bin/pip install --quiet -e ".[dev]"
-
     mkdir -p "$DIST_DIR"
+}
 
-    # Build capture
-    echo "  Construyendo mimir-capture..."
+build_capture() {
+    echo "--- [capture] Construyendo mimir-capture (PyInstaller) ---"
+    ensure_venv
     .venv/bin/pyinstaller mimir_capture.spec \
         --distpath "$DIST_DIR" \
         --workpath /tmp/mimir-build-capture \
         --clean --noconfirm 2>&1 | tail -3
+    echo "Capture: $DIST_DIR/mimir-capture"
+    echo ""
+}
 
-    # Build server
-    echo "  Construyendo mimir-server..."
+build_server() {
+    echo "--- [server] Construyendo mimir-server (PyInstaller) ---"
+    ensure_venv
     .venv/bin/pyinstaller mimir_server.spec \
         --distpath "$DIST_DIR" \
         --workpath /tmp/mimir-build-server \
         --clean --noconfirm 2>&1 | tail -3
+    echo "Server: $DIST_DIR/mimir-server"
+    echo ""
+}
 
-    # Copiar instalador
+build_daemon() {
+    build_capture
+    build_server
     cp "$DAEMON_DIR/install-service.sh" "$DIST_DIR/install-daemon.sh"
     chmod +x "$DIST_DIR/install-daemon.sh"
-
-    echo ""
-    echo "Capture: $DIST_DIR/mimir-capture"
-    echo "Server:  $DIST_DIR/mimir-server"
-    echo ""
 }
 
 build_app() {
@@ -79,6 +81,12 @@ build_app() {
 
 # Ejecutar segun target
 case "$TARGET" in
+    capture)
+        build_capture
+        ;;
+    server)
+        build_server
+        ;;
     daemon)
         build_daemon
         ;;
@@ -91,7 +99,7 @@ case "$TARGET" in
         ;;
     *)
         echo "Target no valido: $TARGET"
-        echo "Uso: build.sh [daemon|app|all]"
+        echo "Uso: build.sh [capture|server|daemon|app|all]"
         exit 1
         ;;
 esac

@@ -159,10 +159,17 @@ export const api = {
       theme: 'dark',
       refresh_interval_seconds: 300,
       daily_hour_target: 8,
+      weekly_hour_targets: [8, 8, 8, 8, 8, 0, 0],
       ai_provider: 'none',
       ai_api_key_stored: false,
       ai_user_role: 'technical',
       ai_custom_context: '',
+      hour_format: 'hm',
+      date_format: 'eu',
+      font_size: 14,
+      dashboard_order: [],
+      dashboard_spans: {} as Record<string, [number, number]>,
+      column_widths: {},
     };
   },
 
@@ -200,5 +207,41 @@ export const api = {
   async getIntegrationStatus() {
     if (await isTauri()) return tauriInvoke('get_integration_status');
     return httpGet('/config/integration-status');
+  },
+
+  // Attendance
+  async getAttendanceToday() {
+    if (await isTauri()) return tauriInvoke('get_attendance_today');
+    return httpGet('/odoo/attendance/today');
+  },
+
+  async attendanceCheckIn() {
+    if (await isTauri()) return tauriInvoke('attendance_check_in');
+    return httpPost('/odoo/attendance/checkin');
+  },
+
+  async attendanceCheckOut(attendanceId: number) {
+    if (await isTauri()) return tauriInvoke('attendance_check_out', { attendanceId });
+    return httpPost(`/odoo/attendance/${attendanceId}/checkout`);
+  },
+
+  // Service control
+  async startCapture() {
+    if (await isTauri()) return tauriInvoke('start_capture_service');
+  },
+  async stopCapture() {
+    if (await isTauri()) return tauriInvoke('stop_capture_service');
+  },
+  async restartCapture() {
+    if (await isTauri()) return tauriInvoke('restart_capture_service');
+  },
+  async startServer() {
+    if (await isTauri()) return tauriInvoke('start_server_service');
+  },
+  async stopServer() {
+    if (await isTauri()) return tauriInvoke('stop_server_service');
+  },
+  async restartServer() {
+    if (await isTauri()) return tauriInvoke('restart_server_service');
   },
 };

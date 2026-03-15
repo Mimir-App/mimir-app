@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use super::issue::GitLabUser;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GitLabMergeRequest {
     #[serde(default)]

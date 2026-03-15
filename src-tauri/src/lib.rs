@@ -39,6 +39,9 @@ pub fn run() {
             daemon::push_config_to_daemon,
             daemon::generate_block_description,
             daemon::get_integration_status,
+            daemon::get_attendance_today,
+            daemon::attendance_check_in,
+            daemon::attendance_check_out,
             // Config
             config::get_config,
             config::save_config,
@@ -46,6 +49,13 @@ pub fn run() {
             auth::store_credential,
             auth::get_credential,
             auth::delete_credential,
+            // Service control
+            server_process::start_capture_service,
+            server_process::stop_capture_service,
+            server_process::restart_capture_service,
+            server_process::start_server_service,
+            server_process::stop_server_service,
+            server_process::restart_server_service,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
