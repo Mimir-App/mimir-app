@@ -2,7 +2,7 @@
 name = "mimir"
 version = "0.2.0"
 description = "Mimir - Asistente inteligente de imputación de horas"
-authors = ["FactorLibre"]
+authors = ["Jesus Lorenzo Limon"]
 edition = "2021"
 
 [lib]

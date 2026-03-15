@@ -1,6 +1,6 @@
 # Mimir
 
-Asistente inteligente de imputacion de horas para [FactorLibre](https://factorlibre.com). Captura automaticamente la actividad del escritorio, sugiere descripciones con IA, y permite imputar horas a Odoo.
+Asistente inteligente de imputacion de horas. Captura automaticamente la actividad del escritorio, sugiere descripciones con IA, y permite imputar horas a Odoo.
 
 ## Funcionalidades
 
@@ -72,7 +72,7 @@ bash install-daemon.sh
 
 ```bash
 # Clonar
-git clone https://github.com/factorlibre/mimir-app.git
+git clone https://github.com/Mimir-App/mimir-app.git
 cd mimir-app
 
 # Frontend
@@ -160,4 +160,4 @@ docs/plans/                   # Documentos de diseno
 
 ## Licencia
 
-Propiedad de FactorLibre.
+Propiedad de Jesus Lorenzo Limon.
