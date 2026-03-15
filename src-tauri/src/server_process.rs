@@ -7,6 +7,7 @@ static SERVER_PROCESS: Mutex<Option<Child>> = Mutex::new(None);
 fn find_server_binary() -> Option<String> {
     let home = std::env::var("HOME").unwrap_or_default();
     let candidates = [
+        "/usr/bin/mimir-server".to_string(),
         format!("{}/.local/bin/mimir-server", home),
         "dist/daemon/mimir-server".to_string(),
     ];

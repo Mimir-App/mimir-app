@@ -1,0 +1,12 @@
+[Unit]
+Description=Mimir Activity Capture
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/mimir-capture
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
