@@ -5,6 +5,8 @@ import { useDaemonStore } from '../stores/daemon';
 import { api } from '../lib/api';
 import CustomSelect from '../components/shared/CustomSelect.vue';
 import HelpTooltip from '../components/shared/HelpTooltip.vue';
+import IntegrationCard from '../components/shared/IntegrationCard.vue';
+import ModalDialog from '../components/shared/ModalDialog.vue';
 
 const configStore = useConfigStore();
 const daemonStore = useDaemonStore();
@@ -19,11 +21,24 @@ const daemonPushResult = ref<string | null>(null);
 const daemonPushType = ref<'success' | 'error'>('success');
 const activeTab = ref('general');
 
+const systemTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const timezoneOptions = [
+  'Europe/Madrid', 'Europe/London', 'Europe/Paris', 'Europe/Berlin',
+  'Europe/Rome', 'Europe/Lisbon', 'Europe/Amsterdam', 'Europe/Brussels',
+  'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'America/Mexico_City', 'America/Bogota', 'America/Buenos_Aires', 'America/Sao_Paulo',
+  'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Kolkata', 'Asia/Dubai',
+  'Australia/Sydney', 'Pacific/Auckland', 'UTC',
+].map(tz => ({ value: tz, label: tz === systemTz ? `${tz} (sistema)` : tz }))
+  .sort((a, b) => a.value === systemTz ? -1 : b.value === systemTz ? 1 : a.label.localeCompare(b.label));
+
 const tabs = computed(() => [
   { id: 'general', label: 'General', enabled: true },
+  { id: 'capture', label: 'Captura', enabled: true },
   { id: 'odoo', label: 'Odoo', enabled: true },
   { id: 'gitlab', label: 'GitLab', enabled: true },
   { id: 'ai', label: 'IA', enabled: true },
+  { id: 'google', label: 'Google', enabled: true },
   { id: 'services', label: 'Servicios', enabled: true },
 ].filter(t => t.enabled));
 
@@ -43,10 +58,56 @@ const odooIntegrationStatus = computed((): OdooStatus => {
   return { configured: false, client_type: null };
 });
 
+// Modals
+const showOdooModal = ref(false);
+const showGitlabModal = ref(false);
+const showGoogleSetupModal = ref(false);
+
+// Google Calendar
+const googleCalendarConnected = ref(false);
+const authorizingGoogle = ref(false);
+
+async function checkGoogleCalendarStatus() {
+  try {
+    const result = await api.getGoogleCalendarStatus() as { configured: boolean; connected: boolean };
+    googleCalendarConnected.value = result.connected;
+  } catch { googleCalendarConnected.value = false; }
+}
+
+async function authorizeGoogle() {
+  authorizingGoogle.value = true;
+  try {
+    const result = await api.getGoogleAuthUrl() as { url: string };
+    window.open(result.url, '_blank');
+    // Poll status every 3s for 2 minutes to detect when user completes auth
+    let attempts = 0;
+    const interval = setInterval(async () => {
+      attempts++;
+      await checkGoogleCalendarStatus();
+      if (googleCalendarConnected.value || attempts > 40) {
+        clearInterval(interval);
+        authorizingGoogle.value = false;
+      }
+    }, 3000);
+  } catch {
+    authorizingGoogle.value = false;
+  }
+}
+
+async function disconnectGoogle() {
+  try {
+    await api.disconnectGoogleCalendar();
+    googleCalendarConnected.value = false;
+  } catch { /* ignore */ }
+}
+
 onMounted(async () => {
   await configStore.load();
   await daemonStore.captureHealthCheck();
-  if (daemonStore.connected) await refreshIntegrationStatus();
+  if (daemonStore.connected) {
+    await refreshIntegrationStatus();
+    await checkGoogleCalendarStatus();
+  }
 });
 
 async function refreshIntegrationStatus() {
@@ -243,6 +304,12 @@ async function toggleServer() {
               </td>
             </tr>
             <tr>
+              <td class="label-cell">Zona horaria <HelpTooltip text="Zona horaria para mostrar horas de fichaje y bloques. Por defecto usa la del sistema." /></td>
+              <td colspan="3">
+                <CustomSelect v-model="configStore.config.timezone" :options="timezoneOptions" />
+              </td>
+            </tr>
+            <tr>
               <td class="label-cell">Escala interfaz <HelpTooltip text="Aumenta o reduce el tamano de toda la interfaz: texto, iconos, tablas y botones." /></td>
               <td colspan="3">
                 <div class="zoom-control">
@@ -256,89 +323,206 @@ async function toggleServer() {
             </tr>
           </tbody>
         </table>
+
+      </div>
+
+      <!-- Captura -->
+      <div v-show="activeTab === 'capture'" class="tab-content">
+        <p class="section-hint">Controla que datos recopila el servicio de captura. Los cambios se aplican en el siguiente ciclo de polling.</p>
+        <table class="settings-table">
+          <tbody>
+            <tr>
+              <td class="label-cell">Ventana activa <HelpTooltip text="Captura la aplicacion y el titulo de la ventana activa cada 30 segundos. Es el dato principal para construir bloques." /></td>
+              <td><label class="toggle"><input type="checkbox" v-model="configStore.config.capture_window" /><span class="toggle-label">{{ configStore.config.capture_window ? 'Activo' : 'Desactivado' }}</span></label></td>
+              <td class="label-cell">Proyecto git <HelpTooltip text="Detecta el repositorio git, rama y ultimo commit del proceso activo. Permite agrupar bloques por proyecto." /></td>
+              <td><label class="toggle"><input type="checkbox" v-model="configStore.config.capture_git" /><span class="toggle-label">{{ configStore.config.capture_git ? 'Activo' : 'Desactivado' }}</span></label></td>
+            </tr>
+            <tr>
+              <td class="label-cell">Tiempo inactivo <HelpTooltip text="Detecta cuanto tiempo llevas sin tocar teclado o raton. Permite descontar tiempo AFK de los bloques." /></td>
+              <td><label class="toggle"><input type="checkbox" v-model="configStore.config.capture_idle" /><span class="toggle-label">{{ configStore.config.capture_idle ? 'Activo' : 'Desactivado' }}</span></label></td>
+              <td class="label-cell">Audio / reuniones <HelpTooltip text="Detecta streams de audio activos para identificar videollamadas (Meet, Zoom, Teams, etc.) automaticamente." /></td>
+              <td><label class="toggle"><input type="checkbox" v-model="configStore.config.capture_audio" /><span class="toggle-label">{{ configStore.config.capture_audio ? 'Activo' : 'Desactivado' }}</span></label></td>
+            </tr>
+            <tr>
+              <td class="label-cell">Sesiones SSH <HelpTooltip text="Detecta conexiones SSH activas para identificar trabajo en servidores remotos." /></td>
+              <td><label class="toggle"><input type="checkbox" v-model="configStore.config.capture_ssh" /><span class="toggle-label">{{ configStore.config.capture_ssh ? 'Activo' : 'Desactivado' }}</span></label></td>
+              <td class="label-cell">Umbral inactividad <HelpTooltip text="Minutos sin actividad para cerrar un bloque automaticamente." /></td>
+              <td>
+                <div class="inline-field">
+                  <input type="number" v-model.number="configStore.config.refresh_interval_seconds" min="1" max="30" />
+                  <span class="suffix">min</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="label-cell">Retencion senales <HelpTooltip text="Dias que se conservan las senales crudas. Pasado este tiempo se eliminan automaticamente para liberar espacio." /></td>
+              <td>
+                <div class="inline-field">
+                  <input type="number" v-model.number="configStore.config.signals_retention_days" min="30" max="730" />
+                  <span class="suffix">dias</span>
+                </div>
+              </td>
+              <td class="label-cell">Retencion bloques <HelpTooltip text="Dias que se conservan los bloques de actividad. Los bloques sincronizados con Odoo se pueden eliminar antes." /></td>
+              <td>
+                <div class="inline-field">
+                  <input type="number" v-model.number="configStore.config.blocks_retention_days" min="30" max="1825" />
+                  <span class="suffix">dias</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- Odoo -->
       <div v-show="activeTab === 'odoo'" class="tab-content">
-        <table class="settings-table">
-          <tbody>
-            <tr>
-              <td class="label-cell">URL <HelpTooltip text="Direccion del servidor Odoo. Ej: https://odoo.miempresa.com" /></td>
-              <td colspan="3"><input type="url" v-model="configStore.config.odoo_url" placeholder="https://odoo.example.com" /></td>
-            </tr>
-            <tr>
-              <td class="label-cell">Version <HelpTooltip text="v11 usa XMLRPC con usuario/contrasena. v16+ usa REST con API key o OAuth." /></td>
-              <td>
-                <CustomSelect v-model="configStore.config.odoo_version" :options="[
-                  { value: 'v11', label: 'Odoo v11', hint: 'XMLRPC' },
-                  { value: 'v16', label: 'Odoo v16+', hint: 'REST / OAuth' },
-                ]" />
-              </td>
-              <td class="label-cell">Base de datos <HelpTooltip text="Nombre de la base de datos de Odoo. Necesario para la autenticacion." /></td>
-              <td><input type="text" v-model="configStore.config.odoo_db" placeholder="nombre_base_datos" /></td>
-            </tr>
-            <tr>
-              <td class="label-cell">Usuario <HelpTooltip text="Email o nombre de usuario para autenticarse en Odoo." /></td>
-              <td colspan="3"><input type="text" v-model="configStore.config.odoo_username" placeholder="usuario@empresa.com" /></td>
-            </tr>
-            <tr>
-              <td class="label-cell">Token <HelpTooltip text="Contrasena (v11) o API key (v16). Se guarda de forma segura en el keyring del sistema." /></td>
-              <td colspan="3">
-                <div class="token-field">
-                  <input type="password" v-model="odooToken" :placeholder="configStore.config.odoo_token_stored ? '***** (guardado)' : 'Contrasena o API key'" />
-                  <button v-if="configStore.config.odoo_token_stored" type="button" class="btn btn-danger btn-sm" @click="clearOdooToken">Eliminar</button>
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td class="label-cell"></td>
-              <td colspan="3">
-                <div class="connection-test">
-                  <button type="button" class="btn btn-secondary btn-sm" @click="testOdooConnection" :disabled="testingOdoo">
-                    {{ testingOdoo ? 'Probando...' : 'Probar conexion' }}
-                  </button>
-                  <span v-if="odooTestResult === 'ok'" class="conn-ok">{{ odooTestMessage }}</span>
-                  <span v-else-if="odooTestResult === 'fail'" class="conn-fail">{{ odooTestMessage }}</span>
-                  <span v-else-if="odooIntegrationStatus.configured" class="conn-ok">Conectado ({{ odooIntegrationStatus.client_type }})</span>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <IntegrationCard
+          name="Odoo"
+          icon="O"
+          description="Conecta con tu servidor Odoo para imputar horas, gestionar proyectos y fichar jornada."
+          :connected="odooIntegrationStatus.configured"
+          connect-label="Configurar Odoo"
+          disconnect-label="Desconectar"
+          @connect="showOdooModal = true"
+          @disconnect="clearOdooToken"
+        >
+          <template #status>
+            <p class="session-detail">{{ configStore.config.odoo_username }} — {{ configStore.config.odoo_url }}</p>
+          </template>
+          <template #details>
+            <table class="settings-table">
+              <tbody>
+                <tr>
+                  <td class="label-cell">Servidor</td>
+                  <td>{{ configStore.config.odoo_url }}</td>
+                  <td class="label-cell">Version</td>
+                  <td>{{ configStore.config.odoo_version }}</td>
+                </tr>
+                <tr>
+                  <td class="label-cell">Usuario</td>
+                  <td>{{ configStore.config.odoo_username }}</td>
+                  <td class="label-cell">Base de datos</td>
+                  <td>{{ configStore.config.odoo_db }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div style="margin-top: 12px;">
+              <button type="button" class="btn btn-secondary btn-sm" @click="showOdooModal = true">Editar configuracion</button>
+            </div>
+          </template>
+        </IntegrationCard>
+
+        <ModalDialog title="Configurar Odoo" :open="showOdooModal" @close="showOdooModal = false">
+          <table class="settings-table">
+            <tbody>
+              <tr>
+                <td class="label-cell">URL</td>
+                <td><input type="url" v-model="configStore.config.odoo_url" placeholder="https://odoo.example.com" /></td>
+              </tr>
+              <tr>
+                <td class="label-cell">Version</td>
+                <td>
+                  <CustomSelect v-model="configStore.config.odoo_version" :options="[
+                    { value: 'v11', label: 'Odoo v11', hint: 'XMLRPC' },
+                    { value: 'v16', label: 'Odoo v16+', hint: 'REST / OAuth' },
+                  ]" />
+                </td>
+              </tr>
+              <tr>
+                <td class="label-cell">Base de datos</td>
+                <td><input type="text" v-model="configStore.config.odoo_db" placeholder="nombre_base_datos" /></td>
+              </tr>
+              <tr>
+                <td class="label-cell">Usuario</td>
+                <td><input type="text" v-model="configStore.config.odoo_username" placeholder="usuario@empresa.com" /></td>
+              </tr>
+              <tr>
+                <td class="label-cell">Token</td>
+                <td>
+                  <div class="token-field">
+                    <input type="password" v-model="odooToken" :placeholder="configStore.config.odoo_token_stored ? '***** (guardado)' : 'Contrasena o API key'" />
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td></td>
+                <td>
+                  <div class="connection-test">
+                    <button type="button" class="btn btn-secondary btn-sm" @click="testOdooConnection" :disabled="testingOdoo">
+                      {{ testingOdoo ? 'Probando...' : 'Probar conexion' }}
+                    </button>
+                    <span v-if="odooTestResult === 'ok'" class="conn-ok">{{ odooTestMessage }}</span>
+                    <span v-else-if="odooTestResult === 'fail'" class="conn-fail">{{ odooTestMessage }}</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </ModalDialog>
       </div>
 
       <!-- GitLab -->
       <div v-show="activeTab === 'gitlab'" class="tab-content">
-        <table class="settings-table">
-          <tbody>
-            <tr>
-              <td class="label-cell">URL <HelpTooltip text="Direccion de tu instancia GitLab. Ej: https://gitlab.miempresa.com" /></td>
-              <td colspan="3"><input type="url" v-model="configStore.config.gitlab_url" placeholder="https://gitlab.example.com" /></td>
-            </tr>
-            <tr>
-              <td class="label-cell">Token <HelpTooltip text="Personal Access Token de GitLab con permisos api y read_user. Se guarda en el keyring del sistema." /></td>
-              <td colspan="3">
-                <div class="token-field">
-                  <input type="password" v-model="gitlabToken" :placeholder="configStore.config.gitlab_token_stored ? '***** (guardado)' : 'Personal Access Token'" />
-                  <button v-if="configStore.config.gitlab_token_stored" type="button" class="btn btn-danger btn-sm" @click="clearGitLabToken">Eliminar</button>
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td class="label-cell"></td>
-              <td colspan="3">
-                <div class="connection-test">
-                  <button type="button" class="btn btn-secondary btn-sm" @click="testGitlabConnection" :disabled="testingGitlab">
-                    {{ testingGitlab ? 'Probando...' : 'Probar conexion' }}
-                  </button>
-                  <span v-if="gitlabTestResult === 'ok'" class="conn-ok">{{ gitlabTestMessage }}</span>
-                  <span v-else-if="gitlabTestResult === 'fail'" class="conn-fail">{{ gitlabTestMessage }}</span>
-                  <span v-else-if="gitlabIntegrationConfigured" class="conn-ok">Conectado</span>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <IntegrationCard
+          name="GitLab"
+          icon="G"
+          description="Conecta con tu instancia GitLab para ver issues y merge requests asignadas."
+          :connected="gitlabIntegrationConfigured"
+          connect-label="Configurar GitLab"
+          disconnect-label="Desconectar"
+          @connect="showGitlabModal = true"
+          @disconnect="clearGitLabToken"
+        >
+          <template #status>
+            <p class="session-detail">{{ configStore.config.gitlab_url.replace(/^https?:\/\//, '') }}</p>
+          </template>
+          <template #details>
+            <table class="settings-table">
+              <tbody>
+                <tr>
+                  <td class="label-cell">Servidor</td>
+                  <td>{{ configStore.config.gitlab_url }}</td>
+                  <td class="label-cell">Auth</td>
+                  <td>Personal Access Token</td>
+                </tr>
+              </tbody>
+            </table>
+            <div style="margin-top: 12px;">
+              <button type="button" class="btn btn-secondary btn-sm" @click="showGitlabModal = true">Editar configuracion</button>
+            </div>
+          </template>
+        </IntegrationCard>
+
+        <ModalDialog title="Configurar GitLab" :open="showGitlabModal" @close="showGitlabModal = false">
+          <table class="settings-table">
+            <tbody>
+              <tr>
+                <td class="label-cell">URL</td>
+                <td><input type="url" v-model="configStore.config.gitlab_url" placeholder="https://gitlab.example.com" /></td>
+              </tr>
+              <tr>
+                <td class="label-cell">Token</td>
+                <td>
+                  <div class="token-field">
+                    <input type="password" v-model="gitlabToken" :placeholder="configStore.config.gitlab_token_stored ? '***** (guardado)' : 'Personal Access Token'" />
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td></td>
+                <td>
+                  <div class="connection-test">
+                    <button type="button" class="btn btn-secondary btn-sm" @click="testGitlabConnection" :disabled="testingGitlab">
+                      {{ testingGitlab ? 'Probando...' : 'Probar conexion' }}
+                    </button>
+                    <span v-if="gitlabTestResult === 'ok'" class="conn-ok">{{ gitlabTestMessage }}</span>
+                    <span v-else-if="gitlabTestResult === 'fail'" class="conn-fail">{{ gitlabTestMessage }}</span>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </ModalDialog>
       </div>
 
       <!-- IA -->
@@ -390,6 +574,70 @@ async function toggleServer() {
         <p v-if="configStore.config.ai_provider !== 'none'" class="hint">
           Las descripciones se generan automaticamente al cerrar cada bloque de actividad.
         </p>
+      </div>
+
+      <!-- Servicios -->
+      <!-- Google -->
+      <div v-show="activeTab === 'google'" class="tab-content">
+        <IntegrationCard
+          name="Google"
+          icon="G"
+          description="Inicia sesion con tu cuenta de Google para acceder a Calendar, Meet y otros servicios."
+          :connected="googleCalendarConnected"
+          :connect-label="authorizingGoogle ? 'Esperando autorizacion...' : 'Iniciar sesion con Google'"
+          disconnect-label="Cerrar sesion"
+          @connect="configStore.config.google_client_id ? authorizeGoogle() : (showGoogleSetupModal = true)"
+          @disconnect="disconnectGoogle"
+        >
+          <template #setup>
+            <div v-if="!configStore.config.google_client_id">
+              <button type="button" class="btn btn-secondary btn-sm" @click="showGoogleSetupModal = true">Configurar credenciales</button>
+            </div>
+          </template>
+          <template #status>
+            <p class="session-detail">Cuenta autorizada con acceso a los servicios configurados</p>
+          </template>
+          <template #details>
+            <table class="settings-table">
+              <tbody>
+                <tr>
+                  <td class="label-cell">Autorizaciones</td>
+                  <td>Google Calendar (lectura)</td>
+                  <td class="label-cell">Servicios</td>
+                  <td><span class="service-chip active">Calendar — Deteccion de reuniones</span></td>
+                </tr>
+              </tbody>
+            </table>
+            <div style="margin-top: 12px;">
+              <button type="button" class="btn btn-secondary btn-sm" @click="showGoogleSetupModal = true">Editar credenciales</button>
+            </div>
+          </template>
+        </IntegrationCard>
+
+        <ModalDialog title="Credenciales Google OAuth2" :open="showGoogleSetupModal" @close="showGoogleSetupModal = false">
+          <table class="settings-table">
+            <tbody>
+              <tr>
+                <td class="label-cell">Client ID</td>
+                <td><input type="text" v-model="configStore.config.google_client_id" placeholder="123456789.apps.googleusercontent.com" /></td>
+              </tr>
+              <tr>
+                <td class="label-cell">Client Secret</td>
+                <td><input type="password" v-model="configStore.config.google_client_secret" placeholder="GOCSPX-..." /></td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="google-help">
+            <p>Como obtener las credenciales:</p>
+            <ol>
+              <li>Ve a <a href="https://console.cloud.google.com" target="_blank" rel="noopener">Google Cloud Console</a></li>
+              <li>Crea un proyecto o usa uno existente</li>
+              <li>Activa la API de Google Calendar</li>
+              <li>En Credentials, crea un OAuth 2.0 Client ID (tipo "Web application")</li>
+              <li>Anade <code>http://127.0.0.1:9477/oauth/google/callback</code> como Authorized redirect URI</li>
+            </ol>
+          </div>
+        </ModalDialog>
       </div>
 
       <!-- Servicios -->
@@ -501,6 +749,39 @@ async function toggleServer() {
                 <template v-else>Configurar en pestaña IA</template>
               </td>
               <td></td>
+            </tr>
+            <tr>
+              <td class="service-name">Google Calendar <HelpTooltip text="Conecta con Google Calendar para detectar reuniones automaticamente y enriquecer los bloques con datos del evento." /></td>
+              <td>
+                <span class="badge" :class="googleCalendarConnected ? 'ok' : 'off'">
+                  {{ googleCalendarConnected ? 'Conectado' : 'No' }}
+                </span>
+              </td>
+              <td class="mono">—</td>
+              <td class="detail">
+                <template v-if="googleCalendarConnected">Eventos del calendario enriquecen las senales</template>
+                <template v-else-if="configStore.config.google_client_id">Autoriza el acceso a tu calendario</template>
+                <template v-else>Configura Client ID y Secret en la pestaña Captura</template>
+              </td>
+              <td class="action-cell">
+                <button
+                  v-if="configStore.config.google_client_id && !googleCalendarConnected"
+                  type="button"
+                  class="btn btn-sm btn-success"
+                  :disabled="authorizingGoogle"
+                  @click="authorizeGoogle"
+                >
+                  {{ authorizingGoogle ? 'Abriendo...' : 'Autorizar' }}
+                </button>
+                <button
+                  v-else-if="googleCalendarConnected"
+                  type="button"
+                  class="btn btn-sm btn-danger"
+                  @click="disconnectGoogle"
+                >
+                  Desconectar
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -833,4 +1114,33 @@ async function toggleServer() {
 .save-msg { font-size: 13px; }
 .save-msg.success { color: var(--success); }
 .save-msg.error { color: var(--error); }
+
+/* Google */
+.google-login { display: flex; justify-content: center; padding: 24px 0; }
+.google-login-card { max-width: 480px; text-align: center; }
+.google-login-card h3 { margin: 12px 0 8px; }
+.google-login-card p { color: var(--text-secondary); font-size: 13px; margin-bottom: 16px; }
+.google-icon { width: 48px; height: 48px; border-radius: 12px; background: var(--bg-secondary); display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 700; color: var(--accent); margin: 0 auto; }
+.google-icon.connected { background: var(--success); color: white; }
+.google-login-btn { margin-top: 16px; padding: 12px 32px; font-size: 15px; }
+.google-setup { text-align: left; margin: 16px 0; }
+.google-help { margin-top: 12px; padding: 12px; background: var(--bg-secondary); border-radius: 6px; font-size: 13px; text-align: left; }
+.google-help ol { margin: 8px 0 0 20px; }
+.google-help li { margin-bottom: 4px; }
+.google-help code { background: var(--bg-card); padding: 2px 4px; border-radius: 3px; font-size: 12px; }
+.google-connected { padding: 8px 0; }
+.google-session-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
+.google-session-header { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.google-session-header h3 { margin: 0; }
+.session-detail { color: var(--text-secondary); font-size: 13px; margin: 4px 0 0; }
+.google-services { display: flex; flex-wrap: wrap; gap: 8px; }
+.service-chip { font-size: 12px; padding: 4px 10px; border-radius: 4px; background: var(--bg-card); border: 1px solid var(--border); }
+.service-chip.active { border-color: var(--success); color: var(--success); }
+.google-actions { margin-top: 16px; display: flex; justify-content: flex-end; }
+
+/* Capture toggles */
+.section-hint { font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
+.toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.toggle input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+.toggle-label { font-size: 13px; color: var(--text-secondary); }
 </style>

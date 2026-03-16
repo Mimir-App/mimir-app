@@ -16,17 +16,17 @@ from fastapi import FastAPI
 from .config import DaemonConfig
 from .db import Database
 from .platform import get_platform_provider
-from .block_manager import BlockManager
+from .signal_aggregator import SignalAggregator
 from .poller import Poller
 from .tray import TrayIcon
 
 logger = logging.getLogger("mimir_capture")
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 CAPTURE_PORT = 9476
 
 
-def create_capture_app(poller: Poller, version: str = VERSION) -> FastAPI:
+def create_capture_app(poller: Poller, platform: object | None = None, version: str = VERSION) -> FastAPI:
     """Crea la app FastAPI mínima del capture."""
     from datetime import datetime, timezone
 
@@ -46,6 +46,7 @@ def create_capture_app(poller: Poller, version: str = VERSION) -> FastAPI:
             "mode": "paused" if poller._paused else "active",
             "uptime_seconds": uptime,
             "last_poll": poller.last_poll.isoformat() if poller.last_poll else None,
+            "backend": getattr(platform, 'backend', 'unknown') if platform else "unknown",
             "version": version,
         }
 
@@ -80,21 +81,23 @@ async def run_capture(args: argparse.Namespace) -> None:
     platform = get_platform_provider()
     await platform.setup()
 
-    block_manager = BlockManager(
+    aggregator = SignalAggregator(
         db=db,
-        inherit_threshold=config.inherit_threshold,
+        inactivity_threshold=config.inactivity_threshold,
+        browser_apps=set(config.browser_apps) if config.browser_apps else None,
+        transient_apps=set(config.transient_apps) if config.transient_apps else None,
     )
 
-    await block_manager.recover_open_blocks()
+    await aggregator.recover_open_blocks()
 
     poller = Poller(
         config=config,
         db=db,
         platform=platform,
-        block_manager=block_manager,
+        aggregator=aggregator,
     )
 
-    app = create_capture_app(poller=poller, version=VERSION)
+    app = create_capture_app(poller=poller, platform=platform, version=VERSION)
 
     tray = TrayIcon(
         on_mode_change=lambda mode: (

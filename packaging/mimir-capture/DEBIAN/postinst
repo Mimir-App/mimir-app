@@ -6,4 +6,8 @@ if [ "$1" = "configure" ]; then
     echo "  systemctl --user daemon-reload"
     echo "  systemctl --user enable --now mimir-capture"
     echo ""
+    echo "Si usas Wayland (GNOME), activa la extension:"
+    echo "  gnome-extensions enable mimir-window-tracker@mimir.app"
+    echo "  (Requiere cerrar sesion y volver a entrar)"
+    echo ""
 fi

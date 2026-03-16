@@ -280,10 +280,14 @@ class OdooV16Client(TimesheetClient):
             )
             if result:
                 r = result[0]
+                # Odoo almacena datetimes en UTC sin indicador de zona.
+                # Añadimos 'Z' para que el frontend los interprete como UTC.
+                ci = r.get("check_in")
+                co = r.get("check_out")
                 return {
                     "id": r["id"],
-                    "check_in": r.get("check_in"),
-                    "check_out": r.get("check_out"),
+                    "check_in": f"{ci}Z" if ci and not ci.endswith("Z") else ci,
+                    "check_out": f"{co}Z" if co and not co.endswith("Z") else co,
                     "employee_id": r["employee_id"][0] if isinstance(r.get("employee_id"), (list, tuple)) else r.get("employee_id"),
                 }
             return None

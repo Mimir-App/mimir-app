@@ -2,7 +2,8 @@
 
 import logging
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from .base import DescriptionProvider, DescriptionRequest, DescriptionResult
 
@@ -43,18 +44,21 @@ class GeminiProvider(DescriptionProvider):
     """Proveedor de descripciones usando Google Gemini API."""
 
     def __init__(self, api_key: str, model: str = "gemini-2.0-flash") -> None:
-        genai.configure(api_key=api_key)
-        self._model = genai.GenerativeModel(
-            model_name=model,
-            system_instruction=SYSTEM_PROMPT,
-        )
+        self._client = genai.Client(api_key=api_key)
+        self._model = model
 
     async def generate(self, request: DescriptionRequest) -> DescriptionResult:
         """Genera descripción con Gemini."""
         prompt = _build_user_prompt(request)
         logger.debug("Gemini prompt: %s", prompt)
 
-        response = await self._model.generate_content_async(prompt)
+        response = await self._client.aio.models.generate_content(
+            model=self._model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+            ),
+        )
         text = (response.text or "").strip()
 
         if not text:

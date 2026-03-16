@@ -22,10 +22,20 @@ const DEFAULT_CONFIG: AppConfig = {
   ai_custom_context: '',
   hour_format: 'hm',
   date_format: 'eu',
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   font_size: 14,
   dashboard_order: [] as string[],
   dashboard_spans: {} as Record<string, [number, number]>,
   column_widths: {} as Record<string, number>,
+  signals_retention_days: 180,
+  blocks_retention_days: 365,
+  google_client_id: '',
+  google_client_secret: '',
+  capture_window: true,
+  capture_git: true,
+  capture_idle: true,
+  capture_audio: true,
+  capture_ssh: true,
 };
 
 export const useConfigStore = defineStore('config', () => {

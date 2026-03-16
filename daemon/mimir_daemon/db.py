@@ -59,6 +59,44 @@ CREATE TABLE IF NOT EXISTS ai_cache (
     provider TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE TABLE IF NOT EXISTS context_mappings (
+    context_key TEXT PRIMARY KEY,
+    odoo_project_id INTEGER,
+    odoo_project_name TEXT,
+    odoo_task_id INTEGER,
+    odoo_task_name TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS signals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    app_name TEXT,
+    window_title TEXT,
+    project_path TEXT,
+    git_branch TEXT,
+    git_remote TEXT,
+    ssh_host TEXT,
+    pid INTEGER,
+    context_key TEXT,
+    last_commit_message TEXT,
+    idle_ms INTEGER DEFAULT 0,
+    audio_app TEXT,
+    is_meeting INTEGER DEFAULT 0,
+    workspace TEXT,
+    calendar_event TEXT,
+    calendar_attendees TEXT,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_signals_timestamp ON signals(timestamp);
+
+CREATE TABLE IF NOT EXISTS block_signals (
+    block_id INTEGER NOT NULL REFERENCES blocks(id) ON DELETE CASCADE,
+    signal_id INTEGER NOT NULL REFERENCES signals(id),
+    PRIMARY KEY (block_id, signal_id)
+);
 """
 
 
@@ -212,3 +250,87 @@ class Database:
             (signal_hash, description, confidence, provider),
         )
         await self.db.commit()
+
+    # --- Context mappings ---
+
+    async def get_context_mapping(self, context_key: str) -> dict | None:
+        """Obtiene el mapeo Odoo para un context_key."""
+        async with self.db.execute(
+            "SELECT * FROM context_mappings WHERE context_key = ?",
+            (context_key,),
+        ) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def set_context_mapping(
+        self, context_key: str, odoo_project_id: int | None,
+        odoo_project_name: str | None, odoo_task_id: int | None,
+        odoo_task_name: str | None,
+    ) -> None:
+        """Guarda o actualiza el mapeo Odoo para un context_key."""
+        await self.db.execute(
+            """INSERT OR REPLACE INTO context_mappings
+               (context_key, odoo_project_id, odoo_project_name, odoo_task_id, odoo_task_name, updated_at)
+               VALUES (?, ?, ?, ?, ?, datetime('now'))""",
+            (context_key, odoo_project_id, odoo_project_name, odoo_task_id, odoo_task_name),
+        )
+        await self.db.commit()
+
+    async def get_all_context_mappings(self) -> list[dict]:
+        """Obtiene todos los mapeos context_key -> Odoo."""
+        async with self.db.execute(
+            "SELECT * FROM context_mappings ORDER BY updated_at DESC",
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    # --- Signals ---
+
+    async def create_signal(self, **kwargs: object) -> int:
+        """Inserta una senal y devuelve su ID."""
+        cols = ", ".join(kwargs.keys())
+        placeholders = ", ".join("?" for _ in kwargs)
+        async with self.db.execute(
+            f"INSERT INTO signals ({cols}) VALUES ({placeholders})",
+            tuple(kwargs.values()),
+        ) as cursor:
+            await self.db.commit()
+            return cursor.lastrowid  # type: ignore
+
+    async def get_signals_by_date(self, date: str) -> list[dict]:
+        """Obtiene senales de un dia."""
+        async with self.db.execute(
+            "SELECT * FROM signals WHERE date(timestamp) = ? ORDER BY timestamp",
+            (date,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def get_signals_by_block(self, block_id: int) -> list[dict]:
+        """Obtiene senales asociadas a un bloque."""
+        async with self.db.execute(
+            """SELECT s.* FROM signals s
+               JOIN block_signals bs ON s.id = bs.signal_id
+               WHERE bs.block_id = ?
+               ORDER BY s.timestamp""",
+            (block_id,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def link_signal_to_block(self, block_id: int, signal_id: int) -> None:
+        """Vincula una senal a un bloque."""
+        await self.db.execute(
+            "INSERT OR IGNORE INTO block_signals (block_id, signal_id) VALUES (?, ?)",
+            (block_id, signal_id),
+        )
+        await self.db.commit()
+
+    async def cleanup_old_signals(self, months: int = 6) -> int:
+        """Elimina senales mas antiguas de N meses."""
+        async with self.db.execute(
+            "DELETE FROM signals WHERE timestamp < datetime('now', ?)",
+            (f"-{months} months",),
+        ) as cursor:
+            await self.db.commit()
+            return cursor.rowcount

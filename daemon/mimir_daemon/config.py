@@ -18,10 +18,25 @@ class DaemonConfig:
     port: int = 9477
     host: str = "127.0.0.1"
     polling_interval: int = 30  # segundos
-    inherit_threshold: int = 900  # 15 minutos en segundos
+    inherit_threshold: int = 900  # legacy, no usado en signal_aggregator
+    inactivity_threshold: int = 300  # 5 minutos en segundos
     checkpoint_interval: int = 5  # cada N polls
     db_path: str = str(DEFAULT_DB_PATH)
     log_level: str = "INFO"
+    browser_apps: list[str] | None = None
+    transient_apps: list[str] | None = None
+    # Google Calendar
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    # Retencion de datos
+    signals_retention_days: int = 180   # 6 meses
+    blocks_retention_days: int = 365    # 1 ano
+    # Permisos de captura
+    capture_window: bool = True
+    capture_git: bool = True
+    capture_idle: bool = True
+    capture_audio: bool = True
+    capture_ssh: bool = True
 
     @classmethod
     def load(cls, path: Path | None = None) -> "DaemonConfig":

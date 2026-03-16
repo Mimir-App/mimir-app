@@ -98,6 +98,55 @@ pub async fn get_merge_requests() -> Result<Vec<serde_json::Value>, String> {
     get_client().get("/gitlab/merge_requests").await
 }
 
+// --- Signals ---
+
+#[tauri::command]
+pub async fn get_signals(date: Option<String>, block_id: Option<i64>) -> Result<Vec<serde_json::Value>, String> {
+    let mut params = Vec::new();
+    if let Some(d) = date { params.push(format!("date={}", d)); }
+    if let Some(b) = block_id { params.push(format!("block_id={}", b)); }
+    let query = if params.is_empty() { String::new() } else { format!("?{}", params.join("&")) };
+    get_client().get(&format!("/signals{}", query)).await
+}
+
+#[tauri::command]
+pub async fn split_block(block_id: i64, signal_id: i64) -> Result<serde_json::Value, String> {
+    get_client()
+        .post::<serde_json::Value, _>(
+            &format!("/blocks/{}/split?signal_id={}", block_id, signal_id),
+            &(),
+        )
+        .await
+}
+
+#[tauri::command]
+pub async fn merge_blocks(block_ids: Vec<i64>) -> Result<serde_json::Value, String> {
+    #[derive(serde::Serialize)]
+    struct MergeReq { block_ids: Vec<i64> }
+    get_client()
+        .post::<serde_json::Value, _>("/blocks/merge", &MergeReq { block_ids })
+        .await
+}
+
+// --- Google Calendar ---
+
+#[tauri::command]
+pub async fn get_google_auth_url() -> Result<serde_json::Value, String> {
+    get_client().get("/google/calendar/auth-url").await
+}
+
+#[tauri::command]
+pub async fn get_google_calendar_status() -> Result<serde_json::Value, String> {
+    get_client().get("/google/calendar/status").await
+}
+
+#[tauri::command]
+pub async fn disconnect_google_calendar() -> Result<serde_json::Value, String> {
+    get_client()
+        .post::<serde_json::Value, _>("/google/calendar/disconnect", &())
+        .await
+}
+
 // --- Attendance ---
 
 #[tauri::command]

@@ -26,6 +26,29 @@ export interface ActivityBlock {
   odoo_entry_id: number | null;
 }
 
+// --- Signals ---
+
+export interface Signal {
+  id: number;
+  timestamp: string;
+  app_name: string | null;
+  window_title: string | null;
+  project_path: string | null;
+  git_branch: string | null;
+  git_remote: string | null;
+  ssh_host: string | null;
+  pid: number | null;
+  context_key: string | null;
+  last_commit_message: string | null;
+  idle_ms: number;
+  audio_app: string | null;
+  is_meeting: boolean;
+  workspace: string | null;
+  calendar_event: string | null;
+  calendar_attendees: string | null;
+  created_at: string;
+}
+
 // --- GitLab ---
 
 export interface GitLabIssue {
@@ -136,8 +159,21 @@ export interface AppConfig {
   ai_custom_context: string;
   hour_format: 'decimal' | 'hm' | 'minutes';
   date_format: 'iso' | 'eu' | 'short' | 'long';
+  timezone: string;
   font_size: number;
   dashboard_order: string[];
   dashboard_spans: Record<string, [number, number]>; // [cols, rows]
   column_widths: Record<string, number>;
+  // Retencion de datos
+  signals_retention_days: number;
+  blocks_retention_days: number;
+  // Google Calendar
+  google_client_id: string;
+  google_client_secret: string;
+  // Permisos de captura
+  capture_window: boolean;
+  capture_git: boolean;
+  capture_idle: boolean;
+  capture_audio: boolean;
+  capture_ssh: boolean;
 }

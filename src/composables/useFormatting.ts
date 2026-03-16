@@ -60,8 +60,11 @@ export function formatDate(dateStr: string): string {
 
 /**
  * Formatea una hora (HH:MM) desde un string ISO datetime.
+ * Usa la timezone configurada por el usuario (por defecto la del sistema).
  */
 export function formatTime(dateStr: string): string {
+  const config = useConfigStore();
+  const tz = config.config.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const d = new Date(dateStr);
-  return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: tz });
 }

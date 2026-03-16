@@ -142,9 +142,13 @@ const workDuration = computed(() => {
 async function fetchAttendance() {
   if (!daemonStore.connected) return;
   try {
-    const result = await api.getAttendanceToday() as { attendance: { id: number; check_in: string; check_out: string | null } | null };
+    const result = await api.getAttendanceToday() as { attendance: { id: number; check_in: string; check_out: string | false | null } | null };
     if (result.attendance) {
-      attendance.value = { id: result.attendance.id, checkIn: result.attendance.check_in, checkOut: result.attendance.check_out };
+      attendance.value = {
+        id: result.attendance.id,
+        checkIn: result.attendance.check_in || null,
+        checkOut: result.attendance.check_out || null,
+      };
     } else {
       attendance.value = { id: null, checkIn: null, checkOut: null };
     }

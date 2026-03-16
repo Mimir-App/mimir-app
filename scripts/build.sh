@@ -127,6 +127,13 @@ package_deb() {
     cp "$DIST_DIR/mimir-capture" "$CAPTURE_PKG/usr/bin/mimir-capture"
     chmod 755 "$CAPTURE_PKG/usr/bin/mimir-capture"
 
+    # Copiar extension GNOME Shell
+    GNOME_EXT_DIR="$CAPTURE_PKG/usr/share/gnome-shell/extensions/mimir-window-tracker@mimir.app"
+    mkdir -p "$GNOME_EXT_DIR"
+    cp "$PROJECT_DIR/daemon/mimir_daemon/platform/gnome_extension/metadata.json" "$GNOME_EXT_DIR/"
+    cp "$PROJECT_DIR/daemon/mimir_daemon/platform/gnome_extension/extension.js" "$GNOME_EXT_DIR/"
+    chmod 644 "$GNOME_EXT_DIR/metadata.json" "$GNOME_EXT_DIR/extension.js"
+
     # Actualizar version y Installed-Size
     CAPTURE_SIZE=$(du -sk "$CAPTURE_PKG" --exclude=DEBIAN | cut -f1)
     sed -i "s/^Version:.*/Version: $VERSION/" "$CAPTURE_PKG/DEBIAN/control"

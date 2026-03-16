@@ -5,4 +5,7 @@ if [ "$1" = "remove" ]; then
     echo "Si el servicio esta activo, desactivalo:"
     echo "  systemctl --user disable --now mimir-capture"
     echo ""
+    echo "Si activaste la extension de GNOME, desactivala:"
+    echo "  gnome-extensions disable mimir-window-tracker@mimir.app"
+    echo ""
 fi

@@ -19,11 +19,22 @@ from .sources.registry import SourceRegistry
 logger = logging.getLogger(__name__)
 
 
+def _calc_duration(start_str: str, end_str: str) -> float:
+    """Calcula duracion en minutos entre dos timestamps ISO."""
+    try:
+        start = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+        end = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+        return round((end - start).total_seconds() / 60, 1)
+    except (ValueError, AttributeError):
+        return 0.0
+
+
 def create_server_app(
     db: Database,
     registry: IntegrationRegistry | None = None,
     ai_service: "AIService | None" = None,
     source_registry: SourceRegistry | None = None,
+    calendar_client: "GoogleCalendarClient | None" = None,
     version: str = "0.1.0",
 ) -> FastAPI:
     """Crea la aplicacion FastAPI."""
@@ -265,6 +276,103 @@ def create_server_app(
         await db.delete_block(block_id)
         return {"status": "deleted"}
 
+    # --- Signals ---
+
+    @app.get("/signals")
+    async def get_signals(date: str = Query(default=None), block_id: int = Query(default=None)) -> list[dict]:
+        """Obtiene senales por fecha o por bloque."""
+        if block_id:
+            return await db.get_signals_by_block(block_id)
+        if not date:
+            date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        return await db.get_signals_by_date(date)
+
+    @app.post("/blocks/{block_id}/split")
+    async def split_block(block_id: int, signal_id: int = Query(...)) -> dict:
+        """Divide un bloque en dos en el punto de una senal."""
+        block = await db.get_block_by_id(block_id)
+        if not block:
+            raise HTTPException(404, "Bloque no encontrado")
+        if block["status"] in ("confirmed", "synced"):
+            raise HTTPException(400, "No se puede partir un bloque confirmado")
+
+        signals = await db.get_signals_by_block(block_id)
+        if not signals:
+            raise HTTPException(400, "Bloque sin senales")
+
+        before = [s for s in signals if s["id"] < signal_id]
+        after = [s for s in signals if s["id"] >= signal_id]
+        if not before or not after:
+            raise HTTPException(400, "Punto de corte invalido")
+
+        last_before = before[-1]
+        await db.update_block(block_id,
+            end_time=last_before["timestamp"],
+            duration_minutes=_calc_duration(block["start_time"], last_before["timestamp"]),
+            status="closed",
+        )
+
+        first_after = after[0]
+        last_after = after[-1]
+        new_id = await db.create_block(
+            start_time=first_after["timestamp"],
+            end_time=last_after["timestamp"],
+            duration_minutes=_calc_duration(first_after["timestamp"], last_after["timestamp"]),
+            app_name=first_after.get("app_name", block["app_name"]),
+            window_title=first_after.get("window_title", ""),
+            project_path=first_after.get("project_path"),
+            git_branch=first_after.get("git_branch"),
+            git_remote=first_after.get("git_remote"),
+            status="closed",
+        )
+
+        for s in after:
+            await db.db.execute(
+                "UPDATE block_signals SET block_id = ? WHERE signal_id = ?",
+                [new_id, s["id"]],
+            )
+        await db.db.commit()
+
+        return {"original_block_id": block_id, "new_block_id": new_id}
+
+    class MergeRequest(BaseModel):
+        block_ids: list[int]
+
+    @app.post("/blocks/merge")
+    async def merge_blocks(req: MergeRequest) -> dict:
+        """Fusiona bloques en uno."""
+        if len(req.block_ids) < 2:
+            raise HTTPException(400, "Se necesitan al menos 2 bloques")
+
+        blocks = []
+        for bid in req.block_ids:
+            b = await db.get_block_by_id(bid)
+            if not b:
+                raise HTTPException(404, f"Bloque {bid} no encontrado")
+            if b["status"] in ("confirmed", "synced"):
+                raise HTTPException(400, f"Bloque {bid} esta confirmado, no se puede fusionar")
+            blocks.append(b)
+
+        blocks.sort(key=lambda b: b["start_time"])
+        primary = blocks[0]
+        last = blocks[-1]
+
+        await db.update_block(primary["id"],
+            end_time=last["end_time"],
+            duration_minutes=_calc_duration(primary["start_time"], last["end_time"]),
+            status="closed",
+        )
+
+        for b in blocks[1:]:
+            await db.db.execute(
+                "UPDATE block_signals SET block_id = ? WHERE block_id = ?",
+                [primary["id"], b["id"]],
+            )
+            await db.delete_block(b["id"])
+        await db.db.commit()
+
+        return {"merged_block_id": primary["id"]}
+
     @app.post("/blocks/{block_id}/generate-description")
     async def generate_description(block_id: int) -> dict:
         """Genera o regenera descripción IA para un bloque."""
@@ -383,6 +491,51 @@ def create_server_app(
             return {"status": "checked_out"}
         except Exception as e:
             raise HTTPException(502, f"Error fichando salida: {e}")
+
+    # --- Google Calendar ---
+
+    @app.get("/google/calendar/auth-url")
+    async def get_google_auth_url() -> dict:
+        """Devuelve la URL de autorizacion OAuth2 de Google."""
+        if not calendar_client:
+            raise HTTPException(400, "Google Calendar no configurado. Configura client_id y client_secret.")
+        url = calendar_client.get_auth_url()
+        return {"url": url}
+
+    @app.get("/oauth/google/callback")
+    async def google_oauth_callback(code: str = Query(...)) -> dict:
+        """Callback OAuth2 — intercambia el codigo por tokens."""
+        if not calendar_client:
+            raise HTTPException(400, "Google Calendar no configurado")
+        success = await calendar_client.exchange_code(code)
+        if not success:
+            raise HTTPException(502, "Error al autorizar con Google")
+        return {"status": "authorized", "message": "Google Calendar conectado. Puedes cerrar esta ventana."}
+
+    @app.get("/google/calendar/status")
+    async def google_calendar_status() -> dict:
+        """Estado de la conexion con Google Calendar."""
+        if not calendar_client:
+            return {"configured": False, "connected": False}
+        return {
+            "configured": True,
+            "connected": calendar_client.is_configured,
+        }
+
+    @app.get("/google/calendar/current-event")
+    async def get_current_event() -> dict:
+        """Obtiene el evento actual del calendario (si hay uno)."""
+        if not calendar_client or not calendar_client.is_configured:
+            return {"event": None}
+        event = await calendar_client.get_current_event()
+        return {"event": event}
+
+    @app.post("/google/calendar/disconnect")
+    async def disconnect_google_calendar() -> dict:
+        """Desconecta Google Calendar eliminando tokens."""
+        if calendar_client:
+            await calendar_client.disconnect()
+        return {"status": "disconnected"}
 
     # --- Config (recibe configuracion desde Tauri) ---
 
