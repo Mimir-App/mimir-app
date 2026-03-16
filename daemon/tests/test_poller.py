@@ -9,8 +9,7 @@ import pytest_asyncio
 from mimir_daemon.db import Database
 from mimir_daemon.config import DaemonConfig
 from mimir_daemon.platform.base import PlatformProvider, WindowInfo, SessionEvent
-from mimir_daemon.context_enricher import EnrichedContext
-from mimir_daemon.block_manager import BlockManager
+from mimir_daemon.signal_aggregator import SignalAggregator
 from mimir_daemon.poller import Poller
 
 
@@ -53,11 +52,10 @@ async def test_poller_creates_blocks(db):
         WindowInfo(pid=100, app_name="code", window_title="file.py - VSCode"),
     ]
 
-    config = DaemonConfig(polling_interval=0)  # Sin espera
-    bm = BlockManager(db=db, inherit_threshold=900)
-    poller = Poller(config=config, db=db, platform=platform, block_manager=bm)
+    config = DaemonConfig(polling_interval=0)
+    agg = SignalAggregator(db=db, inactivity_threshold=900)
+    poller = Poller(config=config, db=db, platform=platform, aggregator=agg)
 
-    # Ejecutar 3 polls manualmente
     for _ in range(3):
         await poller._poll_once()
 
@@ -76,8 +74,8 @@ async def test_poller_no_block_without_window(db):
     platform.windows = [None, None]
 
     config = DaemonConfig(polling_interval=0)
-    bm = BlockManager(db=db, inherit_threshold=900)
-    poller = Poller(config=config, db=db, platform=platform, block_manager=bm)
+    agg = SignalAggregator(db=db, inactivity_threshold=900)
+    poller = Poller(config=config, db=db, platform=platform, aggregator=agg)
 
     await poller._poll_once()
     await poller._poll_once()
@@ -94,16 +92,16 @@ async def test_poller_handles_lock_event(db):
     platform = FakePlatform()
     platform.windows = [
         WindowInfo(pid=100, app_name="code", window_title="file.py"),
-        None,  # Despues del lock
+        None,
     ]
 
     config = DaemonConfig(polling_interval=0)
-    bm = BlockManager(db=db, inherit_threshold=900)
-    poller = Poller(config=config, db=db, platform=platform, block_manager=bm)
+    agg = SignalAggregator(db=db, inactivity_threshold=900)
+    poller = Poller(config=config, db=db, platform=platform, aggregator=agg)
 
     # Primer poll: crea bloque
     await poller._poll_once()
-    assert bm._current_block_id is not None
+    assert agg._current_block_id is not None
 
     # Inyectar evento lock y hacer poll
     platform.events = [
@@ -113,7 +111,7 @@ async def test_poller_handles_lock_event(db):
         )
     ]
     await poller._poll_once()
-    assert bm._current_block_id is None
+    assert agg._current_block_id is None
 
 
 @pytest.mark.asyncio
@@ -125,14 +123,12 @@ async def test_poller_pause_resume(db):
     ]
 
     config = DaemonConfig(polling_interval=0)
-    bm = BlockManager(db=db, inherit_threshold=900)
-    poller = Poller(config=config, db=db, platform=platform, block_manager=bm)
+    agg = SignalAggregator(db=db, inactivity_threshold=900)
+    poller = Poller(config=config, db=db, platform=platform, aggregator=agg)
 
     poller.pause()
     assert poller._paused
 
-    # _poll_once no se llama cuando esta pausado (el run() lo controla)
-    # pero podemos verificar el flag
     poller.resume()
     assert not poller._paused
 
@@ -144,10 +140,9 @@ async def test_poller_run_loop_stops(db):
     platform.windows = [None]
 
     config = DaemonConfig(polling_interval=1)
-    bm = BlockManager(db=db, inherit_threshold=900)
-    poller = Poller(config=config, db=db, platform=platform, block_manager=bm)
+    agg = SignalAggregator(db=db, inactivity_threshold=900)
+    poller = Poller(config=config, db=db, platform=platform, aggregator=agg)
 
-    # Arrancar y parar rapidamente
     task = asyncio.create_task(poller.run())
     await asyncio.sleep(0.1)
     poller.stop()
@@ -167,12 +162,12 @@ async def test_poller_context_change_creates_new_block(db):
     platform = FakePlatform()
     platform.windows = [
         WindowInfo(pid=100, app_name="code", window_title="file.py"),
-        WindowInfo(pid=200, app_name="firefox", window_title="GitLab"),
+        WindowInfo(pid=200, app_name="slack", window_title="General"),
     ]
 
     config = DaemonConfig(polling_interval=0)
-    bm = BlockManager(db=db, inherit_threshold=900)
-    poller = Poller(config=config, db=db, platform=platform, block_manager=bm)
+    agg = SignalAggregator(db=db, inactivity_threshold=900)
+    poller = Poller(config=config, db=db, platform=platform, aggregator=agg)
 
     await poller._poll_once()
     await poller._poll_once()
@@ -182,4 +177,27 @@ async def test_poller_context_change_creates_new_block(db):
     )
     assert len(blocks) == 2
     assert blocks[0]["app_name"] == "code"
-    assert blocks[1]["app_name"] == "firefox"
+    assert blocks[1]["app_name"] == "slack"
+
+
+@pytest.mark.asyncio
+async def test_poller_creates_signals(db):
+    """El poller guarda senales en la tabla signals."""
+    platform = FakePlatform()
+    platform.windows = [
+        WindowInfo(pid=100, app_name="code", window_title="main.py"),
+        WindowInfo(pid=100, app_name="code", window_title="test.py"),
+    ]
+
+    config = DaemonConfig(polling_interval=0)
+    agg = SignalAggregator(db=db, inactivity_threshold=900)
+    poller = Poller(config=config, db=db, platform=platform, aggregator=agg)
+
+    await poller._poll_once()
+    await poller._poll_once()
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    signals = await db.get_signals_by_date(today)
+    assert len(signals) == 2
+    assert signals[0]["app_name"] == "code"
+    assert signals[0]["context_key"] is not None

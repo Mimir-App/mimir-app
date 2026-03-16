@@ -2,7 +2,7 @@
 import { onMounted, watch, ref, computed } from 'vue';
 import { useBlocksStore } from '../stores/blocks';
 import { useDaemonStore } from '../stores/daemon';
-import { formatHours } from '../composables/useFormatting';
+import { formatHours, formatTime } from '../composables/useFormatting';
 import { api } from '../lib/api';
 import type { TimesheetEntry } from '../lib/types';
 import BlockTable from '../components/blocks/BlockTable.vue';
@@ -56,11 +56,13 @@ const odooTotalHours = computed(() =>
 
 onMounted(() => {
   blocksStore.fetchBlocks();
+  blocksStore.fetchSignals();
   fetchOdooEntries();
 });
 
 watch(() => blocksStore.selectedDate, () => {
   blocksStore.fetchBlocks();
+  blocksStore.fetchSignals();
   fetchOdooEntries();
   syncMessage.value = '';
 });
@@ -230,6 +232,37 @@ const isToday = computed(() =>
         </tbody>
       </table>
     </CollapsibleGroup>
+
+    <!-- Senales crudas -->
+    <CollapsibleGroup
+      label="Senales crudas"
+      :count="blocksStore.signals.length"
+    >
+      <LoadingState v-if="blocksStore.signalsLoading" text="Cargando senales..." />
+      <div v-else-if="blocksStore.signals.length > 0" class="signals-table-wrap">
+        <table class="signals-table">
+          <thead>
+            <tr>
+              <th>Hora</th>
+              <th>App</th>
+              <th>Titulo</th>
+              <th>Contexto</th>
+              <th>Proyecto</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="s in blocksStore.signals" :key="s.id">
+              <td>{{ formatTime(s.timestamp) }}</td>
+              <td>{{ s.app_name }}</td>
+              <td class="signal-title">{{ s.window_title }}</td>
+              <td><span class="context-badge">{{ s.context_key }}</span></td>
+              <td>{{ s.project_path ? s.project_path.split('/').pop() : '' }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div v-else class="signals-empty">Sin senales para esta fecha</div>
+    </CollapsibleGroup>
   </div>
 </template>
 
@@ -382,4 +415,13 @@ const isToday = computed(() =>
 .odoo-table .col-project { min-width: 120px; }
 .odoo-table .col-task { min-width: 120px; }
 .odoo-table .col-hours { text-align: right; min-width: 60px; }
+
+/* Signals table */
+.signals-table-wrap { overflow-x: auto; }
+.signals-table { width: 100%; font-size: 12px; border-collapse: collapse; }
+.signals-table th { text-align: left; padding: 4px 8px; color: var(--text-secondary); border-bottom: 1px solid var(--border); font-weight: 500; }
+.signals-table td { padding: 4px 8px; border-bottom: 1px solid var(--border); }
+.signal-title { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.context-badge { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--bg-secondary); color: var(--text-secondary); }
+.signals-empty { padding: 16px; text-align: center; color: var(--text-secondary); font-size: 13px; }
 </style>

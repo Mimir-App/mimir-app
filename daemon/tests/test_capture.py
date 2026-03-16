@@ -7,7 +7,7 @@ from httpx import AsyncClient, ASGITransport
 from mimir_daemon.config import DaemonConfig
 from mimir_daemon.db import Database
 from mimir_daemon.platform.base import PlatformProvider
-from mimir_daemon.block_manager import BlockManager
+from mimir_daemon.signal_aggregator import SignalAggregator
 from mimir_daemon.poller import Poller
 from mimir_daemon.capture import create_capture_app
 
@@ -31,9 +31,9 @@ async def db(tmp_path):
 def capture_app(db):
     config = DaemonConfig(polling_interval=60)
     platform = MockPlatform()
-    block_manager = BlockManager(db=db)
-    poller = Poller(config=config, db=db, platform=platform, block_manager=block_manager)
-    return create_capture_app(poller=poller)
+    aggregator = SignalAggregator(db=db)
+    poller = Poller(config=config, db=db, platform=platform, aggregator=aggregator)
+    return create_capture_app(poller=poller, platform=platform)
 
 
 @pytest_asyncio.fixture

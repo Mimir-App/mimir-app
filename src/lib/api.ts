@@ -118,6 +118,24 @@ export const api = {
     return httpPost(`/blocks/${blockId}/retry`);
   },
 
+  async getSignals(date?: string, blockId?: number) {
+    const params = new URLSearchParams();
+    if (date) params.set('date', date);
+    if (blockId) params.set('block_id', String(blockId));
+    if (await isTauri()) return tauriInvoke('get_signals', { date, blockId });
+    return httpGet(`/signals?${params}`);
+  },
+
+  async splitBlock(blockId: number, signalId: number) {
+    if (await isTauri()) return tauriInvoke('split_block', { blockId, signalId });
+    return httpPost(`/blocks/${blockId}/split?signal_id=${signalId}`);
+  },
+
+  async mergeBlocks(blockIds: number[]) {
+    if (await isTauri()) return tauriInvoke('merge_blocks', { blockIds });
+    return httpPost('/blocks/merge', { block_ids: blockIds });
+  },
+
   async getOdooProjects() {
     if (await isTauri()) return tauriInvoke('get_odoo_projects');
     return httpGet('/odoo/projects');

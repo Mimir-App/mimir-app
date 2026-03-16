@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from .config import DaemonConfig
 from .db import Database
 from .platform import get_platform_provider
-from .block_manager import BlockManager
+from .signal_aggregator import SignalAggregator
 from .poller import Poller
 from .tray import TrayIcon
 
@@ -81,18 +81,20 @@ async def run_capture(args: argparse.Namespace) -> None:
     platform = get_platform_provider()
     await platform.setup()
 
-    block_manager = BlockManager(
+    aggregator = SignalAggregator(
         db=db,
-        inherit_threshold=config.inherit_threshold,
+        inactivity_threshold=config.inactivity_threshold,
+        browser_apps=set(config.browser_apps) if config.browser_apps else None,
+        transient_apps=set(config.transient_apps) if config.transient_apps else None,
     )
 
-    await block_manager.recover_open_blocks()
+    await aggregator.recover_open_blocks()
 
     poller = Poller(
         config=config,
         db=db,
         platform=platform,
-        block_manager=block_manager,
+        aggregator=aggregator,
     )
 
     app = create_capture_app(poller=poller, platform=platform, version=VERSION)

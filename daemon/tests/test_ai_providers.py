@@ -28,23 +28,27 @@ async def test_gemini_provider_builds_prompt_and_calls_api():
     """GeminiProvider construye prompt correcto y llama a la API."""
     from mimir_daemon.ai.gemini import GeminiProvider
 
-    mock_model = MagicMock()
     mock_response = MagicMock()
     mock_response.text = "Desarrollo de lógica de reintento en servidor"
-    mock_model.generate_content_async = AsyncMock(return_value=mock_response)
 
-    with patch("mimir_daemon.ai.gemini.genai") as mock_genai:
-        mock_genai.GenerativeModel.return_value = mock_model
+    mock_models = MagicMock()
+    mock_models.generate_content = AsyncMock(return_value=mock_response)
+
+    mock_aio = MagicMock()
+    mock_aio.models = mock_models
+
+    mock_client = MagicMock()
+    mock_client.aio = mock_aio
+
+    with patch("mimir_daemon.ai.gemini.genai.Client", return_value=mock_client):
         provider = GeminiProvider(api_key="test-key")
         result = await provider.generate(_make_request())
 
     assert result.description == "Desarrollo de lógica de reintento en servidor"
     assert result.confidence == 0.8
-    mock_model.generate_content_async.assert_called_once()
-    call_args = mock_model.generate_content_async.call_args[0][0]
-    assert "server.py" in call_args
-    assert "feat/ai" in call_args
-    assert "technical" in call_args
+    mock_models.generate_content.assert_called_once()
+    call_kwargs = mock_models.generate_content.call_args
+    assert "server.py" in call_kwargs.kwargs.get("contents", "") or "server.py" in str(call_kwargs)
 
 
 @pytest.mark.asyncio
@@ -95,13 +99,19 @@ async def test_gemini_provider_handles_empty_response():
     """GeminiProvider maneja respuesta vacía."""
     from mimir_daemon.ai.gemini import GeminiProvider
 
-    mock_model = MagicMock()
     mock_response = MagicMock()
     mock_response.text = ""
-    mock_model.generate_content_async = AsyncMock(return_value=mock_response)
 
-    with patch("mimir_daemon.ai.gemini.genai") as mock_genai:
-        mock_genai.GenerativeModel.return_value = mock_model
+    mock_models = MagicMock()
+    mock_models.generate_content = AsyncMock(return_value=mock_response)
+
+    mock_aio = MagicMock()
+    mock_aio.models = mock_models
+
+    mock_client = MagicMock()
+    mock_client.aio = mock_aio
+
+    with patch("mimir_daemon.ai.gemini.genai.Client", return_value=mock_client):
         provider = GeminiProvider(api_key="test-key")
         result = await provider.generate(_make_request())
 

@@ -19,6 +19,16 @@ from .sources.registry import SourceRegistry
 logger = logging.getLogger(__name__)
 
 
+def _calc_duration(start_str: str, end_str: str) -> float:
+    """Calcula duracion en minutos entre dos timestamps ISO."""
+    try:
+        start = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+        end = datetime.fromisoformat(end_str.replace("Z", "+00:00"))
+        return round((end - start).total_seconds() / 60, 1)
+    except (ValueError, AttributeError):
+        return 0.0
+
+
 def create_server_app(
     db: Database,
     registry: IntegrationRegistry | None = None,
@@ -264,6 +274,103 @@ def create_server_app(
             raise HTTPException(404, "Bloque no encontrado")
         await db.delete_block(block_id)
         return {"status": "deleted"}
+
+    # --- Signals ---
+
+    @app.get("/signals")
+    async def get_signals(date: str = Query(default=None), block_id: int = Query(default=None)) -> list[dict]:
+        """Obtiene senales por fecha o por bloque."""
+        if block_id:
+            return await db.get_signals_by_block(block_id)
+        if not date:
+            date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        return await db.get_signals_by_date(date)
+
+    @app.post("/blocks/{block_id}/split")
+    async def split_block(block_id: int, signal_id: int = Query(...)) -> dict:
+        """Divide un bloque en dos en el punto de una senal."""
+        block = await db.get_block_by_id(block_id)
+        if not block:
+            raise HTTPException(404, "Bloque no encontrado")
+        if block["status"] in ("confirmed", "synced"):
+            raise HTTPException(400, "No se puede partir un bloque confirmado")
+
+        signals = await db.get_signals_by_block(block_id)
+        if not signals:
+            raise HTTPException(400, "Bloque sin senales")
+
+        before = [s for s in signals if s["id"] < signal_id]
+        after = [s for s in signals if s["id"] >= signal_id]
+        if not before or not after:
+            raise HTTPException(400, "Punto de corte invalido")
+
+        last_before = before[-1]
+        await db.update_block(block_id,
+            end_time=last_before["timestamp"],
+            duration_minutes=_calc_duration(block["start_time"], last_before["timestamp"]),
+            status="closed",
+        )
+
+        first_after = after[0]
+        last_after = after[-1]
+        new_id = await db.create_block(
+            start_time=first_after["timestamp"],
+            end_time=last_after["timestamp"],
+            duration_minutes=_calc_duration(first_after["timestamp"], last_after["timestamp"]),
+            app_name=first_after.get("app_name", block["app_name"]),
+            window_title=first_after.get("window_title", ""),
+            project_path=first_after.get("project_path"),
+            git_branch=first_after.get("git_branch"),
+            git_remote=first_after.get("git_remote"),
+            status="closed",
+        )
+
+        for s in after:
+            await db.db.execute(
+                "UPDATE block_signals SET block_id = ? WHERE signal_id = ?",
+                [new_id, s["id"]],
+            )
+        await db.db.commit()
+
+        return {"original_block_id": block_id, "new_block_id": new_id}
+
+    class MergeRequest(BaseModel):
+        block_ids: list[int]
+
+    @app.post("/blocks/merge")
+    async def merge_blocks(req: MergeRequest) -> dict:
+        """Fusiona bloques en uno."""
+        if len(req.block_ids) < 2:
+            raise HTTPException(400, "Se necesitan al menos 2 bloques")
+
+        blocks = []
+        for bid in req.block_ids:
+            b = await db.get_block_by_id(bid)
+            if not b:
+                raise HTTPException(404, f"Bloque {bid} no encontrado")
+            if b["status"] in ("confirmed", "synced"):
+                raise HTTPException(400, f"Bloque {bid} esta confirmado, no se puede fusionar")
+            blocks.append(b)
+
+        blocks.sort(key=lambda b: b["start_time"])
+        primary = blocks[0]
+        last = blocks[-1]
+
+        await db.update_block(primary["id"],
+            end_time=last["end_time"],
+            duration_minutes=_calc_duration(primary["start_time"], last["end_time"]),
+            status="closed",
+        )
+
+        for b in blocks[1:]:
+            await db.db.execute(
+                "UPDATE block_signals SET block_id = ? WHERE block_id = ?",
+                [primary["id"], b["id"]],
+            )
+            await db.delete_block(b["id"])
+        await db.db.commit()
+
+        return {"merged_block_id": primary["id"]}
 
     @app.post("/blocks/{block_id}/generate-description")
     async def generate_description(block_id: int) -> dict:

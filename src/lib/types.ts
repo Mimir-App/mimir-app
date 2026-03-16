@@ -26,6 +26,23 @@ export interface ActivityBlock {
   odoo_entry_id: number | null;
 }
 
+// --- Signals ---
+
+export interface Signal {
+  id: number;
+  timestamp: string;
+  app_name: string | null;
+  window_title: string | null;
+  project_path: string | null;
+  git_branch: string | null;
+  git_remote: string | null;
+  ssh_host: string | null;
+  pid: number | null;
+  context_key: string | null;
+  last_commit_message: string | null;
+  created_at: string;
+}
+
 // --- GitLab ---
 
 export interface GitLabIssue {

@@ -2,6 +2,6 @@
     "uuid": "mimir-window-tracker@mimir.app",
     "name": "Mimir Window Tracker",
     "description": "Exposes active window info over D-Bus for Mimir capture",
-    "shell-version": ["45", "46"],
+    "shell-version": ["42", "43", "44", "45", "46"],
     "version": 1
 }

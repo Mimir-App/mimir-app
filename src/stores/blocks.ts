@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { ActivityBlock } from '../lib/types';
+import type { ActivityBlock, Signal } from '../lib/types';
 import { api } from '../lib/api';
 
 export const useBlocksStore = defineStore('blocks', () => {
@@ -96,6 +96,33 @@ export const useBlocksStore = defineStore('blocks', () => {
     blocks.value.filter(b => b.status === 'error')
   );
 
+  const closedBlocks = computed(() =>
+    blocks.value.filter(b => b.status === 'closed')
+  );
+
+  // --- Signals ---
+
+  const signals = ref<Signal[]>([]);
+  const signalsLoading = ref(false);
+
+  async function fetchSignals(date?: string, blockId?: number) {
+    signalsLoading.value = true;
+    try {
+      signals.value = await api.getSignals(date || selectedDate.value, blockId) as Signal[];
+    } catch { signals.value = []; }
+    finally { signalsLoading.value = false; }
+  }
+
+  async function splitBlock(blockId: number, signalId: number) {
+    await api.splitBlock(blockId, signalId);
+    await fetchBlocks();
+  }
+
+  async function mergeBlocks(blockIds: number[]) {
+    await api.mergeBlocks(blockIds);
+    await fetchBlocks();
+  }
+
   return {
     blocks,
     selectedDate,
@@ -114,5 +141,11 @@ export const useBlocksStore = defineStore('blocks', () => {
     deleteBlock,
     syncToOdoo,
     retrySync,
+    closedBlocks,
+    signals,
+    signalsLoading,
+    fetchSignals,
+    splitBlock,
+    mergeBlocks,
   };
 });

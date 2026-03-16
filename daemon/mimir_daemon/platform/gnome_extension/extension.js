@@ -1,4 +1,6 @@
-import Gio from 'gi://Gio';
+'use strict';
+
+const { Gio } = imports.gi;
 
 const IFACE_XML = `
 <node>
@@ -11,30 +13,11 @@ const IFACE_XML = `
   </interface>
 </node>`;
 
-export default class MimirWindowTracker {
-    enable() {
-        this._dbusImpl = Gio.DBusExportedObject.wrapJSObject(IFACE_XML, this);
-        this._dbusImpl.export(Gio.DBus.session, '/org/mimir/WindowTracker');
-        this._ownerId = Gio.bus_own_name(
-            Gio.BusType.SESSION,
-            'org.mimir.WindowTracker',
-            Gio.BusNameOwnerFlags.NONE,
-            null, null, null
-        );
-    }
+let _dbusImpl = null;
+let _ownerId = null;
 
-    disable() {
-        if (this._dbusImpl) {
-            this._dbusImpl.unexport();
-            this._dbusImpl = null;
-        }
-        if (this._ownerId) {
-            Gio.bus_unown_name(this._ownerId);
-            this._ownerId = null;
-        }
-    }
-
-    GetActiveWindow() {
+var _handler = {
+    GetActiveWindow: function() {
         const focusWindow = global.display.get_focus_window();
         if (!focusWindow) return [0, '', ''];
         const pid = focusWindow.get_pid() || 0;
@@ -42,4 +25,30 @@ export default class MimirWindowTracker {
         const title = focusWindow.get_title() || '';
         return [pid, wmClass, title];
     }
+};
+
+function enable() {
+    _dbusImpl = Gio.DBusExportedObject.wrapJSObject(IFACE_XML, _handler);
+    _dbusImpl.export(Gio.DBus.session, '/org/mimir/WindowTracker');
+    _ownerId = Gio.bus_own_name(
+        Gio.BusType.SESSION,
+        'org.mimir.WindowTracker',
+        Gio.BusNameOwnerFlags.NONE,
+        null, null, null
+    );
+}
+
+function disable() {
+    if (_dbusImpl) {
+        _dbusImpl.unexport();
+        _dbusImpl = null;
+    }
+    if (_ownerId) {
+        Gio.bus_unown_name(_ownerId);
+        _ownerId = null;
+    }
+}
+
+function init() {
+    // Nothing to initialize
 }
