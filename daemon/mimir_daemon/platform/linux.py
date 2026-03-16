@@ -6,7 +6,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .base import PlatformProvider, WindowInfo, SessionEvent
+from .base import PlatformProvider, WindowInfo, SessionEvent, SystemContext
 
 logger = logging.getLogger(__name__)
 
@@ -187,6 +187,109 @@ class LinuxProvider(PlatformProvider):
             pass
 
         return "unknown"
+
+    # --- System context (idle, audio, workspace) ---
+
+    # Apps conocidas de videollamada
+    MEETING_APPS = frozenset({
+        "zoom", "teams", "slack", "discord", "skype",
+        "webex", "google-meet", "jitsi",
+    })
+
+    # Patrones en titulos/media que indican reunion
+    MEETING_KEYWORDS = frozenset({
+        "meet.google.com", "zoom", "teams", "huddle",
+        "meeting", "call", "webex", "jitsi",
+    })
+
+    async def get_system_context(self) -> SystemContext:
+        """Obtiene idle time, audio activo y workspace."""
+        idle_ms = await self._get_idle_time()
+        audio_app, audio_media, is_meeting = await self._get_audio_info()
+        workspace = await self._get_workspace()
+        return SystemContext(
+            idle_ms=idle_ms,
+            audio_app=audio_app,
+            audio_media=audio_media,
+            is_meeting=is_meeting,
+            workspace=workspace,
+        )
+
+    async def _get_idle_time(self) -> int:
+        """Obtiene milisegundos de inactividad via Mutter IdleMonitor."""
+        try:
+            output = await self._run_cmd(
+                "gdbus", "call", "--session",
+                "--dest", "org.gnome.Mutter.IdleMonitor",
+                "--object-path", "/org/gnome/Mutter/IdleMonitor/Core",
+                "--method", "org.gnome.Mutter.IdleMonitor.GetIdletime",
+            )
+            if output:
+                # Output: "(uint64 1234,)"
+                num = output.strip().strip("()").split()[-1].rstrip(",)")
+                return int(num)
+        except Exception as e:
+            logger.debug("Error obteniendo idle time: %s", e)
+        return 0
+
+    async def _get_audio_info(self) -> tuple[str | None, str | None, bool]:
+        """Detecta streams de audio activos via pactl. Devuelve (app, media, is_meeting)."""
+        try:
+            output = await self._run_cmd("pactl", "list", "sink-inputs")
+            if not output:
+                return None, None, False
+
+            app_name = None
+            media_name = None
+            is_meeting = False
+
+            for line in output.splitlines():
+                line = line.strip()
+                if line.startswith("application.process.binary"):
+                    app_name = line.split("=", 1)[-1].strip().strip('"')
+                elif line.startswith("application.name"):
+                    val = line.split("=", 1)[-1].strip().strip('"')
+                    if not app_name:
+                        app_name = val
+                elif line.startswith("media.name"):
+                    media_name = line.split("=", 1)[-1].strip().strip('"')
+
+            if app_name:
+                app_lower = app_name.lower()
+                if app_lower in self.MEETING_APPS:
+                    is_meeting = True
+                elif media_name:
+                    media_lower = media_name.lower()
+                    if any(kw in media_lower for kw in self.MEETING_KEYWORDS):
+                        is_meeting = True
+                # Navegador con audio de Meet/Teams
+                if app_lower in ("firefox", "chrome", "chromium", "brave") and media_name:
+                    media_lower = media_name.lower()
+                    if any(kw in media_lower for kw in self.MEETING_KEYWORDS):
+                        is_meeting = True
+
+            return app_name, media_name, is_meeting
+
+        except Exception as e:
+            logger.debug("Error obteniendo audio info: %s", e)
+            return None, None, False
+
+    async def _get_workspace(self) -> str | None:
+        """Obtiene el workspace/escritorio virtual activo."""
+        try:
+            if self._use_wayland:
+                # GNOME Wayland: no hay API directa fiable sin extension
+                return None
+            # X11: wmctrl
+            output = await self._run_cmd("wmctrl", "-d")
+            if output:
+                for line in output.splitlines():
+                    if " * " in line:
+                        parts = line.split()
+                        return parts[0] if parts else None
+        except Exception:
+            pass
+        return None
 
     async def _listen_dbus(self) -> None:
         """Escucha eventos de lock/unlock via D-Bus (logind)."""

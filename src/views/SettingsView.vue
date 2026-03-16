@@ -32,6 +32,7 @@ const timezoneOptions = [
 
 const tabs = computed(() => [
   { id: 'general', label: 'General', enabled: true },
+  { id: 'capture', label: 'Captura', enabled: true },
   { id: 'odoo', label: 'Odoo', enabled: true },
   { id: 'gitlab', label: 'GitLab', enabled: true },
   { id: 'ai', label: 'IA', enabled: true },
@@ -268,6 +269,39 @@ async function toggleServer() {
                     <input type="number" :value="Math.round((configStore.config.font_size / 14) * 100)" @change="configStore.config.font_size = Math.round(($event.target as HTMLInputElement).valueAsNumber * 14 / 100)" min="71" max="157" step="1" class="zoom-input" />
                     <span class="zoom-suffix">%</span>
                   </div>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+      </div>
+
+      <!-- Captura -->
+      <div v-show="activeTab === 'capture'" class="tab-content">
+        <p class="section-hint">Controla que datos recopila el servicio de captura. Los cambios se aplican en el siguiente ciclo de polling.</p>
+        <table class="settings-table">
+          <tbody>
+            <tr>
+              <td class="label-cell">Ventana activa <HelpTooltip text="Captura la aplicacion y el titulo de la ventana activa cada 30 segundos. Es el dato principal para construir bloques." /></td>
+              <td><label class="toggle"><input type="checkbox" v-model="configStore.config.capture_window" /><span class="toggle-label">{{ configStore.config.capture_window ? 'Activo' : 'Desactivado' }}</span></label></td>
+              <td class="label-cell">Proyecto git <HelpTooltip text="Detecta el repositorio git, rama y ultimo commit del proceso activo. Permite agrupar bloques por proyecto." /></td>
+              <td><label class="toggle"><input type="checkbox" v-model="configStore.config.capture_git" /><span class="toggle-label">{{ configStore.config.capture_git ? 'Activo' : 'Desactivado' }}</span></label></td>
+            </tr>
+            <tr>
+              <td class="label-cell">Tiempo inactivo <HelpTooltip text="Detecta cuanto tiempo llevas sin tocar teclado o raton. Permite descontar tiempo AFK de los bloques." /></td>
+              <td><label class="toggle"><input type="checkbox" v-model="configStore.config.capture_idle" /><span class="toggle-label">{{ configStore.config.capture_idle ? 'Activo' : 'Desactivado' }}</span></label></td>
+              <td class="label-cell">Audio / reuniones <HelpTooltip text="Detecta streams de audio activos para identificar videollamadas (Meet, Zoom, Teams, etc.) automaticamente." /></td>
+              <td><label class="toggle"><input type="checkbox" v-model="configStore.config.capture_audio" /><span class="toggle-label">{{ configStore.config.capture_audio ? 'Activo' : 'Desactivado' }}</span></label></td>
+            </tr>
+            <tr>
+              <td class="label-cell">Sesiones SSH <HelpTooltip text="Detecta conexiones SSH activas para identificar trabajo en servidores remotos." /></td>
+              <td><label class="toggle"><input type="checkbox" v-model="configStore.config.capture_ssh" /><span class="toggle-label">{{ configStore.config.capture_ssh ? 'Activo' : 'Desactivado' }}</span></label></td>
+              <td class="label-cell">Umbral inactividad <HelpTooltip text="Minutos sin actividad para cerrar un bloque automaticamente." /></td>
+              <td>
+                <div class="inline-field">
+                  <input type="number" v-model.number="configStore.config.refresh_interval_seconds" min="1" max="30" />
+                  <span class="suffix">min</span>
                 </div>
               </td>
             </tr>

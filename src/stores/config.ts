@@ -27,6 +27,11 @@ const DEFAULT_CONFIG: AppConfig = {
   dashboard_order: [] as string[],
   dashboard_spans: {} as Record<string, [number, number]>,
   column_widths: {} as Record<string, number>,
+  capture_window: true,
+  capture_git: true,
+  capture_idle: true,
+  capture_audio: true,
+  capture_ssh: true,
 };
 
 export const useConfigStore = defineStore('config', () => {

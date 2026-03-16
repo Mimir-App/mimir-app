@@ -72,6 +72,10 @@ CREATE TABLE IF NOT EXISTS signals (
     pid INTEGER,
     context_key TEXT,
     last_commit_message TEXT,
+    idle_ms INTEGER DEFAULT 0,
+    audio_app TEXT,
+    is_meeting INTEGER DEFAULT 0,
+    workspace TEXT,
     created_at TEXT DEFAULT (datetime('now'))
 );
 

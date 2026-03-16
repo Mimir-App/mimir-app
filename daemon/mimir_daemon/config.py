@@ -25,6 +25,12 @@ class DaemonConfig:
     log_level: str = "INFO"
     browser_apps: list[str] | None = None
     transient_apps: list[str] | None = None
+    # Permisos de captura
+    capture_window: bool = True
+    capture_git: bool = True
+    capture_idle: bool = True
+    capture_audio: bool = True
+    capture_ssh: bool = True
 
     @classmethod
     def load(cls, path: Path | None = None) -> "DaemonConfig":

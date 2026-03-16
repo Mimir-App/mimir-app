@@ -40,6 +40,10 @@ export interface Signal {
   pid: number | null;
   context_key: string | null;
   last_commit_message: string | null;
+  idle_ms: number;
+  audio_app: string | null;
+  is_meeting: boolean;
+  workspace: string | null;
   created_at: string;
 }
 
@@ -158,4 +162,10 @@ export interface AppConfig {
   dashboard_order: string[];
   dashboard_spans: Record<string, [number, number]>; // [cols, rows]
   column_widths: Record<string, number>;
+  // Permisos de captura
+  capture_window: boolean;
+  capture_git: boolean;
+  capture_idle: boolean;
+  capture_audio: boolean;
+  capture_ssh: boolean;
 }

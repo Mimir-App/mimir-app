@@ -80,22 +80,49 @@ class Poller:
                     await self._aggregator.handle_unlock()
 
             # Capturar ventana activa
+            if not self._config.capture_window:
+                self._last_poll = datetime.now(timezone.utc)
+                return
+
             window = await self._platform.get_active_window()
             if not window:
                 self._last_poll = datetime.now(timezone.utc)
                 return
 
-            # Enriquecer contexto
-            context = await enrich_pid(window.pid)
+            # Enriquecer contexto (git, ssh)
+            context = None
+            if self._config.capture_git or self._config.capture_ssh:
+                context = await enrich_pid(window.pid)
+                if not self._config.capture_git and context:
+                    context.project_path = None
+                    context.git_branch = None
+                    context.git_remote = None
+                    context.last_commit_message = None
+                if not self._config.capture_ssh and context:
+                    context.ssh_host = None
+
+            # Capturar contexto del sistema (idle, audio)
+            from .platform.base import SystemContext
+            sys_ctx = SystemContext()
+            if self._config.capture_idle or self._config.capture_audio:
+                sys_ctx = await self._platform.get_system_context()
+                if not self._config.capture_idle:
+                    sys_ctx.idle_ms = 0
+                if not self._config.capture_audio:
+                    sys_ctx.audio_app = None
+                    sys_ctx.is_meeting = False
 
             # Calcular context_key
             browser_apps = frozenset(self._config.browser_apps) if self._config.browser_apps else None
-            context_key = compute_context_key(
-                app_name=window.app_name,
-                window_title=window.window_title,
-                project_path=context.project_path if context else None,
-                browser_apps=browser_apps or compute_context_key.__defaults__[0],
-            )
+            if sys_ctx.is_meeting:
+                context_key = f"meeting:{sys_ctx.audio_app or window.app_name}"
+            else:
+                context_key = compute_context_key(
+                    app_name=window.app_name,
+                    window_title=window.window_title,
+                    project_path=context.project_path if context else None,
+                    browser_apps=browser_apps or compute_context_key.__defaults__[0],
+                )
 
             # Guardar senal
             now = datetime.now(timezone.utc).isoformat()
@@ -110,6 +137,10 @@ class Poller:
                 pid=window.pid,
                 context_key=context_key,
                 last_commit_message=context.last_commit_message if context else None,
+                idle_ms=sys_ctx.idle_ms,
+                audio_app=sys_ctx.audio_app,
+                is_meeting=1 if sys_ctx.is_meeting else 0,
+                workspace=sys_ctx.workspace,
             )
 
             # Procesar en aggregator
