@@ -354,6 +354,22 @@ async function toggleServer() {
                 </div>
               </td>
             </tr>
+            <tr>
+              <td class="label-cell">Retencion senales <HelpTooltip text="Dias que se conservan las senales crudas. Pasado este tiempo se eliminan automaticamente para liberar espacio." /></td>
+              <td>
+                <div class="inline-field">
+                  <input type="number" v-model.number="configStore.config.signals_retention_days" min="30" max="730" />
+                  <span class="suffix">dias</span>
+                </div>
+              </td>
+              <td class="label-cell">Retencion bloques <HelpTooltip text="Dias que se conservan los bloques de actividad. Los bloques sincronizados con Odoo se pueden eliminar antes." /></td>
+              <td>
+                <div class="inline-field">
+                  <input type="number" v-model.number="configStore.config.blocks_retention_days" min="30" max="1825" />
+                  <span class="suffix">dias</span>
+                </div>
+              </td>
+            </tr>
           </tbody>
         </table>
       </div>

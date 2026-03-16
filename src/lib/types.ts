@@ -164,6 +164,9 @@ export interface AppConfig {
   dashboard_order: string[];
   dashboard_spans: Record<string, [number, number]>; // [cols, rows]
   column_widths: Record<string, number>;
+  // Retencion de datos
+  signals_retention_days: number;
+  blocks_retention_days: number;
   // Google Calendar
   google_client_id: string;
   google_client_secret: string;

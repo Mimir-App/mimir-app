@@ -28,6 +28,9 @@ class DaemonConfig:
     # Google Calendar
     google_client_id: str = ""
     google_client_secret: str = ""
+    # Retencion de datos
+    signals_retention_days: int = 180   # 6 meses
+    blocks_retention_days: int = 365    # 1 ano
     # Permisos de captura
     capture_window: bool = True
     capture_git: bool = True

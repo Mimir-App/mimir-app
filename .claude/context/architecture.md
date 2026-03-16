@@ -1,74 +1,94 @@
 ## Arquitectura
 
-Todas las fases completadas (v0.2.0). Refactor capture/server realizado.
+Version actual: v0.3.0. Arquitectura de senales implementada.
 
 ### Procesos
 
 **mimir-capture** (puerto 9476)
 - Proceso independiente, corre como systemd user service
-- Poller (ciclo cada 30s), BlockManager, Context Enricher, Tray Icon
-- Platform layer (xdotool + D-Bus logind + /proc)
-- Endpoint /health para monitoreo
+- Poller (ciclo cada 30s), SignalAggregator, Context Enricher, Tray Icon
+- Platform layer: X11 (xdotool) + Wayland (GNOME Shell extension D-Bus) + D-Bus logind
+- Deteccion automatica de entorno via $XDG_SESSION_TYPE
+- System context: idle time (Mutter), audio/reuniones (pactl), workspace
+- Endpoint /health y /status (incluye backend activo)
 - Siempre corriendo en background, independiente de la app
 
 **mimir-server** (puerto 9477)
 - Lanzado por Tauri como child process al abrir la app
-- FastAPI completo: CRUD blocks, sync Odoo, GitLab, IA, config
+- FastAPI completo: CRUD blocks, signals, split/merge, sync Odoo, GitLab, IA, config
+- Google Calendar OAuth2 + consulta de eventos
 - Se mata al cerrar la app Tauri
 
 **SQLite compartida**
 - Ambos procesos acceden a la misma base de datos
 - WAL mode para concurrencia segura entre capture y server
+- Tablas: blocks, signals, block_signals, ai_cache, source_tokens, preferences_cache
 
-### Fases implementadas
+### Flujo de captura (v0.3.0)
 
-**Fase 0 -- Scaffold (COMPLETADA)**
-- Estructura completa del proyecto: Tauri 2 + Vue 3 + daemon Python
-- 6 vistas Vue, 6 stores Pinia, 14 componentes, 3 composables
-- Backend Rust con commands, models y daemon HTTP client
+```
+Poller (cada 30s)
+  |
+  +-- Platform: get_active_window() [X11 o Wayland]
+  +-- Context Enricher: enrich_pid() [git, SSH]
+  +-- System Context: get_system_context() [idle, audio, workspace]
+  +-- Google Calendar: get_current_event() [evento activo]
+  |
+  v
+Senal -> SQLite (signals table)
+  |
+  v
+SignalAggregator (determinista, tiempo real)
+  |-- Reglas: git project > browser domain > app name
+  |-- Meeting detection: audio + calendario
+  |-- Transient apps: heredan contexto
+  |-- Inactivity threshold: 5 min (configurable)
+  |
+  v
+Bloques -> SQLite (blocks + block_signals tables)
+  |
+  v
+Usuario revisa en "Revisar dia"
+  +-- Bloques agrupados (vista normal)
+  +-- Senales crudas (vista detalle)
+  +-- Split/merge bloques
+  +-- IA: descripciones + sugerencias
+```
 
-**Fase 1 -- Daemon Core (COMPLETADA)**
-- `daemon/mimir_daemon/platform/linux.py`: xdotool (llamadas separadas), /proc directo, D-Bus logind
-- `daemon/mimir_daemon/context_enricher.py`: cache git, deteccion SSH, alias resolution
-- `daemon/mimir_daemon/block_manager.py`: deteccion cambio contexto (app/proyecto), crash recovery, checkpoints
-- `daemon/mimir_daemon/db.py`: CRUD completo, summary, open blocks, preferences cache
-- `daemon/mimir_daemon/server.py`: CORS, CRUD blocks, /blocks/summary, mode, stubs Odoo/GitLab
+### Ciclo de vida de bloques
 
-**Fase 2 -- Config + Auth + Comunicacion (COMPLETADA)**
-- Keyring real en Rust (crate `keyring`)
-- Frontend Tauri conectado con daemon via HTTP localhost:9477
-- SettingsView funcional end-to-end
-- Health check daemon desde Tauri
+```
+auto -> closed -> confirmed -> synced
+                            -> error
+```
 
-**Fase 3 -- Revisar Dia + Imputacion Odoo (COMPLETADA)**
-- `integrations/odoo_v11.py` (XMLRPC) y `odoo_v16.py` (REST) conectados con server.py
-- BlockEditor con dropdowns funcionales de proyectos/tareas Odoo
-- Flujo completo: captura -> revision -> confirmacion -> envio Odoo
-- Fichaje de asistencia conectado a hr.attendance
+- auto: bloque abierto, el aggregator lo construye
+- closed: aggregator lo cerro (cambio contexto / inactividad)
+- confirmed: usuario lo aprobo
+- synced: enviado a Odoo
+- error: fallo al enviar
 
-**Fase 4 -- Descripciones IA (COMPLETADA)**
-- Providers Gemini/Claude/OpenAI con patron adaptador
-- Cache por hash de senales (SHA-256) en SQLite
-- Generacion automatica al cerrar bloque + regeneracion bajo demanda
+### Integraciones
 
-**Fase 5 -- Vistas GitLab (COMPLETADA)**
-- GitLabSource conectado con server.py
-- Scoring en frontend (computeIssueScore/computeMRScore)
-- IssuesView y MergeRequestsView con polling
+| Servicio | Auth | Funcionalidad |
+|---|---|---|
+| Odoo v11 | XMLRPC + password | Timesheets, proyectos, tareas, fichaje |
+| Odoo v16+ | REST + API key | Timesheets, proyectos, tareas, fichaje |
+| GitLab | Personal Access Token | Issues, merge requests, scoring |
+| Google Calendar | OAuth2 | Eventos actuales, deteccion reuniones |
+| Gemini/Claude/OpenAI | API key | Descripciones automaticas de bloques |
 
-**Fase 6 -- Dashboard + Polish + Empaquetado (COMPLETADA)**
-- DashboardView con datos reales y widgets arrastrables NxM
-- Temas oscuro/claro (branding FactorLibre)
-- PyInstaller para daemon, Tauri bundle para app
+### Empaquetado
 
-**v0.2.0 -- Refactor capture/server + UI/UX (COMPLETADA)**
-- Separacion en dos procesos (capture 9476, server 9477)
-- Componentes UI: CustomSelect, CustomDatePicker, CollapsibleGroup, ViewToolbar, DashboardGrid, StatusBanner, LoadingState, EmptyState, HelpTooltip
-- Composables: useFormatting, useSortable, useCollapseAll, usePolling, useColumnWidths, useTargets
-- Formatos configurables, zoom, sidebar colapsable, columnas redimensionables
-- Objetivos semanales, barras de progreso, filtro por usuario, agrupaciones nuevas
+Dos paquetes .deb + AppImage:
+- `mimir` (.deb): app Tauri + mimir-server en /usr/bin/
+- `mimir-capture` (.deb): captura + systemd service + extension GNOME Shell
+- AppImage: app Tauri standalone
 
-## Comunicacion entre componentes
+Build: `bash scripts/build.sh deb`
+CI: GitHub Actions, trigger en push de tag `v*`
+
+### Comunicacion entre componentes
 
 ```
 Frontend (Vue 3 + Tauri)
@@ -91,7 +111,7 @@ Frontend (Vue 3 + Tauri)
     |      |          |          |
     |   Poller    Health    Tray Icon
     |      |
-    |   Platform (xdotool/D-Bus)
+    |   Platform (xdotool / GNOME D-Bus)
     |      |
-    |   BlockManager -> SQLite
+    |   SignalAggregator -> SQLite (signals + blocks)
 ```

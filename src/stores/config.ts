@@ -27,6 +27,8 @@ const DEFAULT_CONFIG: AppConfig = {
   dashboard_order: [] as string[],
   dashboard_spans: {} as Record<string, [number, number]>,
   column_widths: {} as Record<string, number>,
+  signals_retention_days: 180,
+  blocks_retention_days: 365,
   google_client_id: '',
   google_client_secret: '',
   capture_window: true,

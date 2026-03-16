@@ -1,7 +1,7 @@
 # CLAUDE.md — Mimir
 
 ## Descripcion
-Mimir es un asistente inteligente de imputacion de horas. Captura automaticamente la actividad del empleado, sugiere descripciones con IA, y permite imputar horas a Odoo.
+Mimir es un asistente inteligente de imputacion de horas. Captura automaticamente la actividad del empleado mediante senales (cada 30s), construye bloques con un algoritmo determinista, sugiere descripciones con IA, y permite imputar horas a Odoo.
 
 ## Stack
 - **Frontend**: Tauri 2 + Vue 3 + TypeScript + Vite
@@ -23,13 +23,14 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 python -m mimir_daemon      # Arranca daemon (capture + server)
-pytest tests/ -v            # Tests del daemon (~110 tests)
+pytest tests/ -v            # Tests del daemon (~142 tests)
 
 # Build
 bash scripts/build.sh capture   # Solo capture
 bash scripts/build.sh server    # Solo server
 bash scripts/build.sh daemon    # Ambos + instalador
 bash scripts/build.sh app       # Solo app Tauri
+bash scripts/build.sh deb       # Paquetes .deb unificados
 bash scripts/build.sh           # Todo
 
 # Verificaciones
@@ -41,9 +42,10 @@ cd src-tauri && cargo check  # Rust check
 - `src/` — Frontend Vue 3 + TypeScript
 - `src-tauri/` — Backend Rust (Tauri 2)
 - `daemon/` — Daemon Python (dos procesos: capture y server)
-- mimir-capture: puerto 9476, systemd user service, poller + blocks + tray + health
+- mimir-capture: puerto 9476, systemd user service, poller + signals + tray + health
 - mimir-server: puerto 9477, lanzado por Tauri como child process, FastAPI completo
 - SQLite compartida entre ambos procesos (WAL mode)
+- Tablas: blocks, signals, block_signals, ai_cache, source_tokens, preferences_cache
 
 ## Progreso
 Ver `PROGRESS.md` para el estado detallado de cada fase.
