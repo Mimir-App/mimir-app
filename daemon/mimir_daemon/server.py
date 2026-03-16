@@ -34,6 +34,7 @@ def create_server_app(
     registry: IntegrationRegistry | None = None,
     ai_service: "AIService | None" = None,
     source_registry: SourceRegistry | None = None,
+    calendar_client: "GoogleCalendarClient | None" = None,
     version: str = "0.1.0",
 ) -> FastAPI:
     """Crea la aplicacion FastAPI."""
@@ -490,6 +491,51 @@ def create_server_app(
             return {"status": "checked_out"}
         except Exception as e:
             raise HTTPException(502, f"Error fichando salida: {e}")
+
+    # --- Google Calendar ---
+
+    @app.get("/google/calendar/auth-url")
+    async def get_google_auth_url() -> dict:
+        """Devuelve la URL de autorizacion OAuth2 de Google."""
+        if not calendar_client:
+            raise HTTPException(400, "Google Calendar no configurado. Configura client_id y client_secret.")
+        url = calendar_client.get_auth_url()
+        return {"url": url}
+
+    @app.get("/oauth/google/callback")
+    async def google_oauth_callback(code: str = Query(...)) -> dict:
+        """Callback OAuth2 — intercambia el codigo por tokens."""
+        if not calendar_client:
+            raise HTTPException(400, "Google Calendar no configurado")
+        success = await calendar_client.exchange_code(code)
+        if not success:
+            raise HTTPException(502, "Error al autorizar con Google")
+        return {"status": "authorized", "message": "Google Calendar conectado. Puedes cerrar esta ventana."}
+
+    @app.get("/google/calendar/status")
+    async def google_calendar_status() -> dict:
+        """Estado de la conexion con Google Calendar."""
+        if not calendar_client:
+            return {"configured": False, "connected": False}
+        return {
+            "configured": True,
+            "connected": calendar_client.is_configured,
+        }
+
+    @app.get("/google/calendar/current-event")
+    async def get_current_event() -> dict:
+        """Obtiene el evento actual del calendario (si hay uno)."""
+        if not calendar_client or not calendar_client.is_configured:
+            return {"event": None}
+        event = await calendar_client.get_current_event()
+        return {"event": event}
+
+    @app.post("/google/calendar/disconnect")
+    async def disconnect_google_calendar() -> dict:
+        """Desconecta Google Calendar eliminando tokens."""
+        if calendar_client:
+            await calendar_client.disconnect()
+        return {"status": "disconnected"}
 
     # --- Config (recibe configuracion desde Tauri) ---
 

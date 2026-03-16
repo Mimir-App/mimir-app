@@ -22,11 +22,13 @@ class Poller:
         db: Database,
         platform: PlatformProvider,
         aggregator: SignalAggregator,
+        calendar_client: object | None = None,
     ) -> None:
         self._config = config
         self._db = db
         self._platform = platform
         self._aggregator = aggregator
+        self._calendar = calendar_client
         self._running = False
         self._paused = False
         self._last_poll: datetime | None = None
@@ -112,9 +114,26 @@ class Poller:
                     sys_ctx.audio_app = None
                     sys_ctx.is_meeting = False
 
+            # Consultar evento del calendario
+            calendar_event = None
+            calendar_attendees = None
+            if self._calendar and hasattr(self._calendar, 'get_current_event'):
+                try:
+                    event = await self._calendar.get_current_event()
+                    if event:
+                        calendar_event = event.get("summary")
+                        attendees = event.get("attendees", [])
+                        calendar_attendees = ", ".join(attendees[:10]) if attendees else None
+                        if event.get("is_meeting"):
+                            sys_ctx.is_meeting = True
+                except Exception as e:
+                    logger.debug("Error consultando calendario: %s", e)
+
             # Calcular context_key
             browser_apps = frozenset(self._config.browser_apps) if self._config.browser_apps else None
-            if sys_ctx.is_meeting:
+            if sys_ctx.is_meeting and calendar_event:
+                context_key = f"meeting:{calendar_event}"
+            elif sys_ctx.is_meeting:
                 context_key = f"meeting:{sys_ctx.audio_app or window.app_name}"
             else:
                 context_key = compute_context_key(
@@ -141,6 +160,8 @@ class Poller:
                 audio_app=sys_ctx.audio_app,
                 is_meeting=1 if sys_ctx.is_meeting else 0,
                 workspace=sys_ctx.workspace,
+                calendar_event=calendar_event,
+                calendar_attendees=calendar_attendees,
             )
 
             # Procesar en aggregator

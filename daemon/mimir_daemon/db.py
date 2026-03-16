@@ -76,6 +76,8 @@ CREATE TABLE IF NOT EXISTS signals (
     audio_app TEXT,
     is_meeting INTEGER DEFAULT 0,
     workspace TEXT,
+    calendar_event TEXT,
+    calendar_attendees TEXT,
     created_at TEXT DEFAULT (datetime('now'))
 );
 

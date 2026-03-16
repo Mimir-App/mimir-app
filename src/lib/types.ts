@@ -44,6 +44,8 @@ export interface Signal {
   audio_app: string | null;
   is_meeting: boolean;
   workspace: string | null;
+  calendar_event: string | null;
+  calendar_attendees: string | null;
   created_at: string;
 }
 
@@ -162,6 +164,9 @@ export interface AppConfig {
   dashboard_order: string[];
   dashboard_spans: Record<string, [number, number]>; // [cols, rows]
   column_widths: Record<string, number>;
+  // Google Calendar
+  google_client_id: string;
+  google_client_secret: string;
   // Permisos de captura
   capture_window: boolean;
   capture_git: boolean;

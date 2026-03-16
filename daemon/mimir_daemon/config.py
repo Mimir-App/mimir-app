@@ -25,6 +25,9 @@ class DaemonConfig:
     log_level: str = "INFO"
     browser_apps: list[str] | None = None
     transient_apps: list[str] | None = None
+    # Google Calendar
+    google_client_id: str = ""
+    google_client_secret: str = ""
     # Permisos de captura
     capture_window: bool = True
     capture_git: bool = True

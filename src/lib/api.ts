@@ -136,6 +136,22 @@ export const api = {
     return httpPost('/blocks/merge', { block_ids: blockIds });
   },
 
+  // Google Calendar
+  async getGoogleAuthUrl() {
+    if (await isTauri()) return tauriInvoke('get_google_auth_url');
+    return httpGet('/google/calendar/auth-url');
+  },
+
+  async getGoogleCalendarStatus() {
+    if (await isTauri()) return tauriInvoke('get_google_calendar_status');
+    return httpGet('/google/calendar/status');
+  },
+
+  async disconnectGoogleCalendar() {
+    if (await isTauri()) return tauriInvoke('disconnect_google_calendar');
+    return httpPost('/google/calendar/disconnect');
+  },
+
   async getOdooProjects() {
     if (await isTauri()) return tauriInvoke('get_odoo_projects');
     return httpGet('/odoo/projects');
