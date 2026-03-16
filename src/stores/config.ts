@@ -22,6 +22,7 @@ const DEFAULT_CONFIG: AppConfig = {
   ai_custom_context: '',
   hour_format: 'hm',
   date_format: 'eu',
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   font_size: 14,
   dashboard_order: [] as string[],
   dashboard_spans: {} as Record<string, [number, number]>,

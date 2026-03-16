@@ -19,6 +19,17 @@ const daemonPushResult = ref<string | null>(null);
 const daemonPushType = ref<'success' | 'error'>('success');
 const activeTab = ref('general');
 
+const systemTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const timezoneOptions = [
+  'Europe/Madrid', 'Europe/London', 'Europe/Paris', 'Europe/Berlin',
+  'Europe/Rome', 'Europe/Lisbon', 'Europe/Amsterdam', 'Europe/Brussels',
+  'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'America/Mexico_City', 'America/Bogota', 'America/Buenos_Aires', 'America/Sao_Paulo',
+  'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Kolkata', 'Asia/Dubai',
+  'Australia/Sydney', 'Pacific/Auckland', 'UTC',
+].map(tz => ({ value: tz, label: tz === systemTz ? `${tz} (sistema)` : tz }))
+  .sort((a, b) => a.value === systemTz ? -1 : b.value === systemTz ? 1 : a.label.localeCompare(b.label));
+
 const tabs = computed(() => [
   { id: 'general', label: 'General', enabled: true },
   { id: 'odoo', label: 'Odoo', enabled: true },
@@ -240,6 +251,12 @@ async function toggleServer() {
                   { value: 'short', label: 'Corto', hint: '14 mar 2026' },
                   { value: 'long', label: 'Largo', hint: 'viernes, 14 de marzo de 2026' },
                 ]" />
+              </td>
+            </tr>
+            <tr>
+              <td class="label-cell">Zona horaria <HelpTooltip text="Zona horaria para mostrar horas de fichaje y bloques. Por defecto usa la del sistema." /></td>
+              <td colspan="3">
+                <CustomSelect v-model="configStore.config.timezone" :options="timezoneOptions" />
               </td>
             </tr>
             <tr>

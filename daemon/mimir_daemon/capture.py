@@ -22,11 +22,11 @@ from .tray import TrayIcon
 
 logger = logging.getLogger("mimir_capture")
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 CAPTURE_PORT = 9476
 
 
-def create_capture_app(poller: Poller, version: str = VERSION) -> FastAPI:
+def create_capture_app(poller: Poller, platform: object | None = None, version: str = VERSION) -> FastAPI:
     """Crea la app FastAPI mínima del capture."""
     from datetime import datetime, timezone
 
@@ -46,6 +46,7 @@ def create_capture_app(poller: Poller, version: str = VERSION) -> FastAPI:
             "mode": "paused" if poller._paused else "active",
             "uptime_seconds": uptime,
             "last_poll": poller.last_poll.isoformat() if poller.last_poll else None,
+            "backend": getattr(platform, 'backend', 'unknown') if platform else "unknown",
             "version": version,
         }
 
@@ -94,7 +95,7 @@ async def run_capture(args: argparse.Namespace) -> None:
         block_manager=block_manager,
     )
 
-    app = create_capture_app(poller=poller, version=VERSION)
+    app = create_capture_app(poller=poller, platform=platform, version=VERSION)
 
     tray = TrayIcon(
         on_mode_change=lambda mode: (

@@ -136,6 +136,7 @@ export interface AppConfig {
   ai_custom_context: string;
   hour_format: 'decimal' | 'hm' | 'minutes';
   date_format: 'iso' | 'eu' | 'short' | 'long';
+  timezone: string;
   font_size: number;
   dashboard_order: string[];
   dashboard_spans: Record<string, [number, number]>; // [cols, rows]

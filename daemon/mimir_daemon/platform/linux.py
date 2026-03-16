@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -11,40 +12,114 @@ logger = logging.getLogger(__name__)
 
 
 class LinuxProvider(PlatformProvider):
-    """Captura de actividad en Linux usando xdotool y D-Bus."""
+    """Captura de actividad en Linux (X11 + Wayland)."""
 
     def __init__(self) -> None:
         self._session_events: list[SessionEvent] = []
         self._dbus_task: asyncio.Task | None = None
+        self._use_wayland: bool = False
+        self._wayland_bus = None
+        self._wayland_iface = None
+        self._wayland_warning_shown: bool = False
+
+    @property
+    def backend(self) -> str:
+        """Devuelve el backend activo: 'wayland' o 'x11'."""
+        return "wayland" if self._use_wayland else "x11"
 
     async def setup(self) -> None:
-        """Inicia listener de D-Bus para lock/unlock."""
+        """Detecta entorno e inicia listeners D-Bus."""
+        session_type = os.environ.get("XDG_SESSION_TYPE", "")
+        self._use_wayland = session_type == "wayland"
+
+        if self._use_wayland:
+            logger.info("Sesion Wayland detectada, usando backend D-Bus")
+            await self._connect_wayland_bus()
+        elif session_type:
+            logger.info("Sesion %s detectada, usando backend xdotool", session_type)
+        else:
+            logger.warning("XDG_SESSION_TYPE no definido, usando xdotool como fallback")
+
+        # Listener de lock/unlock (funciona en ambos)
         try:
             self._dbus_task = asyncio.create_task(self._listen_dbus())
-            logger.info("Listener D-Bus iniciado")
+            logger.info("Listener D-Bus logind iniciado")
         except Exception as e:
             logger.warning("No se pudo iniciar listener D-Bus: %s", e)
 
     async def teardown(self) -> None:
-        """Cancela el listener de D-Bus."""
+        """Cancela listeners y desconecta buses."""
         if self._dbus_task:
             self._dbus_task.cancel()
             try:
                 await self._dbus_task
             except asyncio.CancelledError:
                 pass
+        if self._wayland_bus:
+            self._wayland_bus.disconnect()
+            self._wayland_bus = None
+            self._wayland_iface = None
 
     async def get_active_window(self) -> WindowInfo | None:
+        """Obtiene la ventana activa usando el backend apropiado."""
+        if self._use_wayland:
+            return await self._get_active_window_wayland()
+        return await self._get_active_window_x11()
+
+    # --- Wayland backend ---
+
+    async def _connect_wayland_bus(self) -> None:
+        """Establece conexion persistente al D-Bus de la extension."""
+        try:
+            from dbus_next.aio import MessageBus
+
+            self._wayland_bus = await MessageBus().connect()
+            introspection = await self._wayland_bus.introspect(
+                "org.mimir.WindowTracker", "/org/mimir/WindowTracker"
+            )
+            proxy = self._wayland_bus.get_proxy_object(
+                "org.mimir.WindowTracker", "/org/mimir/WindowTracker", introspection
+            )
+            self._wayland_iface = proxy.get_interface("org.mimir.WindowTracker")
+            logger.info("Conexion D-Bus con mimir-window-tracker establecida")
+        except Exception as e:
+            self._wayland_bus = None
+            self._wayland_iface = None
+            if not self._wayland_warning_shown:
+                logger.warning("Extension mimir-window-tracker no disponible: %s", e)
+                logger.warning(
+                    "Activa la extension: gnome-extensions enable mimir-window-tracker@mimir.app"
+                )
+                self._wayland_warning_shown = True
+
+    async def _get_active_window_wayland(self) -> WindowInfo | None:
+        """Obtiene ventana activa via D-Bus (GNOME Wayland)."""
+        if not self._wayland_iface:
+            await self._connect_wayland_bus()
+            if not self._wayland_iface:
+                return None
+        try:
+            pid, wm_class, title = await self._wayland_iface.call_get_active_window()
+            if pid == 0:
+                return None
+            app_name = self._get_app_name_sync(pid)
+            return WindowInfo(pid=pid, app_name=app_name, window_title=title or "")
+        except Exception:
+            # Conexion perdida — reconectar en el proximo poll
+            self._wayland_bus = None
+            self._wayland_iface = None
+            return None
+
+    # --- X11 backend ---
+
+    async def _get_active_window_x11(self) -> WindowInfo | None:
         """Obtiene la ventana activa usando xdotool."""
         try:
-            # Obtener ID de ventana activa
             window_id = await self._run_cmd("xdotool", "getactivewindow")
             if not window_id:
                 return None
 
             window_id = window_id.strip()
-
-            # Obtener PID y titulo en llamadas separadas (mas fiable)
             pid_str = await self._run_cmd("xdotool", "getwindowpid", window_id)
             title = await self._run_cmd("xdotool", "getwindowname", window_id)
 
@@ -64,6 +139,8 @@ class LinuxProvider(PlatformProvider):
         except Exception as e:
             logger.debug("Error obteniendo ventana activa: %s", e)
         return None
+
+    # --- Utilidades compartidas ---
 
     async def get_session_events(self) -> list[SessionEvent]:
         """Retorna y limpia eventos de sesion pendientes."""
@@ -99,7 +176,6 @@ class LinuxProvider(PlatformProvider):
         except (PermissionError, OSError):
             pass
 
-        # Fallback: leer cmdline
         try:
             cmdline_path = Path(f"/proc/{pid}/cmdline")
             if cmdline_path.exists():
@@ -128,7 +204,6 @@ class LinuxProvider(PlatformProvider):
                 )
                 logger.info("Evento de sesion: %s", event_type)
 
-            # Escuchar senal de logind
             introspection = await bus.introspect(
                 "org.freedesktop.login1",
                 "/org/freedesktop/login1/session/auto",
@@ -149,7 +224,6 @@ class LinuxProvider(PlatformProvider):
                 )
             )
 
-            # Mantener el bus activo
             await asyncio.Future()
 
         except ImportError:
