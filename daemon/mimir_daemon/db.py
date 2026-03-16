@@ -60,6 +60,15 @@ CREATE TABLE IF NOT EXISTS ai_cache (
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS context_mappings (
+    context_key TEXT PRIMARY KEY,
+    odoo_project_id INTEGER,
+    odoo_project_name TEXT,
+    odoo_task_id INTEGER,
+    odoo_task_name TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT NOT NULL,
@@ -241,6 +250,39 @@ class Database:
             (signal_hash, description, confidence, provider),
         )
         await self.db.commit()
+
+    # --- Context mappings ---
+
+    async def get_context_mapping(self, context_key: str) -> dict | None:
+        """Obtiene el mapeo Odoo para un context_key."""
+        async with self.db.execute(
+            "SELECT * FROM context_mappings WHERE context_key = ?",
+            (context_key,),
+        ) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def set_context_mapping(
+        self, context_key: str, odoo_project_id: int | None,
+        odoo_project_name: str | None, odoo_task_id: int | None,
+        odoo_task_name: str | None,
+    ) -> None:
+        """Guarda o actualiza el mapeo Odoo para un context_key."""
+        await self.db.execute(
+            """INSERT OR REPLACE INTO context_mappings
+               (context_key, odoo_project_id, odoo_project_name, odoo_task_id, odoo_task_name, updated_at)
+               VALUES (?, ?, ?, ?, ?, datetime('now'))""",
+            (context_key, odoo_project_id, odoo_project_name, odoo_task_id, odoo_task_name),
+        )
+        await self.db.commit()
+
+    async def get_all_context_mappings(self) -> list[dict]:
+        """Obtiene todos los mapeos context_key -> Odoo."""
+        async with self.db.execute(
+            "SELECT * FROM context_mappings ORDER BY updated_at DESC",
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
 
     # --- Signals ---
 
