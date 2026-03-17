@@ -79,12 +79,25 @@ CREATE TABLE IF NOT EXISTS context_mappings (
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
-CREATE TABLE IF NOT EXISTS issue_preferences (
-    issue_id INTEGER PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS item_preferences (
+    item_id INTEGER NOT NULL,
+    item_type TEXT NOT NULL CHECK(item_type IN ('issue', 'mr')),
     manual_score INTEGER DEFAULT 0,
     followed BOOLEAN DEFAULT FALSE,
     created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    updated_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (item_id, item_type)
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    link TEXT,
+    item_id INTEGER,
+    read BOOLEAN DEFAULT FALSE,
+    created_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS signals (
@@ -401,14 +414,16 @@ class Database:
             await self.db.commit()
             return cursor.rowcount
 
-    # --- Issue preferences ---
+    # --- Item preferences ---
 
-    async def upsert_issue_preference(
-        self, issue_id: int, manual_score: int | None = None, followed: bool | None = None
+    async def upsert_item_preference(
+        self, item_id: int, item_type: str,
+        manual_score: int | None = None, followed: bool | None = None,
     ) -> None:
-        """Crea o actualiza preferencia de issue."""
+        """Crea o actualiza preferencia de un item (issue o mr)."""
         async with self.db.execute(
-            "SELECT * FROM issue_preferences WHERE issue_id = ?", (issue_id,)
+            "SELECT * FROM item_preferences WHERE item_id = ? AND item_type = ?",
+            (item_id, item_type),
         ) as cursor:
             existing = await cursor.fetchone()
         if existing:
@@ -422,28 +437,87 @@ class Database:
                 params.append(followed)
             if updates:
                 updates.append("updated_at = datetime('now')")
-                params.append(issue_id)
+                params.extend([item_id, item_type])
                 await self.db.execute(
-                    f"UPDATE issue_preferences SET {', '.join(updates)} WHERE issue_id = ?",
+                    f"UPDATE item_preferences SET {', '.join(updates)} "
+                    "WHERE item_id = ? AND item_type = ?",
                     params,
                 )
         else:
             await self.db.execute(
-                "INSERT INTO issue_preferences (issue_id, manual_score, followed) VALUES (?, ?, ?)",
-                (issue_id, manual_score or 0, followed or False),
+                "INSERT INTO item_preferences (item_id, item_type, manual_score, followed) "
+                "VALUES (?, ?, ?, ?)",
+                (item_id, item_type, manual_score or 0, followed or False),
             )
         await self.db.commit()
 
-    async def get_all_issue_preferences(self) -> list[dict]:
-        """Obtiene todas las preferencias de issues."""
-        async with self.db.execute("SELECT * FROM issue_preferences") as cursor:
+    async def get_item_preferences(self, item_type: str) -> list[dict]:
+        """Obtiene todas las preferencias de un tipo de item."""
+        async with self.db.execute(
+            "SELECT * FROM item_preferences WHERE item_type = ?", (item_type,)
+        ) as cursor:
             rows = await cursor.fetchall()
             return [dict(r) for r in rows]
 
-    async def get_followed_issue_ids(self) -> list[int]:
-        """Obtiene IDs de issues seguidas."""
+    async def get_followed_item_ids(self, item_type: str) -> list[int]:
+        """Obtiene IDs de items seguidos por tipo."""
         async with self.db.execute(
-            "SELECT issue_id FROM issue_preferences WHERE followed = 1"
+            "SELECT item_id FROM item_preferences WHERE item_type = ? AND followed = 1",
+            (item_type,),
         ) as cursor:
             rows = await cursor.fetchall()
-            return [r["issue_id"] for r in rows]
+            return [r["item_id"] for r in rows]
+
+    # --- Notifications ---
+
+    async def create_notification(
+        self, type: str, title: str, body: str | None = None,
+        link: str | None = None, item_id: int | None = None,
+    ) -> int:
+        """Crea una notificacion y retorna su ID."""
+        async with self.db.execute(
+            "INSERT INTO notifications (type, title, body, link, item_id) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (type, title, body, link, item_id),
+        ) as cursor:
+            await self.db.commit()
+            return cursor.lastrowid  # type: ignore
+
+    async def get_notifications(self, unread_only: bool = True) -> list[dict]:
+        """Obtiene notificaciones, opcionalmente solo las no leidas."""
+        query = "SELECT * FROM notifications"
+        if unread_only:
+            query += " WHERE read = 0"
+        query += " ORDER BY created_at DESC"
+        async with self.db.execute(query) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+    async def get_notification_count(self) -> int:
+        """Obtiene el numero de notificaciones no leidas."""
+        async with self.db.execute(
+            "SELECT COUNT(*) FROM notifications WHERE read = 0"
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else 0
+
+    async def mark_notification_read(self, notification_id: int) -> None:
+        """Marca una notificacion como leida."""
+        await self.db.execute(
+            "UPDATE notifications SET read = 1 WHERE id = ?", (notification_id,)
+        )
+        await self.db.commit()
+
+    async def mark_all_notifications_read(self) -> None:
+        """Marca todas las notificaciones como leidas."""
+        await self.db.execute("UPDATE notifications SET read = 1 WHERE read = 0")
+        await self.db.commit()
+
+    async def cleanup_old_notifications(self, days: int = 7) -> int:
+        """Elimina notificaciones mas antiguas de N dias."""
+        async with self.db.execute(
+            "DELETE FROM notifications WHERE created_at < datetime('now', ?)",
+            (f"-{days} days",),
+        ) as cursor:
+            await self.db.commit()
+            return cursor.rowcount

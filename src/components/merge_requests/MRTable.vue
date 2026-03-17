@@ -6,7 +6,8 @@ import { useSortable } from '../../composables/useSortable';
 import { useColumnWidths } from '../../composables/useColumnWidths';
 import ScoreBadge from '../shared/ScoreBadge.vue';
 
-const props = defineProps<{ mergeRequests: GitLabMergeRequest[] }>();
+const props = defineProps<{ mergeRequests: GitLabMergeRequest[]; followedIds?: Set<number> }>();
+const emit = defineEmits<{ select: [mr: GitLabMergeRequest] }>();
 const { toggleSort, sortIcon, sorted } = useSortable(toRef(props, 'mergeRequests'), 'score', 'desc');
 const { colStyle, startResize } = useColumnWidths();
 </script>
@@ -34,16 +35,21 @@ const { colStyle, startResize } = useColumnWidths();
       </tr>
     </thead>
     <tbody>
-      <tr v-for="mr in sorted" :key="mr.id" class="data-row">
-        <td :style="colStyle('score')"><ScoreBadge :score="mr.score" /></td>
+      <tr v-for="mr in sorted" :key="mr.id" class="data-row clickable-row" @click="emit('select', mr)">
+        <td :style="colStyle('score')">
+          <span class="score-cell">
+            <span v-if="followedIds?.has(mr.id)" class="followed-dot" title="Seguida"></span>
+            <ScoreBadge :score="mr.score" />
+          </span>
+        </td>
         <td :style="colStyle('iid')" class="muted">{{ mr.iid }}</td>
         <td class="col-expand">
-          <a :href="mr.web_url" target="_blank" class="link">{{ mr.title }}</a>
+          <a :href="mr.web_url" target="_blank" class="link" @click.stop>{{ mr.title }}</a>
         </td>
         <td :style="colStyle('branch')" class="muted truncate">{{ mr.source_branch }}</td>
         <td :style="colStyle('pipeline')">
           <span v-if="mr.pipeline_status" :class="'pipeline-' + mr.pipeline_status">{{ mr.pipeline_status }}</span>
-          <span v-else class="muted">—</span>
+          <span v-else class="muted">&mdash;</span>
         </td>
         <td :style="colStyle('conflicts')">
           <span v-if="mr.has_conflicts" class="conflict-yes">Si</span>
@@ -87,12 +93,28 @@ const { colStyle, startResize } = useColumnWidths();
 }
 
 .data-row:hover td { background: var(--bg-hover); }
+.clickable-row { cursor: pointer; }
 .col-expand { width: auto; }
 .muted { color: var(--text-secondary); }
 .truncate { overflow: hidden; text-overflow: ellipsis; }
 
 .link { color: var(--text-primary); text-decoration: none; overflow: hidden; text-overflow: ellipsis; display: block; }
 .link:hover { color: var(--accent); text-decoration: underline; }
+
+.score-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.followed-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
 
 .pipeline-success { color: var(--success); }
 .pipeline-failed { color: var(--error); }

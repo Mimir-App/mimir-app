@@ -141,6 +141,101 @@ class GitLabSource(VCSSource):
                 continue
         return results
 
+    async def search_merge_requests(self, query: str, per_page: int = 20) -> list[dict]:
+        """Busca merge requests en todos los proyectos accesibles."""
+        try:
+            resp = await self._client.get(
+                "/merge_requests",
+                params={"search": query, "scope": "all", "state": "opened", "per_page": per_page},
+            )
+            resp.raise_for_status()
+            mrs = resp.json()
+            for mr in mrs:
+                ref = mr.get("references", {}).get("full", "")
+                mr["project_path"] = ref.split("!")[0].rstrip() if "!" in ref else ""
+            return mrs
+        except Exception as e:
+            logger.error("Error buscando merge requests en GitLab: %s", e)
+            return []
+
+    async def get_mr_notes(
+        self, project_id: str, mr_iid: int, per_page: int = 5
+    ) -> list[dict]:
+        """Obtiene notas de usuario de un MR (excluye system notes)."""
+        try:
+            resp = await self._client.get(
+                f"/projects/{project_id}/merge_requests/{mr_iid}/notes",
+                params={"sort": "desc", "per_page": per_page * 2},
+            )
+            resp.raise_for_status()
+            notes = [n for n in resp.json() if not n.get("system", False)]
+            return notes[:per_page]
+        except Exception as e:
+            logger.error("Error obteniendo notas de MR %s!%d: %s", project_id, mr_iid, e)
+            return []
+
+    async def get_mr_conflicts(self, project_id: str, mr_iid: int) -> list[dict]:
+        """Obtiene archivos en conflicto de un MR."""
+        try:
+            resp = await self._client.get(
+                f"/projects/{project_id}/merge_requests/{mr_iid}/changes",
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            diffs = data.get("changes", data.get("diffs", []))
+            conflicts = []
+            for diff in diffs:
+                if diff.get("conflict") or diff.get("has_conflict"):
+                    conflicts.append({
+                        "old_path": diff.get("old_path"),
+                        "new_path": diff.get("new_path"),
+                        "conflict": True,
+                    })
+            return conflicts
+        except Exception as e:
+            logger.error("Error obteniendo conflictos de MR %s!%d: %s", project_id, mr_iid, e)
+            return []
+
+    async def get_merge_requests_by_ids(self, mr_ids: list[int]) -> list[dict]:
+        """Obtiene MRs por sus IDs globales."""
+        if not mr_ids:
+            return []
+        results = []
+        for gid in mr_ids:
+            try:
+                resp = await self._client.get(f"/merge_requests/{gid}")
+                if resp.status_code == 200:
+                    mr = resp.json()
+                    ref = mr.get("references", {}).get("full", "")
+                    mr["project_path"] = ref.split("!")[0].rstrip() if "!" in ref else ""
+                    results.append(mr)
+            except Exception:
+                continue
+        return results
+
+    async def get_todos(self) -> list[dict]:
+        """Obtiene TODOs del usuario."""
+        try:
+            resp = await self._client.get(
+                "/todos",
+                params={"state": "pending", "per_page": 50},
+            )
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            logger.error("Error obteniendo TODOs de GitLab: %s", e)
+            return []
+
+    async def get_current_user(self) -> dict:
+        """Obtiene info del usuario actual."""
+        try:
+            resp = await self._client.get("/user")
+            resp.raise_for_status()
+            return resp.json()
+        except Exception as e:
+            logger.error("Error obteniendo usuario actual de GitLab: %s", e)
+            return {}
+
     async def get_labels(self, project_paths: list[str] | None = None) -> list[dict]:
         """Obtiene labels unicas de los proyectos del usuario."""
         try:

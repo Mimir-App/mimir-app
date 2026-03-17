@@ -2,15 +2,15 @@
 import { ref, watch, nextTick } from 'vue';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import type { GitLabIssue, GitLabNote, GitLabLabel, TimesheetEntry } from '../../lib/types';
+import type { GitLabMergeRequest, GitLabNote, GitLabLabel, MRConflict } from '../../lib/types';
 import { api } from '../../lib/api';
 import { useConfigStore } from '../../stores/config';
-import { formatDate, formatHours } from '../../composables/useFormatting';
+import { formatDate } from '../../composables/useFormatting';
 import ModalDialog from '../shared/ModalDialog.vue';
 import ScoreBadge from '../shared/ScoreBadge.vue';
 
 const props = defineProps<{
-  issue: GitLabIssue | null;
+  mr: GitLabMergeRequest | null;
   open: boolean;
 }>();
 
@@ -24,8 +24,8 @@ const configStore = useConfigStore();
 const notes = ref<GitLabNote[]>([]);
 const loadingNotes = ref(false);
 const labels = ref<GitLabLabel[]>([]);
-const timeSpentHours = ref(0);
-const loadingTime = ref(false);
+const conflicts = ref<MRConflict[]>([]);
+const loadingConflicts = ref(false);
 
 // Manual score inline editing
 const editingScore = ref(false);
@@ -55,14 +55,13 @@ async function loadLabels() {
   }
 }
 
-/** Carga notas de la issue */
-async function loadNotes(issue: GitLabIssue) {
+/** Carga notas de la MR */
+async function loadNotes(mr: GitLabMergeRequest) {
   loadingNotes.value = true;
   try {
     const perPage = configStore.config.issue_notes_count || 5;
-    // project_path viene como "group/project", se pasa url-encoded
-    const projectId = encodeURIComponent(issue.project_path);
-    notes.value = await api.getIssueNotes(projectId, issue.iid, perPage);
+    const projectId = encodeURIComponent(mr.project_path);
+    notes.value = await api.getMRNotes(projectId, mr.iid, perPage);
   } catch {
     notes.value = [];
   } finally {
@@ -70,39 +69,27 @@ async function loadNotes(issue: GitLabIssue) {
   }
 }
 
-/** Carga horas imputadas en Odoo para la tarea vinculada */
-async function loadTimeSpent(issue: GitLabIssue) {
-  loadingTime.value = true;
+/** Carga archivos en conflicto */
+async function loadConflicts(mr: GitLabMergeRequest) {
+  if (!mr.has_conflicts) {
+    conflicts.value = [];
+    return;
+  }
+  loadingConflicts.value = true;
   try {
-    // Buscar en un rango amplio (ultimo anno)
-    const now = new Date();
-    const yearAgo = new Date(now);
-    yearAgo.setFullYear(yearAgo.getFullYear() - 1);
-    const dateFrom = yearAgo.toISOString().slice(0, 10);
-    const dateTo = now.toISOString().slice(0, 10);
-
-    const entries = await api.getTimesheetEntries(dateFrom, dateTo) as TimesheetEntry[];
-
-    // Filtrar por task_id si la issue tiene un odoo_task_id equivalente
-    // Usamos el iid como referencia; las entries que tienen el issue title en description
-    // o que match por task. Simplificamos: sumamos entries cuya description contenga #iid
-    const pattern = `#${issue.iid}`;
-    const matching = entries.filter(e =>
-      e.description?.includes(pattern) ||
-      e.description?.includes(issue.title)
-    );
-    timeSpentHours.value = matching.reduce((sum, e) => sum + e.hours, 0);
+    const projectId = encodeURIComponent(mr.project_path);
+    conflicts.value = await api.getMRConflicts(projectId, mr.iid);
   } catch {
-    timeSpentHours.value = 0;
+    conflicts.value = [];
   } finally {
-    loadingTime.value = false;
+    loadingConflicts.value = false;
   }
 }
 
 /** Inicia edicion inline del manual score */
 function startEditScore() {
-  if (!props.issue) return;
-  editScoreValue.value = props.issue.manual_priority ?? 0;
+  if (!props.mr) return;
+  editScoreValue.value = props.mr.manual_priority ?? 0;
   editingScore.value = true;
   nextTick(() => {
     scoreInput.value?.focus();
@@ -112,13 +99,13 @@ function startEditScore() {
 
 /** Guarda el manual score */
 async function saveManualScore() {
-  if (!props.issue) return;
+  if (!props.mr) return;
   editingScore.value = false;
   const val = Math.max(0, Math.min(200, editScoreValue.value));
   try {
-    await api.updateItemPreferences('issue', props.issue.id, { manual_score: val });
+    await api.updateItemPreferences('mr', props.mr.id, { manual_score: val });
     // Actualizar localmente
-    props.issue.manual_priority = val;
+    props.mr.manual_priority = val;
   } catch {
     // Silenciar error
   }
@@ -129,16 +116,31 @@ function cancelEditScore() {
   editingScore.value = false;
 }
 
-// Watch: cuando cambia la issue, cargar datos
+/** Devuelve clase CSS segun el estado del pipeline */
+function pipelineClass(status: string | null): string {
+  if (!status) return '';
+  switch (status) {
+    case 'success': return 'pipeline-success';
+    case 'failed': return 'pipeline-failed';
+    case 'running': return 'pipeline-running';
+    case 'pending':
+    case 'created':
+    case 'manual':
+      return 'pipeline-pending';
+    default: return '';
+  }
+}
+
+// Watch: cuando cambia la MR, cargar datos
 watch(
-  () => props.issue,
-  (newIssue) => {
+  () => props.mr,
+  (newMR) => {
     notes.value = [];
-    timeSpentHours.value = 0;
+    conflicts.value = [];
     editingScore.value = false;
-    if (newIssue) {
-      loadNotes(newIssue);
-      loadTimeSpent(newIssue);
+    if (newMR) {
+      loadNotes(newMR);
+      loadConflicts(newMR);
       loadLabels();
     }
   },
@@ -147,18 +149,18 @@ watch(
 
 <template>
   <ModalDialog
-    :title="issue ? `${issue.project_path}#${issue.iid}` : ''"
+    :title="mr ? `${mr.project_path}#${mr.iid}` : ''"
     :open="open"
     @close="emit('close')"
   >
-    <div v-if="issue" class="issue-modal-content">
+    <div v-if="mr" class="mr-modal-content">
       <!-- Titulo -->
-      <h3 class="issue-title">{{ issue.title }}</h3>
+      <h3 class="mr-title">{{ mr.title }}</h3>
 
       <!-- Labels como chips coloreados -->
-      <div v-if="issue.labels.length" class="labels-row">
+      <div v-if="mr.labels.length" class="labels-row">
         <span
-          v-for="l in issue.labels"
+          v-for="l in mr.labels"
           :key="l"
           class="label-chip"
           :style="{
@@ -169,25 +171,52 @@ watch(
         >{{ l }}</span>
       </div>
 
+      <!-- State badge -->
+      <div class="state-badge-row">
+        <span class="state-badge" :class="'state-' + mr.state">{{ mr.state }}</span>
+      </div>
+
+      <!-- Pipeline section -->
+      <div class="pipeline-section">
+        <span class="meta-label">Pipeline</span>
+        <span v-if="mr.pipeline_status" class="pipeline-badge" :class="pipelineClass(mr.pipeline_status)">
+          {{ mr.pipeline_status }}
+        </span>
+        <span v-else class="meta-value muted">&mdash;</span>
+      </div>
+
+      <!-- Conflicts section -->
+      <div v-if="mr.has_conflicts" class="conflicts-section">
+        <div class="conflicts-header">
+          <span class="conflicts-icon">&#9888;</span>
+          <span class="conflicts-title">Conflictos detectados</span>
+        </div>
+        <div v-if="loadingConflicts" class="loading-text">Cargando conflictos...</div>
+        <ul v-else-if="conflicts.length" class="conflicts-list">
+          <li v-for="c in conflicts" :key="c.old_path" class="conflict-file">
+            {{ c.new_path !== c.old_path ? `${c.old_path} → ${c.new_path}` : c.old_path }}
+          </li>
+        </ul>
+        <div v-else class="conflicts-fallback">No se pudieron obtener los archivos en conflicto</div>
+      </div>
+
       <!-- Meta info -->
       <div class="meta-section">
-        <div v-if="issue.milestone" class="meta-row">
-          <span class="meta-label">Milestone</span>
-          <span class="meta-value">{{ issue.milestone }}</span>
-        </div>
-        <div v-if="issue.due_date" class="meta-row">
-          <span class="meta-label">Fecha limite</span>
-          <span class="meta-value">{{ formatDate(issue.due_date) }}</span>
-        </div>
         <div class="meta-row">
           <span class="meta-label">Asignados</span>
           <span class="meta-value">
-            {{ issue.assignees.map(a => a.username).join(', ') || '\u2014' }}
+            {{ mr.assignees.map(a => a.username).join(', ') || '\u2014' }}
           </span>
         </div>
         <div class="meta-row">
-          <span class="meta-label">Estado</span>
-          <span class="meta-value">{{ issue.state }}</span>
+          <span class="meta-label">Reviewers</span>
+          <span class="meta-value">
+            {{ mr.reviewers.map(r => r.username).join(', ') || '\u2014' }}
+          </span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Rama</span>
+          <span class="meta-value branch-info">{{ mr.source_branch }} → {{ mr.target_branch }}</span>
         </div>
       </div>
 
@@ -195,12 +224,12 @@ watch(
       <div class="scores-section">
         <div class="score-row">
           <span class="meta-label">Score total</span>
-          <ScoreBadge :score="issue.score" />
+          <ScoreBadge :score="mr.score" />
         </div>
         <div class="score-row">
           <span class="meta-label">Score manual</span>
           <span v-if="!editingScore" class="manual-score-display" @click="startEditScore">
-            {{ issue.manual_priority ?? 0 }}
+            {{ mr.manual_priority ?? 0 }}
             <span class="edit-hint">editar</span>
           </span>
           <span v-else class="manual-score-edit">
@@ -219,18 +248,11 @@ watch(
         </div>
       </div>
 
-      <!-- Tiempo imputado -->
-      <div class="time-section">
-        <span class="meta-label">Tiempo imputado (Odoo)</span>
-        <span v-if="loadingTime" class="meta-value loading-text">Cargando...</span>
-        <span v-else class="meta-value">{{ formatHours(timeSpentHours) }}</span>
-      </div>
-
       <!-- Descripcion en markdown -->
-      <div v-if="issue.description" class="description-section">
+      <div v-if="mr.description" class="description-section">
         <h4>Descripcion</h4>
         <!-- eslint-disable-next-line vue/no-v-html -->
-        <div class="markdown-body" v-html="renderMarkdown(issue.description)"></div>
+        <div class="markdown-body" v-html="renderMarkdown(mr.description)"></div>
       </div>
 
       <!-- Comentarios -->
@@ -252,20 +274,20 @@ watch(
 
       <!-- Footer -->
       <div class="modal-footer">
-        <a :href="issue.web_url" target="_blank" class="gitlab-link">Ir a GitLab</a>
+        <a :href="mr.web_url" target="_blank" class="gitlab-link">Ir a GitLab</a>
       </div>
     </div>
   </ModalDialog>
 </template>
 
 <style scoped>
-.issue-modal-content {
+.mr-modal-content {
   display: flex;
   flex-direction: column;
   gap: 16px;
 }
 
-.issue-title {
+.mr-title {
   font-size: 16px;
   font-weight: 600;
   margin: 0;
@@ -286,6 +308,131 @@ watch(
   font-size: 11px;
   font-weight: 500;
   border: 1px solid;
+}
+
+/* State badge */
+.state-badge-row {
+  display: flex;
+}
+
+.state-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.state-opened {
+  background: rgba(78, 201, 176, 0.15);
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+
+.state-merged {
+  background: rgba(203, 27, 33, 0.15);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+
+.state-closed {
+  background: rgba(162, 176, 180, 0.15);
+  color: var(--text-secondary);
+  border: 1px solid var(--text-secondary);
+}
+
+/* Pipeline */
+.pipeline-section {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+
+.pipeline-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.pipeline-success {
+  background: rgba(78, 201, 176, 0.15);
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+
+.pipeline-failed {
+  background: rgba(241, 76, 76, 0.15);
+  color: var(--error);
+  border: 1px solid var(--error);
+}
+
+.pipeline-running {
+  background: rgba(220, 220, 170, 0.15);
+  color: var(--warning);
+  border: 1px solid var(--warning);
+}
+
+.pipeline-pending {
+  background: rgba(162, 176, 180, 0.15);
+  color: var(--text-secondary);
+  border: 1px solid var(--text-secondary);
+}
+
+/* Conflicts */
+.conflicts-section {
+  border: 1px solid var(--error);
+  border-radius: 8px;
+  padding: 12px;
+  background: rgba(241, 76, 76, 0.08);
+}
+
+.conflicts-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.conflicts-icon {
+  color: var(--error);
+  font-size: 16px;
+}
+
+.conflicts-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--error);
+}
+
+.conflicts-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.conflict-file {
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--text-primary);
+  padding: 2px 6px;
+  background: rgba(241, 76, 76, 0.05);
+  border-radius: 4px;
+}
+
+.conflicts-fallback {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-style: italic;
 }
 
 /* Meta */
@@ -309,6 +456,15 @@ watch(
 
 .meta-value {
   font-size: 13px;
+}
+
+.branch-info {
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.muted {
+  color: var(--text-secondary);
 }
 
 /* Scores */
@@ -363,20 +519,6 @@ watch(
   color: var(--text-primary);
   outline: none;
   text-align: right;
-}
-
-/* Tiempo */
-.time-section {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-}
-
-.loading-text {
-  color: var(--text-secondary);
-  font-style: italic;
-  font-size: 12px;
 }
 
 /* Descripcion */
@@ -464,6 +606,12 @@ watch(
 
 .markdown-body :deep(th) {
   background: var(--bg-card);
+}
+
+.loading-text {
+  color: var(--text-secondary);
+  font-style: italic;
+  font-size: 12px;
 }
 
 /* Notas */

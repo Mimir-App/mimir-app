@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { GitLabIssue, IssuePreference } from '../lib/types';
+import type { GitLabIssue, ItemPreference } from '../lib/types';
 import { computeIssueScore, sortByScore, groupByProject, setPriorityLabels } from '../lib/scoring';
 import { api } from '../lib/api';
 import { useConfigStore } from './config';
@@ -22,7 +22,7 @@ export const useIssuesStore = defineStore('issues', () => {
   const error = ref<string | null>(null);
   const filterText = ref('');
   const groupBy = ref<IssueGroupBy>('project');
-  const preferences = ref<Map<number, IssuePreference>>(new Map());
+  const preferences = ref<Map<number, ItemPreference>>(new Map());
   const followedIssues = ref<GitLabIssue[]>([]);
   const searchResults = ref<GitLabIssue[]>([]);
   const searchLoading = ref(false);
@@ -112,8 +112,8 @@ export const useIssuesStore = defineStore('issues', () => {
   });
 
   async function fetchPreferences() {
-    const prefs = await api.getIssuePreferences();
-    preferences.value = new Map(prefs.map(p => [p.issue_id, p]));
+    const prefs = await api.getItemPreferences('issue');
+    preferences.value = new Map(prefs.map(p => [p.item_id, p]));
   }
 
   async function fetchFollowedIssues() {
@@ -130,10 +130,10 @@ export const useIssuesStore = defineStore('issues', () => {
     }
   }
 
-  async function updatePreference(issueId: number, data: Partial<IssuePreference>) {
-    await api.updateIssuePreferences(issueId, data);
-    const existing = preferences.value.get(issueId) || { issue_id: issueId, manual_score: 0, followed: false };
-    preferences.value.set(issueId, { ...existing, ...data } as IssuePreference);
+  async function updatePreference(issueId: number, data: Partial<ItemPreference>) {
+    await api.updateItemPreferences('issue', issueId, data);
+    const existing = preferences.value.get(issueId) || { item_id: issueId, item_type: 'issue' as const, manual_score: 0, followed: false };
+    preferences.value.set(issueId, { ...existing, ...data } as ItemPreference);
   }
 
   async function followIssue(issueId: number) {

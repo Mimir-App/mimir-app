@@ -4,7 +4,7 @@
  * En navegador: llama directamente al daemon HTTP en localhost:9477.
  */
 
-import type { IssuePreference, GitLabIssue, GitLabLabel, GitLabNote } from './types';
+import type { ItemPreference, GitLabIssue, GitLabMergeRequest, GitLabLabel, GitLabNote, MRConflict, GitLabTodo, AppNotification } from './types';
 
 const DAEMON_BASE = 'http://127.0.0.1:9477';
 
@@ -281,14 +281,14 @@ export const api = {
     if (await isTauri()) return tauriInvoke('restart_server_service');
   },
 
-  async getIssuePreferences(): Promise<IssuePreference[]> {
-    if (await isTauri()) return tauriInvoke('get_issue_preferences');
-    return httpGet('/gitlab/issues/preferences');
+  async getItemPreferences(type: string): Promise<ItemPreference[]> {
+    if (await isTauri()) return tauriInvoke('get_item_preferences', { itemType: type });
+    return httpGet(`/items/preferences?type=${type}`);
   },
 
-  async updateIssuePreferences(issueId: number, body: Partial<IssuePreference>): Promise<void> {
-    if (await isTauri()) return tauriInvoke('update_issue_preferences', { issueId, body });
-    return httpPut(`/gitlab/issues/${issueId}/preferences`, body);
+  async updateItemPreferences(type: string, id: number, body: Partial<ItemPreference>): Promise<void> {
+    if (await isTauri()) return tauriInvoke('update_item_preferences', { itemType: type, itemId: id, body });
+    return httpPut(`/items/${type}/${id}/preferences`, body);
   },
 
   async searchGitlabIssues(q: string): Promise<GitLabIssue[]> {
@@ -314,5 +314,46 @@ export const api = {
   async updateTimesheetEntry(entryId: number, body: { description?: string; hours?: number; project_id?: number; task_id?: number }): Promise<void> {
     if (await isTauri()) return tauriInvoke('update_timesheet_entry', { entryId, body });
     return httpPut(`/odoo/entries/${entryId}`, body);
+  },
+
+  async searchMergeRequests(q: string): Promise<GitLabMergeRequest[]> {
+    if (await isTauri()) return tauriInvoke('search_gitlab_merge_requests', { q });
+    return httpGet(`/gitlab/merge_requests/search?q=${encodeURIComponent(q)}`);
+  },
+  async getFollowedMergeRequests(): Promise<GitLabMergeRequest[]> {
+    if (await isTauri()) return tauriInvoke('get_followed_merge_requests');
+    return httpGet('/gitlab/merge_requests/followed');
+  },
+  async getMRNotes(projectId: string, mrIid: number, perPage: number = 5): Promise<GitLabNote[]> {
+    if (await isTauri()) return tauriInvoke('get_mr_notes', { projectId, mrIid, perPage });
+    return httpGet(`/gitlab/merge_requests/${projectId}/${mrIid}/notes?per_page=${perPage}`);
+  },
+  async getMRConflicts(projectId: string, mrIid: number): Promise<MRConflict[]> {
+    if (await isTauri()) return tauriInvoke('get_mr_conflicts', { projectId, mrIid });
+    return httpGet(`/gitlab/merge_requests/${projectId}/${mrIid}/conflicts`);
+  },
+  async getGitlabTodos(): Promise<GitLabTodo[]> {
+    if (await isTauri()) return tauriInvoke('get_gitlab_todos');
+    return httpGet('/gitlab/todos');
+  },
+  async getGitlabUser(): Promise<{ id: number; username: string; name: string }> {
+    if (await isTauri()) return tauriInvoke('get_gitlab_user');
+    return httpGet('/gitlab/user');
+  },
+  async getNotifications(unreadOnly: boolean = true): Promise<AppNotification[]> {
+    if (await isTauri()) return tauriInvoke('get_notifications', { unreadOnly });
+    return httpGet(`/notifications?unread_only=${unreadOnly}`);
+  },
+  async getNotificationCount(): Promise<{ count: number }> {
+    if (await isTauri()) return tauriInvoke('get_notification_count');
+    return httpGet('/notifications/count');
+  },
+  async markNotificationRead(id: number): Promise<void> {
+    if (await isTauri()) return tauriInvoke('mark_notification_read', { notificationId: id });
+    return httpPut(`/notifications/${id}/read`, {});
+  },
+  async markAllNotificationsRead(): Promise<void> {
+    if (await isTauri()) return tauriInvoke('mark_all_notifications_read');
+    return httpPut('/notifications/read-all', {});
   },
 };

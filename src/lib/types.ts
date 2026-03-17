@@ -93,8 +93,9 @@ export interface GitLabMergeRequest {
   manual_priority: number | null;
 }
 
-export interface IssuePreference {
-  issue_id: number;
+export interface ItemPreference {
+  item_id: number;
+  item_type: 'issue' | 'mr';
   manual_score: number;
   followed: boolean;
 }
@@ -109,6 +110,38 @@ export interface GitLabNote {
   body: string;
   author: { username: string };
   created_at: string;
+}
+
+export interface MRConflict {
+  old_path: string;
+  new_path: string;
+}
+
+export interface GitLabTodo {
+  id: number;
+  action_name: string;
+  target_type: string;
+  target: { title: string; iid: number; web_url: string };
+  project: { path_with_namespace: string };
+}
+
+export interface AppNotification {
+  id: number;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  item_id: number | null;
+  read: boolean;
+  created_at: string;
+}
+
+export interface DashboardWidgetConfig {
+  id: string;
+  type: string;
+  position: number;
+  span: [number, number];
+  config: Record<string, any>;
 }
 
 export interface GitLabUser {
@@ -196,4 +229,14 @@ export interface AppConfig {
   capture_ssh: boolean;
   gitlab_priority_labels: Array<{ label: string; weight: number }>;
   issue_notes_count: number;
+  dashboard_widgets: DashboardWidgetConfig[];
+  notification_enabled: boolean;
+  notification_interval_minutes: number;
+  notification_retention_days: number;
+  notification_comments: boolean;
+  notification_pipeline_failed: boolean;
+  notification_mr_approved: boolean;
+  notification_changes_requested: boolean;
+  notification_conflicts: boolean;
+  notification_todos: boolean;
 }

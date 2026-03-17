@@ -38,6 +38,16 @@ const DEFAULT_CONFIG: AppConfig = {
   capture_ssh: true,
   gitlab_priority_labels: [],
   issue_notes_count: 5,
+  dashboard_widgets: [],
+  notification_enabled: true,
+  notification_interval_minutes: 5,
+  notification_retention_days: 7,
+  notification_comments: true,
+  notification_pipeline_failed: true,
+  notification_mr_approved: true,
+  notification_changes_requested: true,
+  notification_conflicts: true,
+  notification_todos: true,
 };
 
 export const useConfigStore = defineStore('config', () => {

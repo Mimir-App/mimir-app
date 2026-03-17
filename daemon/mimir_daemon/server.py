@@ -3,17 +3,20 @@
 # NOTA: NO usar 'from __future__ import annotations' aquí.
 # Rompe la inspección de tipos de FastAPI/Pydantic para body params.
 
+import asyncio
 import json
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .db import Database
 from .integrations.base import TimesheetEntryData
 from .integrations.registry import IntegrationRegistry
+from .notifications import NotificationService
 from .sources.registry import SourceRegistry
 
 logger = logging.getLogger(__name__)
@@ -35,11 +38,26 @@ def create_server_app(
     ai_service: "AIService | None" = None,
     source_registry: SourceRegistry | None = None,
     calendar_client: "GoogleCalendarClient | None" = None,
+    notification_service: NotificationService | None = None,
     version: str = "0.1.0",
 ) -> FastAPI:
     """Crea la aplicacion FastAPI."""
 
-    app = FastAPI(title="Mimir Server", version=version)
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        """Lifecycle: arranca servicios en background."""
+        task = None
+        if notification_service:
+            task = asyncio.create_task(notification_service.run())
+        yield
+        if task:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    app = FastAPI(title="Mimir Server", version=version, lifespan=lifespan)
     start_time = datetime.now(timezone.utc)
     _registry = registry or IntegrationRegistry()
     _source_registry = source_registry or SourceRegistry()
@@ -710,36 +728,33 @@ def create_server_app(
             logger.error("Error obteniendo MRs de GitLab: %s", e)
             return []
 
-    @app.get("/gitlab/issues/preferences")
-    async def get_gitlab_issue_preferences() -> list:
-        """Obtiene todas las preferencias de issues desde la base de datos."""
+    @app.get("/items/preferences")
+    async def get_item_preferences(type: str = Query(...)) -> list:
+        """Obtiene todas las preferencias de un tipo de item."""
         try:
-            return await db.get_all_issue_preferences()
+            return await db.get_item_preferences(type)
         except Exception as e:
-            logger.error("Error obteniendo preferencias de issues: %s", e)
+            logger.error("Error obteniendo preferencias de items (%s): %s", type, e)
             return []
 
-    class IssuePreferenceRequest(BaseModel):
-        manual_score: int | None = None
-        followed: bool | None = None
-
-    @app.put("/gitlab/issues/{issue_id}/preferences")
-    async def upsert_gitlab_issue_preference(
-        issue_id: int, req: IssuePreferenceRequest
+    @app.put("/items/{item_type}/{item_id}/preferences")
+    async def update_item_preferences(
+        item_type: str, item_id: int, body: dict = Body(...)
     ) -> dict:
-        """Crea o actualiza preferencia de una issue."""
-        await db.upsert_issue_preference(
-            issue_id=issue_id,
-            manual_score=req.manual_score,
-            followed=req.followed,
+        """Crea o actualiza preferencia de un item (issue o mr)."""
+        await db.upsert_item_preference(
+            item_id=item_id,
+            item_type=item_type,
+            manual_score=body.get("manual_score"),
+            followed=body.get("followed"),
         )
-        return {"status": "updated", "issue_id": issue_id}
+        return {"status": "updated", "item_id": item_id, "item_type": item_type}
 
     @app.get("/gitlab/issues/followed")
     async def get_gitlab_followed_issues() -> list:
         """Obtiene issues seguidas con datos frescos de GitLab."""
         try:
-            followed_ids = await db.get_followed_issue_ids()
+            followed_ids = await db.get_followed_item_ids("issue")
             if not followed_ids:
                 return []
             gitlab = _source_registry._vcs_sources.get("gitlab")
@@ -797,6 +812,132 @@ def create_server_app(
         except Exception as e:
             logger.error("Error obteniendo notas de issue %s#%d: %s", project_id, issue_iid, e)
             return []
+
+    @app.get("/gitlab/merge_requests/search")
+    async def search_gitlab_merge_requests(q: str = Query(..., min_length=2)) -> list:
+        """Busca merge requests en GitLab por texto."""
+        try:
+            gitlab = _source_registry._vcs_sources.get("gitlab")
+            if not gitlab:
+                return []
+            from .sources.gitlab import GitLabSource
+            if not isinstance(gitlab, GitLabSource):
+                return []
+            return await gitlab.search_merge_requests(q)
+        except Exception as e:
+            logger.error("Error buscando MRs en GitLab: %s", e)
+            return []
+
+    @app.get("/gitlab/merge_requests/followed")
+    async def get_gitlab_followed_merge_requests() -> list:
+        """Obtiene MRs seguidas con datos frescos de GitLab."""
+        try:
+            followed_ids = await db.get_followed_item_ids("mr")
+            if not followed_ids:
+                return []
+            gitlab = _source_registry._vcs_sources.get("gitlab")
+            if not gitlab:
+                return []
+            from .sources.gitlab import GitLabSource
+            if not isinstance(gitlab, GitLabSource):
+                return []
+            return await gitlab.get_merge_requests_by_ids(followed_ids)
+        except Exception as e:
+            logger.error("Error obteniendo MRs seguidas: %s", e)
+            return []
+
+    @app.get("/gitlab/merge_requests/{project_id}/{mr_iid}/notes")
+    async def get_gitlab_mr_notes(project_id: str, mr_iid: int) -> list:
+        """Obtiene notas de usuario de un MR de GitLab."""
+        try:
+            gitlab = _source_registry._vcs_sources.get("gitlab")
+            if not gitlab:
+                return []
+            from .sources.gitlab import GitLabSource
+            if not isinstance(gitlab, GitLabSource):
+                return []
+            return await gitlab.get_mr_notes(project_id, mr_iid)
+        except Exception as e:
+            logger.error("Error obteniendo notas de MR %s!%d: %s", project_id, mr_iid, e)
+            return []
+
+    @app.get("/gitlab/merge_requests/{project_id}/{mr_iid}/conflicts")
+    async def get_gitlab_mr_conflicts(project_id: str, mr_iid: int) -> list:
+        """Obtiene archivos en conflicto de un MR."""
+        try:
+            gitlab = _source_registry._vcs_sources.get("gitlab")
+            if not gitlab:
+                return []
+            from .sources.gitlab import GitLabSource
+            if not isinstance(gitlab, GitLabSource):
+                return []
+            return await gitlab.get_mr_conflicts(project_id, mr_iid)
+        except Exception as e:
+            logger.error("Error obteniendo conflictos de MR %s!%d: %s", project_id, mr_iid, e)
+            return []
+
+    @app.get("/gitlab/todos")
+    async def get_gitlab_todos() -> list:
+        """Obtiene TODOs pendientes del usuario en GitLab."""
+        try:
+            gitlab = _source_registry._vcs_sources.get("gitlab")
+            if not gitlab:
+                return []
+            from .sources.gitlab import GitLabSource
+            if not isinstance(gitlab, GitLabSource):
+                return []
+            return await gitlab.get_todos()
+        except Exception as e:
+            logger.error("Error obteniendo TODOs de GitLab: %s", e)
+            return []
+
+    @app.get("/gitlab/user")
+    async def get_gitlab_user() -> dict:
+        """Obtiene info del usuario actual de GitLab."""
+        try:
+            gitlab = _source_registry._vcs_sources.get("gitlab")
+            if not gitlab:
+                return {}
+            from .sources.gitlab import GitLabSource
+            if not isinstance(gitlab, GitLabSource):
+                return {}
+            return await gitlab.get_current_user()
+        except Exception as e:
+            logger.error("Error obteniendo usuario de GitLab: %s", e)
+            return {}
+
+    # --- Notifications ---
+
+    @app.get("/notifications")
+    async def get_notifications(unread_only: bool = Query(default=True)) -> list:
+        """Obtiene notificaciones."""
+        try:
+            return await db.get_notifications(unread_only=unread_only)
+        except Exception as e:
+            logger.error("Error obteniendo notificaciones: %s", e)
+            return []
+
+    @app.get("/notifications/count")
+    async def get_notification_count() -> dict:
+        """Obtiene el numero de notificaciones no leidas."""
+        try:
+            count = await db.get_notification_count()
+            return {"count": count}
+        except Exception as e:
+            logger.error("Error obteniendo count de notificaciones: %s", e)
+            return {"count": 0}
+
+    @app.put("/notifications/{notification_id}/read")
+    async def mark_notification_read(notification_id: int) -> dict:
+        """Marca una notificacion como leida."""
+        await db.mark_notification_read(notification_id)
+        return {"status": "read", "id": notification_id}
+
+    @app.put("/notifications/read-all")
+    async def mark_all_notifications_read() -> dict:
+        """Marca todas las notificaciones como leidas."""
+        await db.mark_all_notifications_read()
+        return {"status": "all_read"}
 
     # --- Odoo entry update ---
 

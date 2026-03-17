@@ -45,6 +45,16 @@ pub struct AppConfig {
     pub capture_ssh: bool,
     pub gitlab_priority_labels: Vec<PriorityLabelMapping>,
     pub issue_notes_count: u32,
+    pub dashboard_widgets: Vec<serde_json::Value>,
+    pub notification_enabled: bool,
+    pub notification_interval_minutes: u32,
+    pub notification_retention_days: u32,
+    pub notification_comments: bool,
+    pub notification_pipeline_failed: bool,
+    pub notification_mr_approved: bool,
+    pub notification_changes_requested: bool,
+    pub notification_conflicts: bool,
+    pub notification_todos: bool,
 }
 
 impl Default for AppConfig {
@@ -90,6 +100,16 @@ impl Default for AppConfig {
                 PriorityLabelMapping { label: "Expedite".to_string(), weight: 100 },
             ],
             issue_notes_count: 5,
+            dashboard_widgets: vec![],
+            notification_enabled: true,
+            notification_interval_minutes: 5,
+            notification_retention_days: 7,
+            notification_comments: true,
+            notification_pipeline_failed: true,
+            notification_mr_approved: true,
+            notification_changes_requested: true,
+            notification_conflicts: true,
+            notification_todos: true,
         }
     }
 }

@@ -242,17 +242,19 @@ pub async fn get_integration_status() -> Result<serde_json::Value, String> {
     get_client().get("/config/integration-status").await
 }
 
-// --- GitLab Issues (preferences, search, followed, labels, notes) ---
+// --- Item preferences (generic: issue, mr) ---
 
 #[tauri::command]
-pub async fn get_issue_preferences() -> Result<serde_json::Value, String> {
-    get_client().get("/gitlab/issues/preferences").await
+pub async fn get_item_preferences(item_type: String) -> Result<serde_json::Value, String> {
+    get_client().get(&format!("/items/preferences?type={}", item_type)).await
 }
 
 #[tauri::command]
-pub async fn update_issue_preferences(issue_id: u64, body: serde_json::Value) -> Result<serde_json::Value, String> {
-    get_client().put_json(&format!("/gitlab/issues/{}/preferences", issue_id), &body).await
+pub async fn update_item_preferences(item_type: String, item_id: u64, body: serde_json::Value) -> Result<serde_json::Value, String> {
+    get_client().put_json(&format!("/items/{}/{}/preferences", item_type, item_id), &body).await
 }
+
+// --- GitLab Issues (search, followed, labels, notes) ---
 
 #[tauri::command]
 pub async fn search_gitlab_issues(q: String) -> Result<serde_json::Value, String> {
@@ -279,4 +281,60 @@ pub async fn get_issue_notes(project_id: String, issue_iid: u64, per_page: u32) 
 #[tauri::command]
 pub async fn update_timesheet_entry(entry_id: u64, body: serde_json::Value) -> Result<serde_json::Value, String> {
     get_client().put_json(&format!("/odoo/entries/{}", entry_id), &body).await
+}
+
+// --- GitLab Merge Requests (search, followed, notes, conflicts) ---
+
+#[tauri::command]
+pub async fn search_gitlab_merge_requests(q: String) -> Result<serde_json::Value, String> {
+    get_client().get(&format!("/gitlab/merge_requests/search?q={}", q)).await
+}
+
+#[tauri::command]
+pub async fn get_followed_merge_requests() -> Result<serde_json::Value, String> {
+    get_client().get("/gitlab/merge_requests/followed").await
+}
+
+#[tauri::command]
+pub async fn get_mr_notes(project_id: String, mr_iid: u64, per_page: u32) -> Result<serde_json::Value, String> {
+    get_client().get(&format!("/gitlab/merge_requests/{}/{}/notes?per_page={}", project_id, mr_iid, per_page)).await
+}
+
+#[tauri::command]
+pub async fn get_mr_conflicts(project_id: String, mr_iid: u64) -> Result<serde_json::Value, String> {
+    get_client().get(&format!("/gitlab/merge_requests/{}/{}/conflicts", project_id, mr_iid)).await
+}
+
+// --- GitLab Todos & User ---
+
+#[tauri::command]
+pub async fn get_gitlab_todos() -> Result<serde_json::Value, String> {
+    get_client().get("/gitlab/todos").await
+}
+
+#[tauri::command]
+pub async fn get_gitlab_user() -> Result<serde_json::Value, String> {
+    get_client().get("/gitlab/user").await
+}
+
+// --- Notifications ---
+
+#[tauri::command]
+pub async fn get_notifications(unread_only: bool) -> Result<serde_json::Value, String> {
+    get_client().get(&format!("/notifications?unread_only={}", unread_only)).await
+}
+
+#[tauri::command]
+pub async fn get_notification_count() -> Result<serde_json::Value, String> {
+    get_client().get("/notifications/count").await
+}
+
+#[tauri::command]
+pub async fn mark_notification_read(notification_id: u64) -> Result<serde_json::Value, String> {
+    get_client().put_json(&format!("/notifications/{}/read", notification_id), &serde_json::json!({})).await
+}
+
+#[tauri::command]
+pub async fn mark_all_notifications_read() -> Result<serde_json::Value, String> {
+    get_client().put_json("/notifications/read-all", &serde_json::json!({})).await
 }

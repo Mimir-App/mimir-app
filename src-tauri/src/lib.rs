@@ -48,13 +48,27 @@ pub fn run() {
             daemon::get_attendance_today,
             daemon::attendance_check_in,
             daemon::attendance_check_out,
+            // Item preferences (generic)
+            daemon::get_item_preferences,
+            daemon::update_item_preferences,
             // GitLab issues extended
-            daemon::get_issue_preferences,
-            daemon::update_issue_preferences,
             daemon::search_gitlab_issues,
             daemon::get_followed_issues,
             daemon::get_gitlab_labels,
             daemon::get_issue_notes,
+            // GitLab merge requests extended
+            daemon::search_gitlab_merge_requests,
+            daemon::get_followed_merge_requests,
+            daemon::get_mr_notes,
+            daemon::get_mr_conflicts,
+            // GitLab todos & user
+            daemon::get_gitlab_todos,
+            daemon::get_gitlab_user,
+            // Notifications
+            daemon::get_notifications,
+            daemon::get_notification_count,
+            daemon::mark_notification_read,
+            daemon::mark_all_notifications_read,
             // Odoo entries
             daemon::update_timesheet_entry,
             // Config

@@ -1,23 +1,17 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-
-export interface DashboardWidget {
-  id: string;
-  label: string;
-  span: 1 | 2 | 3;
-  rowSpan?: 1 | 2 | 3;
-}
+import { ref, computed, onMounted, onUnmounted, type Component } from 'vue';
+import type { DashboardWidget } from '../../lib/widget-registry';
 
 const props = defineProps<{
   widgets: DashboardWidget[];
-  order: string[];
-  spans: Record<string, [number, number]>;
   editing: boolean;
+  componentMap: Record<string, Component>;
 }>();
 
 const emit = defineEmits<{
-  'update:order': [order: string[]];
-  'update:spans': [spans: Record<string, [number, number]>];
+  'update:widgets': [widgets: DashboardWidget[]];
+  'configure': [widget: DashboardWidget];
+  'remove': [widgetId: string];
 }>();
 
 const dragId = ref<string | null>(null);
@@ -25,34 +19,28 @@ const dragOverId = ref<string | null>(null);
 const menuId = ref<string | null>(null);
 const gridEl = ref<HTMLElement | null>(null);
 
+const orderedWidgets = computed(() =>
+  [...props.widgets].sort((a, b) => a.position - b.position)
+);
+
 function getCols(w: DashboardWidget): number {
-  return props.spans[w.id]?.[1] ?? w.span;
+  return w.span[1];
 }
 
 function getRows(w: DashboardWidget): number {
-  return props.spans[w.id]?.[0] ?? w.rowSpan ?? 1;
+  return w.span[0];
 }
-
-const orderedWidgets = computed(() => {
-  const ordered: DashboardWidget[] = [];
-  for (const id of props.order) {
-    const w = props.widgets.find(w => w.id === id);
-    if (w) ordered.push(w);
-  }
-  for (const w of props.widgets) {
-    if (!ordered.find(o => o.id === w.id)) ordered.push(w);
-  }
-  return ordered;
-});
 
 function toggleMenu(id: string, e: MouseEvent) {
   e.stopPropagation();
   menuId.value = menuId.value === id ? null : id;
 }
 
-function setSize(id: string, rows: number, cols: number) {
-  const newSpans = { ...props.spans, [id]: [rows, cols] as [number, number] };
-  emit('update:spans', newSpans);
+function setSize(widget: DashboardWidget, rows: number, cols: number) {
+  const updated = props.widgets.map(w =>
+    w.id === widget.id ? { ...w, span: [rows, cols] as [number, number] } : w
+  );
+  emit('update:widgets', updated);
   menuId.value = null;
 }
 
@@ -76,11 +64,18 @@ function onDragLeave() { dragOverId.value = null; }
 function onDrop(e: DragEvent, targetId: string) {
   e.preventDefault(); dragOverId.value = null;
   if (!dragId.value || dragId.value === targetId) { dragId.value = null; return; }
-  const order = orderedWidgets.value.map(w => w.id);
-  const from = order.indexOf(dragId.value); const to = order.indexOf(targetId);
-  if (from === -1 || to === -1) return;
-  order.splice(from, 1); order.splice(to, 0, dragId.value);
-  emit('update:order', order); dragId.value = null;
+  const ordered = orderedWidgets.value;
+  const fromIdx = ordered.findIndex(w => w.id === dragId.value);
+  const toIdx = ordered.findIndex(w => w.id === targetId);
+  if (fromIdx === -1 || toIdx === -1) return;
+  // Swap positions
+  const updated = props.widgets.map(w => {
+    if (w.id === dragId.value) return { ...w, position: ordered[toIdx].position };
+    if (w.id === targetId) return { ...w, position: ordered[fromIdx].position };
+    return w;
+  });
+  emit('update:widgets', updated);
+  dragId.value = null;
 }
 function onDragEnd() { dragId.value = null; dragOverId.value = null; }
 </script>
@@ -108,7 +103,13 @@ function onDragEnd() { dragId.value = null; dragOverId.value = null; }
     >
       <!-- Controles solo en modo edicion -->
       <div v-if="editing" class="cell-controls">
-        <span class="widget-label">{{ widget.label }}</span>
+        <span class="widget-label">{{ widget.type }}</span>
+        <button class="control-btn remove-btn" @click.stop="emit('remove', widget.id)" title="Eliminar widget">
+          &times;
+        </button>
+        <button class="control-btn gear-btn" @click.stop="emit('configure', widget)" title="Configurar widget">
+          &#x2699;
+        </button>
         <button class="control-btn" @click.stop="toggleMenu(widget.id, $event)" title="Cambiar tamano">
           {{ getRows(widget) }}x{{ getCols(widget) }}
         </button>
@@ -122,7 +123,7 @@ function onDragEnd() { dragId.value = null; dragOverId.value = null; }
                   v-for="c in 3" :key="'cell' + r + c"
                   class="size-cell"
                   :class="{ active: getRows(widget) === r && getCols(widget) === c }"
-                  @click="setSize(widget.id, r, c)"
+                  @click="setSize(widget, r, c)"
                   :title="`${r} x ${c}`"
                 >
                   <span class="cell-preview">
@@ -138,7 +139,11 @@ function onDragEnd() { dragId.value = null; dragOverId.value = null; }
         </Transition>
       </div>
 
-      <slot :name="widget.id" />
+      <!-- Contenido del widget -->
+      <component
+        :is="componentMap[widget.type]"
+        :config="widget.config"
+      />
     </div>
   </div>
 </template>
@@ -208,6 +213,11 @@ function onDragEnd() { dragId.value = null; dragOverId.value = null; }
   background: var(--bg-hover);
   color: var(--text-primary);
   border-color: var(--accent);
+}
+
+.remove-btn:hover {
+  border-color: var(--error);
+  color: var(--error);
 }
 
 /* Size menu */
