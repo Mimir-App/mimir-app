@@ -48,6 +48,15 @@ pub fn run() {
             daemon::get_attendance_today,
             daemon::attendance_check_in,
             daemon::attendance_check_out,
+            // GitLab issues extended
+            daemon::get_issue_preferences,
+            daemon::update_issue_preferences,
+            daemon::search_gitlab_issues,
+            daemon::get_followed_issues,
+            daemon::get_gitlab_labels,
+            daemon::get_issue_notes,
+            // Odoo entries
+            daemon::update_timesheet_entry,
             // Config
             config::get_config,
             config::save_config,

@@ -241,3 +241,42 @@ pub async fn generate_block_description(block_id: i64) -> Result<serde_json::Val
 pub async fn get_integration_status() -> Result<serde_json::Value, String> {
     get_client().get("/config/integration-status").await
 }
+
+// --- GitLab Issues (preferences, search, followed, labels, notes) ---
+
+#[tauri::command]
+pub async fn get_issue_preferences() -> Result<serde_json::Value, String> {
+    get_client().get("/gitlab/issues/preferences").await
+}
+
+#[tauri::command]
+pub async fn update_issue_preferences(issue_id: u64, body: serde_json::Value) -> Result<serde_json::Value, String> {
+    get_client().put_json(&format!("/gitlab/issues/{}/preferences", issue_id), &body).await
+}
+
+#[tauri::command]
+pub async fn search_gitlab_issues(q: String) -> Result<serde_json::Value, String> {
+    get_client().get(&format!("/gitlab/issues/search?q={}", q)).await
+}
+
+#[tauri::command]
+pub async fn get_followed_issues() -> Result<serde_json::Value, String> {
+    get_client().get("/gitlab/issues/followed").await
+}
+
+#[tauri::command]
+pub async fn get_gitlab_labels() -> Result<serde_json::Value, String> {
+    get_client().get("/gitlab/labels").await
+}
+
+#[tauri::command]
+pub async fn get_issue_notes(project_id: String, issue_iid: u64, per_page: u32) -> Result<serde_json::Value, String> {
+    get_client().get(&format!("/gitlab/issues/{}/{}/notes?per_page={}", project_id, issue_iid, per_page)).await
+}
+
+// --- Odoo entries ---
+
+#[tauri::command]
+pub async fn update_timesheet_entry(entry_id: u64, body: serde_json::Value) -> Result<serde_json::Value, String> {
+    get_client().put_json(&format!("/odoo/entries/{}", entry_id), &body).await
+}

@@ -91,5 +91,84 @@ class GitLabSource(VCSSource):
         logger.info("GitLab: %d MRs obtenidas", len(unique))
         return unique
 
+    async def search_issues(self, query: str, per_page: int = 20) -> list[dict]:
+        """Busca issues en todos los proyectos accesibles."""
+        try:
+            resp = await self._client.get(
+                "/issues",
+                params={"search": query, "scope": "all", "state": "opened", "per_page": per_page},
+            )
+            resp.raise_for_status()
+            issues = resp.json()
+            for issue in issues:
+                ref = issue.get("references", {}).get("full", "")
+                issue["project_path"] = ref.rsplit("#", 1)[0] if "#" in ref else ""
+            return issues
+        except Exception as e:
+            logger.error("Error buscando issues en GitLab: %s", e)
+            return []
+
+    async def get_issue_notes(
+        self, project_id: str, issue_iid: int, per_page: int = 5
+    ) -> list[dict]:
+        """Obtiene notas de usuario de una issue (excluye system notes)."""
+        try:
+            resp = await self._client.get(
+                f"/projects/{project_id}/issues/{issue_iid}/notes",
+                params={"sort": "desc", "per_page": per_page * 2},
+            )
+            resp.raise_for_status()
+            notes = [n for n in resp.json() if not n.get("system", False)]
+            return notes[:per_page]
+        except Exception as e:
+            logger.error("Error obteniendo notas de issue %s#%d: %s", project_id, issue_iid, e)
+            return []
+
+    async def get_issues_by_ids(self, issue_ids: list[int]) -> list[dict]:
+        """Obtiene issues por sus IDs globales."""
+        if not issue_ids:
+            return []
+        results = []
+        for gid in issue_ids:
+            try:
+                resp = await self._client.get(f"/issues/{gid}")
+                if resp.status_code == 200:
+                    issue = resp.json()
+                    ref = issue.get("references", {}).get("full", "")
+                    issue["project_path"] = ref.rsplit("#", 1)[0] if "#" in ref else ""
+                    results.append(issue)
+            except Exception:
+                continue
+        return results
+
+    async def get_labels(self, project_paths: list[str] | None = None) -> list[dict]:
+        """Obtiene labels unicas de los proyectos del usuario."""
+        try:
+            seen: set[str] = set()
+            labels = []
+            if not project_paths:
+                issues = await self.get_issues()
+                project_paths = list({i["project_path"] for i in issues})
+
+            for path in project_paths:
+                encoded = path.replace("/", "%2F")
+                try:
+                    resp = await self._client.get(
+                        f"/projects/{encoded}/labels",
+                        params={"per_page": 100},
+                    )
+                    if resp.status_code == 200:
+                        for label in resp.json():
+                            name = label["name"]
+                            if name not in seen:
+                                seen.add(name)
+                                labels.append({"name": name, "color": label.get("color", "")})
+                except Exception:
+                    continue
+            return sorted(labels, key=lambda l: l["name"])
+        except Exception as e:
+            logger.error("Error obteniendo labels de GitLab: %s", e)
+            return []
+
     async def close(self) -> None:
         await self._client.aclose()

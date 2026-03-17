@@ -40,6 +40,22 @@ class LinuxProvider(PlatformProvider):
         else:
             logger.warning("XDG_SESSION_TYPE no definido, usando xdotool como fallback")
 
+        if not self._use_wayland:
+            import subprocess
+            try:
+                result = subprocess.run(
+                    ["xdotool", "getactivewindow"],
+                    capture_output=True, text=True, timeout=3
+                )
+                if result.returncode == 0:
+                    logger.info("xdotool verificado correctamente (ventana: %s)", result.stdout.strip())
+                else:
+                    logger.error("xdotool fallo al arrancar: %s", result.stderr.strip())
+            except FileNotFoundError:
+                logger.error("xdotool no esta instalado. La captura X11 NO funcionara.")
+            except Exception as e:
+                logger.error("Error verificando xdotool: %s", e)
+
         # Listener de lock/unlock (funciona en ambos)
         try:
             self._dbus_task = asyncio.create_task(self._listen_dbus())
@@ -133,7 +149,7 @@ class LinuxProvider(PlatformProvider):
             return WindowInfo(pid=pid, app_name=app_name, window_title=title)
 
         except FileNotFoundError:
-            logger.warning(
+            logger.error(
                 "xdotool no encontrado. Instalar con: sudo apt install xdotool"
             )
         except Exception as e:

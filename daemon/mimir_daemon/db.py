@@ -79,6 +79,14 @@ CREATE TABLE IF NOT EXISTS context_mappings (
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS issue_preferences (
+    issue_id INTEGER PRIMARY KEY,
+    manual_score INTEGER DEFAULT 0,
+    followed BOOLEAN DEFAULT FALSE,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp TEXT NOT NULL,
@@ -392,3 +400,50 @@ class Database:
         ) as cursor:
             await self.db.commit()
             return cursor.rowcount
+
+    # --- Issue preferences ---
+
+    async def upsert_issue_preference(
+        self, issue_id: int, manual_score: int | None = None, followed: bool | None = None
+    ) -> None:
+        """Crea o actualiza preferencia de issue."""
+        async with self.db.execute(
+            "SELECT * FROM issue_preferences WHERE issue_id = ?", (issue_id,)
+        ) as cursor:
+            existing = await cursor.fetchone()
+        if existing:
+            updates = []
+            params: list = []
+            if manual_score is not None:
+                updates.append("manual_score = ?")
+                params.append(manual_score)
+            if followed is not None:
+                updates.append("followed = ?")
+                params.append(followed)
+            if updates:
+                updates.append("updated_at = datetime('now')")
+                params.append(issue_id)
+                await self.db.execute(
+                    f"UPDATE issue_preferences SET {', '.join(updates)} WHERE issue_id = ?",
+                    params,
+                )
+        else:
+            await self.db.execute(
+                "INSERT INTO issue_preferences (issue_id, manual_score, followed) VALUES (?, ?, ?)",
+                (issue_id, manual_score or 0, followed or False),
+            )
+        await self.db.commit()
+
+    async def get_all_issue_preferences(self) -> list[dict]:
+        """Obtiene todas las preferencias de issues."""
+        async with self.db.execute("SELECT * FROM issue_preferences") as cursor:
+            rows = await cursor.fetchall()
+            return [dict(r) for r in rows]
+
+    async def get_followed_issue_ids(self) -> list[int]:
+        """Obtiene IDs de issues seguidas."""
+        async with self.db.execute(
+            "SELECT issue_id FROM issue_preferences WHERE followed = 1"
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [r["issue_id"] for r in rows]

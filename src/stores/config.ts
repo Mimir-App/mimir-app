@@ -36,6 +36,8 @@ const DEFAULT_CONFIG: AppConfig = {
   capture_idle: true,
   capture_audio: true,
   capture_ssh: true,
+  gitlab_priority_labels: [],
+  issue_notes_count: 5,
 };
 
 export const useConfigStore = defineStore('config', () => {

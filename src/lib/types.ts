@@ -93,6 +93,24 @@ export interface GitLabMergeRequest {
   manual_priority: number | null;
 }
 
+export interface IssuePreference {
+  issue_id: number;
+  manual_score: number;
+  followed: boolean;
+}
+
+export interface GitLabLabel {
+  name: string;
+  color: string;
+}
+
+export interface GitLabNote {
+  id: number;
+  body: string;
+  author: { username: string };
+  created_at: string;
+}
+
 export interface GitLabUser {
   id: number;
   username: string;
@@ -176,4 +194,6 @@ export interface AppConfig {
   capture_idle: boolean;
   capture_audio: boolean;
   capture_ssh: boolean;
+  gitlab_priority_labels: Array<{ label: string; weight: number }>;
+  issue_notes_count: number;
 }

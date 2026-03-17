@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { GitLabIssue } from '../lib/types';
-import { computeIssueScore, sortByScore, groupByProject } from '../lib/scoring';
+import type { GitLabIssue, IssuePreference } from '../lib/types';
+import { computeIssueScore, sortByScore, groupByProject, setPriorityLabels } from '../lib/scoring';
 import { api } from '../lib/api';
+import { useConfigStore } from './config';
 
 export type IssueGroupBy = 'project' | 'priority' | 'none';
 
@@ -21,24 +22,68 @@ export const useIssuesStore = defineStore('issues', () => {
   const error = ref<string | null>(null);
   const filterText = ref('');
   const groupBy = ref<IssueGroupBy>('project');
+  const preferences = ref<Map<number, IssuePreference>>(new Map());
+  const followedIssues = ref<GitLabIssue[]>([]);
+  const searchResults = ref<GitLabIssue[]>([]);
+  const searchLoading = ref(false);
+  const activeFilter = ref<'all' | 'assigned' | 'followed'>('all');
+
+  /** Merge assigned + followed, deduplicando por id */
+  const allIssues = computed(() => {
+    const seen = new Set<number>();
+    const result: GitLabIssue[] = [];
+    for (const issue of issues.value) {
+      if (!seen.has(issue.id)) {
+        seen.add(issue.id);
+        result.push(issue);
+      }
+    }
+    for (const issue of followedIssues.value) {
+      if (!seen.has(issue.id)) {
+        seen.add(issue.id);
+        result.push(issue);
+      }
+    }
+    return result;
+  });
 
   const scoredIssues = computed(() => {
-    const scored = issues.value.map(issue => ({
-      ...issue,
-      score: computeIssueScore(issue),
-    }));
+    const scored = allIssues.value.map(issue => {
+      const pref = preferences.value.get(issue.id);
+      const manualPriority = pref?.manual_score ?? issue.manual_priority ?? 0;
+      const issueWithPref = { ...issue, manual_priority: manualPriority };
+      const isFollowed = followedIssues.value.some(f => f.id === issue.id);
+      return {
+        ...issueWithPref,
+        score: computeIssueScore(issueWithPref),
+        _followed: isFollowed,
+      };
+    });
     return sortByScore(scored);
   });
 
   const filteredIssues = computed(() => {
-    if (!filterText.value) return scoredIssues.value;
-    const q = filterText.value.toLowerCase();
-    return scoredIssues.value.filter(
-      i =>
-        i.title.toLowerCase().includes(q) ||
-        i.project_path.toLowerCase().includes(q) ||
-        i.labels.some(l => l.toLowerCase().includes(q))
-    );
+    let result = scoredIssues.value;
+
+    // Aplicar filtro activo
+    if (activeFilter.value === 'assigned') {
+      result = result.filter(i => !i._followed || issues.value.some(a => a.id === i.id));
+    } else if (activeFilter.value === 'followed') {
+      result = result.filter(i => i._followed);
+    }
+
+    // Aplicar filtro de texto
+    if (filterText.value) {
+      const q = filterText.value.toLowerCase();
+      result = result.filter(
+        i =>
+          i.title.toLowerCase().includes(q) ||
+          i.project_path.toLowerCase().includes(q) ||
+          i.labels.some(l => l.toLowerCase().includes(q))
+      );
+    }
+
+    return result;
   });
 
   const groupedByProject = computed(() => groupByProject(filteredIssues.value));
@@ -66,11 +111,54 @@ export const useIssuesStore = defineStore('issues', () => {
     }
   });
 
+  async function fetchPreferences() {
+    const prefs = await api.getIssuePreferences();
+    preferences.value = new Map(prefs.map(p => [p.issue_id, p]));
+  }
+
+  async function fetchFollowedIssues() {
+    followedIssues.value = await api.getFollowedIssues();
+  }
+
+  async function searchIssues(query: string) {
+    if (query.length < 2) { searchResults.value = []; return; }
+    searchLoading.value = true;
+    try {
+      searchResults.value = await api.searchGitlabIssues(query);
+    } finally {
+      searchLoading.value = false;
+    }
+  }
+
+  async function updatePreference(issueId: number, data: Partial<IssuePreference>) {
+    await api.updateIssuePreferences(issueId, data);
+    const existing = preferences.value.get(issueId) || { issue_id: issueId, manual_score: 0, followed: false };
+    preferences.value.set(issueId, { ...existing, ...data } as IssuePreference);
+  }
+
+  async function followIssue(issueId: number) {
+    await updatePreference(issueId, { followed: true });
+    await fetchFollowedIssues();
+  }
+
+  async function unfollowIssue(issueId: number) {
+    await updatePreference(issueId, { followed: false });
+    followedIssues.value = followedIssues.value.filter(i => i.id !== issueId);
+  }
+
   async function fetchIssues() {
     loading.value = true;
     error.value = null;
     try {
+      // Aplicar priority labels desde config
+      const configStore = useConfigStore();
+      if (configStore.config.gitlab_priority_labels?.length) {
+        setPriorityLabels(configStore.config.gitlab_priority_labels);
+      }
+
       issues.value = await api.getIssues() as GitLabIssue[];
+      await fetchPreferences();
+      await fetchFollowedIssues();
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
     } finally {
@@ -84,9 +172,21 @@ export const useIssuesStore = defineStore('issues', () => {
     error,
     filterText,
     groupBy,
+    preferences,
+    followedIssues,
+    searchResults,
+    searchLoading,
+    activeFilter,
+    allIssues,
     scoredIssues,
     filteredIssues,
     groupedIssues,
     fetchIssues,
+    fetchPreferences,
+    fetchFollowedIssues,
+    searchIssues,
+    updatePreference,
+    followIssue,
+    unfollowIssue,
   };
 });

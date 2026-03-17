@@ -21,10 +21,11 @@ class OdooV16Client(TimesheetClient):
     o mediante sesión JSONRPC si el endpoint REST no está disponible.
     """
 
-    def __init__(self, url: str, db: str, token: str) -> None:
+    def __init__(self, url: str, db: str, token: str, timezone: str = "Europe/Madrid") -> None:
         self._url = url.rstrip("/")
         self._db = db
         self._token = token
+        self._timezone = timezone
         self._client = httpx.AsyncClient(
             base_url=self._url,
             headers={
@@ -265,8 +266,10 @@ class OdooV16Client(TimesheetClient):
 
     async def get_today_attendance(self) -> dict[str, Any] | None:
         """Obtiene el attendance de hoy del empleado."""
-        from datetime import datetime, timezone
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        import zoneinfo
+        from datetime import datetime
+        user_tz = zoneinfo.ZoneInfo(self._timezone)
+        today = datetime.now(user_tz).strftime("%Y-%m-%d")
         domain = [
             ("employee_id", "=", self._employee_id),
             ("check_in", ">=", f"{today} 00:00:00"),

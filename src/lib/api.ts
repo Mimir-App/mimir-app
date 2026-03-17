@@ -4,6 +4,8 @@
  * En navegador: llama directamente al daemon HTTP en localhost:9477.
  */
 
+import type { IssuePreference, GitLabIssue, GitLabLabel, GitLabNote } from './types';
+
 const DAEMON_BASE = 'http://127.0.0.1:9477';
 
 let _isTauri: boolean | null = null;
@@ -277,5 +279,40 @@ export const api = {
   },
   async restartServer() {
     if (await isTauri()) return tauriInvoke('restart_server_service');
+  },
+
+  async getIssuePreferences(): Promise<IssuePreference[]> {
+    if (await isTauri()) return tauriInvoke('get_issue_preferences');
+    return httpGet('/gitlab/issues/preferences');
+  },
+
+  async updateIssuePreferences(issueId: number, body: Partial<IssuePreference>): Promise<void> {
+    if (await isTauri()) return tauriInvoke('update_issue_preferences', { issueId, body });
+    return httpPut(`/gitlab/issues/${issueId}/preferences`, body);
+  },
+
+  async searchGitlabIssues(q: string): Promise<GitLabIssue[]> {
+    if (await isTauri()) return tauriInvoke('search_gitlab_issues', { q });
+    return httpGet(`/gitlab/issues/search?q=${encodeURIComponent(q)}`);
+  },
+
+  async getFollowedIssues(): Promise<GitLabIssue[]> {
+    if (await isTauri()) return tauriInvoke('get_followed_issues');
+    return httpGet('/gitlab/issues/followed');
+  },
+
+  async getGitlabLabels(): Promise<GitLabLabel[]> {
+    if (await isTauri()) return tauriInvoke('get_gitlab_labels');
+    return httpGet('/gitlab/labels');
+  },
+
+  async getIssueNotes(projectId: string, issueIid: number, perPage: number = 5): Promise<GitLabNote[]> {
+    if (await isTauri()) return tauriInvoke('get_issue_notes', { projectId, issueIid, perPage });
+    return httpGet(`/gitlab/issues/${projectId}/${issueIid}/notes?per_page=${perPage}`);
+  },
+
+  async updateTimesheetEntry(entryId: number, body: { description?: string; hours?: number; project_id?: number; task_id?: number }): Promise<void> {
+    if (await isTauri()) return tauriInvoke('update_timesheet_entry', { entryId, body });
+    return httpPut(`/odoo/entries/${entryId}`, body);
   },
 };

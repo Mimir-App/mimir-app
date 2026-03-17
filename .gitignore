@@ -45,5 +45,8 @@ daemon/build/
 *.sln
 *.sw?
 
+# Worktrees
+.worktrees/
+
 # OS
 Thumbs.db

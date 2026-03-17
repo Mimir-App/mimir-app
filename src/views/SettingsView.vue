@@ -523,6 +523,55 @@ async function toggleServer() {
             </tbody>
           </table>
         </ModalDialog>
+
+        <!-- Scoring: prioridad de labels + notas -->
+        <div class="setting-group">
+          <h3 class="setting-group-title">Scoring de issues</h3>
+          <table class="settings-table">
+            <tbody>
+              <tr>
+                <td class="label-cell">Comentarios en detalle de issue <HelpTooltip text="Numero de comentarios recientes a mostrar al abrir el detalle de una issue." /></td>
+                <td>
+                  <div class="inline-field">
+                    <input type="number" v-model.number="configStore.config.issue_notes_count" min="1" max="20" />
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p class="section-hint" style="margin-top: 16px;">
+            Mapeo de prioridad de labels: asigna un peso (0-100) a cada label de GitLab para influir en el scoring de issues.
+          </p>
+          <table class="settings-table priority-labels-table">
+            <thead>
+              <tr>
+                <th>Label</th>
+                <th style="width: 100px;">Peso</th>
+                <th style="width: 40px;"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="(rule, idx) in configStore.config.gitlab_priority_labels" :key="idx">
+                <td><input type="text" v-model="rule.label" placeholder="Ej: priority::1" /></td>
+                <td><input type="number" v-model.number="rule.weight" min="0" max="100" /></td>
+                <td class="action-cell">
+                  <button type="button" class="btn btn-danger btn-sm" @click="configStore.config.gitlab_priority_labels.splice(idx, 1)">
+                    &times;
+                  </button>
+                </td>
+              </tr>
+              <tr v-if="configStore.config.gitlab_priority_labels.length === 0">
+                <td colspan="3" class="empty-hint">Sin reglas de prioridad. Anade una para personalizar el scoring.</td>
+              </tr>
+            </tbody>
+          </table>
+          <div style="margin-top: 8px;">
+            <button type="button" class="btn btn-secondary btn-sm" @click="configStore.config.gitlab_priority_labels.push({ label: '', weight: 50 })">
+              Anadir regla
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- IA -->
@@ -761,7 +810,7 @@ async function toggleServer() {
               <td class="detail">
                 <template v-if="googleCalendarConnected">Eventos del calendario enriquecen las senales</template>
                 <template v-else-if="configStore.config.google_client_id">Autoriza el acceso a tu calendario</template>
-                <template v-else>Configura Client ID y Secret en la pestaña Captura</template>
+                <template v-else>Configura Client ID y Secret en la pestaña Google</template>
               </td>
               <td class="action-cell">
                 <button
@@ -1143,4 +1192,52 @@ async function toggleServer() {
 .toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; }
 .toggle input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
 .toggle-label { font-size: 13px; color: var(--text-secondary); }
+
+/* Setting groups */
+.setting-group {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.setting-group-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 12px;
+}
+
+/* Priority labels table */
+.priority-labels-table {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.priority-labels-table th {
+  text-align: left;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.priority-labels-table td {
+  border-bottom: 1px solid var(--border);
+}
+
+.priority-labels-table tr:last-child td {
+  border-bottom: none;
+}
+
+.empty-hint {
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-style: italic;
+  padding: 16px 10px !important;
+}
 </style>

@@ -442,13 +442,17 @@ def create_server_app(
     async def get_odoo_entries(
         date_from: str = Query(alias="from"),
         date_to: str = Query(alias="to"),
+        task_id: int | None = Query(default=None),
     ) -> list:
         """Obtiene entradas de timesheet de Odoo en un rango."""
         client = _registry.timesheet
         if not client:
             return []
         try:
-            return await client.get_entries(date_from, date_to)
+            entries = await client.get_entries(date_from, date_to)
+            if task_id is not None:
+                entries = [e for e in entries if e.get("task_id") == task_id]
+            return entries
         except Exception as e:
             logger.error("Error obteniendo entradas de Odoo: %s", e)
             return []
@@ -590,6 +594,7 @@ def create_server_app(
                         db=req.odoo_db,
                         username=req.odoo_username,
                         password=req.odoo_token,
+                        timezone=config_data.get("timezone", "Europe/Madrid"),
                     )
                     auth_ok = await client.authenticate()
                     if auth_ok:
@@ -608,6 +613,7 @@ def create_server_app(
                         url=req.odoo_url,
                         db=req.odoo_db,
                         token=req.odoo_token,
+                        timezone=config_data.get("timezone", "Europe/Madrid"),
                     )
                     auth_ok = await client.authenticate()
                     if auth_ok:
@@ -703,5 +709,122 @@ def create_server_app(
         except Exception as e:
             logger.error("Error obteniendo MRs de GitLab: %s", e)
             return []
+
+    @app.get("/gitlab/issues/preferences")
+    async def get_gitlab_issue_preferences() -> list:
+        """Obtiene todas las preferencias de issues desde la base de datos."""
+        try:
+            return await db.get_all_issue_preferences()
+        except Exception as e:
+            logger.error("Error obteniendo preferencias de issues: %s", e)
+            return []
+
+    class IssuePreferenceRequest(BaseModel):
+        manual_score: int | None = None
+        followed: bool | None = None
+
+    @app.put("/gitlab/issues/{issue_id}/preferences")
+    async def upsert_gitlab_issue_preference(
+        issue_id: int, req: IssuePreferenceRequest
+    ) -> dict:
+        """Crea o actualiza preferencia de una issue."""
+        await db.upsert_issue_preference(
+            issue_id=issue_id,
+            manual_score=req.manual_score,
+            followed=req.followed,
+        )
+        return {"status": "updated", "issue_id": issue_id}
+
+    @app.get("/gitlab/issues/followed")
+    async def get_gitlab_followed_issues() -> list:
+        """Obtiene issues seguidas con datos frescos de GitLab."""
+        try:
+            followed_ids = await db.get_followed_issue_ids()
+            if not followed_ids:
+                return []
+            gitlab = _source_registry._vcs_sources.get("gitlab")
+            if not gitlab:
+                return []
+            from .sources.gitlab import GitLabSource
+            if not isinstance(gitlab, GitLabSource):
+                return []
+            return await gitlab.get_issues_by_ids(followed_ids)
+        except Exception as e:
+            logger.error("Error obteniendo issues seguidas: %s", e)
+            return []
+
+    @app.get("/gitlab/issues/search")
+    async def search_gitlab_issues(q: str = Query(..., min_length=2)) -> list:
+        """Busca issues en GitLab por texto."""
+        try:
+            gitlab = _source_registry._vcs_sources.get("gitlab")
+            if not gitlab:
+                return []
+            from .sources.gitlab import GitLabSource
+            if not isinstance(gitlab, GitLabSource):
+                return []
+            return await gitlab.search_issues(q)
+        except Exception as e:
+            logger.error("Error buscando issues en GitLab: %s", e)
+            return []
+
+    @app.get("/gitlab/labels")
+    async def get_gitlab_labels() -> list:
+        """Obtiene labels unicas de los proyectos del usuario."""
+        try:
+            gitlab = _source_registry._vcs_sources.get("gitlab")
+            if not gitlab:
+                return []
+            from .sources.gitlab import GitLabSource
+            if not isinstance(gitlab, GitLabSource):
+                return []
+            return await gitlab.get_labels()
+        except Exception as e:
+            logger.error("Error obteniendo labels de GitLab: %s", e)
+            return []
+
+    @app.get("/gitlab/issues/{project_id}/{issue_iid}/notes")
+    async def get_gitlab_issue_notes(project_id: str, issue_iid: int) -> list:
+        """Obtiene notas de usuario de una issue de GitLab."""
+        try:
+            gitlab = _source_registry._vcs_sources.get("gitlab")
+            if not gitlab:
+                return []
+            from .sources.gitlab import GitLabSource
+            if not isinstance(gitlab, GitLabSource):
+                return []
+            return await gitlab.get_issue_notes(project_id, issue_iid)
+        except Exception as e:
+            logger.error("Error obteniendo notas de issue %s#%d: %s", project_id, issue_iid, e)
+            return []
+
+    # --- Odoo entry update ---
+
+    class OdooEntryUpdateRequest(BaseModel):
+        project_id: int | None = None
+        task_id: int | None = None
+        description: str | None = None
+        hours: float | None = None
+        date: str | None = None
+
+    @app.put("/odoo/entries/{entry_id}")
+    async def update_odoo_entry(entry_id: int, req: OdooEntryUpdateRequest) -> dict:
+        """Actualiza una entrada de timesheet en Odoo."""
+        client = _registry.timesheet
+        if not client:
+            raise HTTPException(503, "No hay cliente de timesheet configurado")
+        try:
+            entry = TimesheetEntryData(
+                date=req.date or "",
+                project_id=req.project_id or 0,
+                task_id=req.task_id,
+                description=req.description or "",
+                hours=req.hours or 0.0,
+            )
+            await client.update_entry(entry_id, entry)
+            return {"status": "updated", "entry_id": entry_id}
+        except Exception as e:
+            logger.error("Error actualizando entrada Odoo %d: %s", entry_id, e)
+            raise HTTPException(502, f"Error actualizando entrada: {e}")
 
     return app

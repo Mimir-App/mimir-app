@@ -3,6 +3,12 @@ use std::fs;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PriorityLabelMapping {
+    pub label: String,
+    pub weight: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppConfig {
     pub daemon_port: u16,
@@ -27,6 +33,18 @@ pub struct AppConfig {
     pub dashboard_order: Vec<String>,
     pub dashboard_spans: std::collections::HashMap<String, Vec<u32>>,
     pub column_widths: std::collections::HashMap<String, u32>,
+    pub timezone: String,
+    pub signals_retention_days: u32,
+    pub blocks_retention_days: u32,
+    pub google_client_id: String,
+    pub google_client_secret: String,
+    pub capture_window: bool,
+    pub capture_git: bool,
+    pub capture_idle: bool,
+    pub capture_audio: bool,
+    pub capture_ssh: bool,
+    pub gitlab_priority_labels: Vec<PriorityLabelMapping>,
+    pub issue_notes_count: u32,
 }
 
 impl Default for AppConfig {
@@ -54,6 +72,24 @@ impl Default for AppConfig {
             dashboard_order: vec![],
             dashboard_spans: std::collections::HashMap::<String, Vec<u32>>::new(),
             column_widths: std::collections::HashMap::new(),
+            timezone: "Europe/Madrid".to_string(),
+            signals_retention_days: 90,
+            blocks_retention_days: 180,
+            google_client_id: String::new(),
+            google_client_secret: String::new(),
+            capture_window: true,
+            capture_git: true,
+            capture_idle: true,
+            capture_audio: true,
+            capture_ssh: true,
+            gitlab_priority_labels: vec![
+                PriorityLabelMapping { label: "priority::critical".to_string(), weight: 100 },
+                PriorityLabelMapping { label: "priority::high".to_string(), weight: 75 },
+                PriorityLabelMapping { label: "priority::medium".to_string(), weight: 50 },
+                PriorityLabelMapping { label: "priority::low".to_string(), weight: 25 },
+                PriorityLabelMapping { label: "Expedite".to_string(), weight: 100 },
+            ],
+            issue_notes_count: 5,
         }
     }
 }

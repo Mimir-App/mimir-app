@@ -6,7 +6,8 @@ import { useSortable } from '../../composables/useSortable';
 import { useColumnWidths } from '../../composables/useColumnWidths';
 import ScoreBadge from '../shared/ScoreBadge.vue';
 
-const props = defineProps<{ issues: GitLabIssue[] }>();
+const props = defineProps<{ issues: GitLabIssue[]; followedIds?: Set<number> }>();
+const emit = defineEmits<{ select: [issue: GitLabIssue] }>();
 const { toggleSort, sortIcon, sorted } = useSortable(toRef(props, 'issues'), 'score', 'desc');
 const { colStyle, startResize } = useColumnWidths();
 </script>
@@ -36,11 +37,16 @@ const { colStyle, startResize } = useColumnWidths();
       </tr>
     </thead>
     <tbody>
-      <tr v-for="issue in sorted" :key="issue.id" class="data-row">
-        <td :style="colStyle('score')"><ScoreBadge :score="issue.score" /></td>
+      <tr v-for="issue in sorted" :key="issue.id" class="data-row clickable-row" @click="emit('select', issue)">
+        <td :style="colStyle('score')">
+          <span class="score-cell">
+            <span v-if="followedIds?.has(issue.id)" class="followed-dot" title="Seguida"></span>
+            <ScoreBadge :score="issue.score" />
+          </span>
+        </td>
         <td :style="colStyle('iid')" class="muted">{{ issue.iid }}</td>
         <td class="col-expand">
-          <a :href="issue.web_url" target="_blank" class="link">{{ issue.title }}</a>
+          <a :href="issue.web_url" target="_blank" class="link" @click.stop>{{ issue.title }}</a>
         </td>
         <td :style="colStyle('labels')">
           <span v-for="label in issue.labels.slice(0, 3)" :key="label" class="label-tag">{{ label }}</span>
@@ -86,11 +92,27 @@ const { colStyle, startResize } = useColumnWidths();
 }
 
 .data-row:hover td { background: var(--bg-hover); }
+.clickable-row { cursor: pointer; }
 .col-expand { width: auto; }
 .muted { color: var(--text-secondary); }
 
 .link { color: var(--text-primary); text-decoration: none; overflow: hidden; text-overflow: ellipsis; display: block; }
 .link:hover { color: var(--accent); text-decoration: underline; }
+
+.score-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.followed-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
 
 .label-tag {
   display: inline-block; padding: 1px 6px; margin-right: 4px;

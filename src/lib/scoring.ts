@@ -16,8 +16,8 @@ const WEIGHTS = {
   FAILED_PIPELINE: 15,
 } as const;
 
-/** Labels que incrementan prioridad */
-const PRIORITY_LABELS: Record<string, number> = {
+/** Labels que incrementan prioridad (dinamicos, configurables desde settings) */
+let dynamicPriorityLabels: Record<string, number> = {
   'priority::critical': 100,
   'priority::high': 75,
   'priority::medium': 50,
@@ -25,10 +25,19 @@ const PRIORITY_LABELS: Record<string, number> = {
   'Expedite': 100,
 };
 
+export function setPriorityLabels(labels: Array<{ label: string; weight: number }>) {
+  if (labels.length > 0) {
+    dynamicPriorityLabels = {};
+    for (const { label, weight } of labels) {
+      dynamicPriorityLabels[label] = weight;
+    }
+  }
+}
+
 function scoreLabelPriority(labels: string[]): number {
   let max = 0;
   for (const label of labels) {
-    const val = PRIORITY_LABELS[label];
+    const val = dynamicPriorityLabels[label];
     if (val !== undefined && val > max) max = val;
   }
   return max;
