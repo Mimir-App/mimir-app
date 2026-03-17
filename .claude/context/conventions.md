@@ -18,8 +18,11 @@
 - TypeScript strict mode
 - Vue 3 con Composition API (`<script setup>`). No usar Options API
 - **Componentizacion agresiva**: toda UI repetida o reutilizable debe ser un componente en `components/shared/` o `components/settings/`. Nunca duplicar markup entre vistas.
-- Componentes shared: CustomSelect, CustomDatePicker, CollapsibleGroup, ViewToolbar, DashboardGrid, StatusBanner, LoadingState, EmptyState, HelpTooltip, FilterBar, ScoreBadge, IntegrationCard, ModalDialog
-- Componentes settings: (pendiente) separar tabs de SettingsView en componentes individuales
+- Componentes shared: CustomSelect, CustomDatePicker, CollapsibleGroup, ViewToolbar, DashboardGrid, StatusBanner, LoadingState, EmptyState, HelpTooltip, FilterBar, ScoreBadge, IntegrationCard, ModalDialog, NotificationBell
+- Componentes settings: SettingGroup, SettingRow, CredentialField + tabs individuales (GeneralTab, CaptureTab, OdooTab, GitLabTab, AITab, GoogleTab, ServicesTab, NotificationsTab)
+- Componentes dashboard/widgets: JornadaWidget, ServiciosWidget, HorasHoyWidget, ProgresoWidget, TopIssuesWidget, MRsPendientesWidget, TodosWidget + WidgetGallery, WidgetConfigModal
+- Componentes issues: IssueTable, IssueDetailModal
+- Componentes merge_requests: MRTable, MRDetailModal
 - Composables en `composables/` para logica reutilizable:
   - `useFormatting` — formatos de horas, fechas y timestamps (obligatorio, nunca `.toFixed()` o `.toLocaleDateString()` directo)
   - `useSortable` — sorting por click en cabeceras de tabla
@@ -49,10 +52,10 @@
 - Server daemon lanzado como child process, matado al cerrar la app
 
 ### General
-- Tests: para cada adaptador, al menos un test con mock del servicio externo (~142 tests en daemon)
+- Tests: para cada adaptador, al menos un test con mock del servicio externo (~147 tests en daemon)
 - Distribucion: scripts/build.sh con targets individuales (capture, server, daemon, app, deb, all)
 - CI: GitHub Actions con release automatica al push de tag v*
 - Textos de la interfaz en espanol
 - Todo debe ser configurable desde Settings (formatos, zoom, objetivos, intervalos, permisos de captura)
-- Settings organizados en tabs: General, Captura, Odoo, GitLab, IA, Google, Servicios
+- Settings organizados en tabs: General, Captura, Odoo, GitLab, IA, Google, Servicios, Notificaciones
 - Integraciones siguen patron IntegrationCard: boton login cuando desconectado, detalles + logout cuando conectado, popup para editar config

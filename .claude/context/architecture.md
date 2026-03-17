@@ -1,6 +1,6 @@
 ## Arquitectura
 
-Version actual: v0.3.0. Arquitectura de senales implementada.
+Version actual: v0.4.1. Dashboard configurable + MR features + notificaciones.
 
 ### Procesos
 
@@ -17,12 +17,13 @@ Version actual: v0.3.0. Arquitectura de senales implementada.
 - Lanzado por Tauri como child process al abrir la app
 - FastAPI completo: CRUD blocks, signals, split/merge, sync Odoo, GitLab, IA, config
 - Google Calendar OAuth2 + consulta de eventos
+- NotificationService como background task (asyncio, lifespan)
 - Se mata al cerrar la app Tauri
 
 **SQLite compartida**
 - Ambos procesos acceden a la misma base de datos
 - WAL mode para concurrencia segura entre capture y server
-- Tablas: blocks, signals, block_signals, ai_cache, source_tokens, preferences_cache
+- Tablas: blocks, signals, block_signals, ai_cache, source_tokens, preferences_cache, item_preferences, notifications, context_mappings
 
 ### Flujo de captura (v0.3.0)
 
@@ -74,9 +75,26 @@ auto -> closed -> confirmed -> synced
 |---|---|---|
 | Odoo v11 | XMLRPC + password | Timesheets, proyectos, tareas, fichaje |
 | Odoo v16+ | REST + API key | Timesheets, proyectos, tareas, fichaje |
-| GitLab | Personal Access Token | Issues, merge requests, scoring |
+| GitLab | Personal Access Token | Issues, merge requests, TODOs, scoring, notas, conflictos |
 | Google Calendar | OAuth2 | Eventos actuales, deteccion reuniones |
 | Gemini/Claude/OpenAI | API key | Descripciones automaticas de bloques |
+
+### Dashboard
+
+Sistema de widgets configurable:
+- Widget registry (`src/lib/widget-registry.ts`) con 10 tipos
+- Cada widget es un componente independiente en `src/components/dashboard/widgets/`
+- DashboardGrid soporta drag & drop, resize, add/remove
+- Config persistente por widget en `dashboard_widgets` de AppConfig
+- Galeria para anadir nuevos widgets + modal de configuracion
+
+### Notificaciones
+
+- NotificationService: background task async en el server (FastAPI lifespan)
+- Tabla `notifications` en SQLite con TTL configurable
+- NotificationBell en header con polling 30s + dropdown
+- Configurable por tipo de evento en Settings > Notificaciones
+- Pendiente: desktop notifications (tauri-plugin-notification), tray badge
 
 ### Empaquetado
 
@@ -100,6 +118,7 @@ Frontend (Vue 3 + Tauri)
     |         mimir-server (FastAPI)
     |           localhost:9477
     |           [child process de Tauri]
+    |           [NotificationService background task]
     |                 |
     |                 | SQLite compartida (WAL)
     |                 |
