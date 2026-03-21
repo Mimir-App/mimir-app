@@ -1,0 +1,50 @@
+name: Version Check
+
+# Check obligatorio: la version debe haber cambiado respecto a main
+# Solo se cumple si se uso /bump en el PR
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compare versions
+        run: |
+          # Version en el PR
+          PR_VERSION=$(python3 -c "import json; print(json.load(open('package.json'))['version'])")
+
+          # Version en main
+          git fetch origin main
+          MAIN_VERSION=$(git show origin/main:package.json | python3 -c "import json, sys; print(json.load(sys.stdin)['version'])")
+
+          echo "Version en main:  $MAIN_VERSION"
+          echo "Version en PR:    $PR_VERSION"
+
+          if [ "$PR_VERSION" = "$MAIN_VERSION" ]; then
+            echo ""
+            echo "::error::La version no ha cambiado respecto a main ($MAIN_VERSION)."
+            echo "::error::Usa '/bump patch', '/bump minor' o '/bump major' en un comentario del PR."
+            exit 1
+          fi
+
+          # Verificar que el bump fue hecho por el bot (commit message pattern)
+          BUMP_COMMIT=$(git log origin/main..HEAD --oneline --author="mimir-bot" --grep="chore: bump version" | head -1)
+          if [ -z "$BUMP_COMMIT" ]; then
+            echo ""
+            echo "::error::La version cambio pero no fue via el bot (/bump)."
+            echo "::error::Revierte el cambio manual y usa '/bump patch|minor|major' en un comentario."
+            exit 1
+          fi
+
+          echo ""
+          echo "Version bump verificado: $MAIN_VERSION -> $PR_VERSION"
+          echo "Commit: $BUMP_COMMIT"

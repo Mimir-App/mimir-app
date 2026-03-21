@@ -1,13 +1,23 @@
 """Base de datos SQLite para el daemon."""
 
 import logging
+from collections.abc import Callable, Coroutine
 from pathlib import Path
+from typing import Any
 
 import aiosqlite
 
 logger = logging.getLogger(__name__)
 
+# Tipo para funciones de migracion
+MigrationFn = Callable[[aiosqlite.Connection], Coroutine[Any, Any, None]]
+
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS schema_version (
+    version INTEGER PRIMARY KEY,
+    applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS blocks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     start_time TEXT NOT NULL,
@@ -100,6 +110,25 @@ CREATE TABLE IF NOT EXISTS block_signals (
 """
 
 
+# --- Migraciones versionadas ---
+# Cada tupla: (version, descripcion, funcion async)
+# Las funciones reciben la conexion aiosqlite.
+# NUNCA eliminar ni reordenar migraciones existentes, solo anadir al final.
+
+async def _m001_blocks_window_titles_json(db: aiosqlite.Connection) -> None:
+    """Anade columna window_titles_json a blocks (v0.3.0)."""
+    # Verificar si ya existe (DB creada con schema nuevo)
+    async with db.execute("PRAGMA table_info(blocks)") as cur:
+        cols = [row[1] for row in await cur.fetchall()]
+    if "window_titles_json" not in cols:
+        await db.execute("ALTER TABLE blocks ADD COLUMN window_titles_json TEXT")
+
+
+MIGRATIONS: list[tuple[int, str, MigrationFn]] = [
+    (1, "blocks.window_titles_json", _m001_blocks_window_titles_json),
+]
+
+
 class Database:
     """Gestor de base de datos async."""
 
@@ -108,13 +137,42 @@ class Database:
         self._db: aiosqlite.Connection | None = None
 
     async def connect(self) -> None:
-        """Conecta y crea el esquema."""
+        """Conecta, crea el esquema y aplica migraciones."""
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self._db = await aiosqlite.connect(self.db_path)
         self._db.row_factory = aiosqlite.Row
         await self._db.executescript(SCHEMA)
+        await self._run_migrations()
         await self._db.commit()
         logger.info("Base de datos conectada: %s", self.db_path)
+
+    async def _get_schema_version(self) -> int:
+        """Obtiene la version actual del esquema."""
+        try:
+            async with self._db.execute(  # type: ignore
+                "SELECT MAX(version) FROM schema_version"
+            ) as cursor:
+                row = await cursor.fetchone()
+                return row[0] if row and row[0] is not None else 0
+        except Exception:
+            return 0
+
+    async def _set_schema_version(self, version: int) -> None:
+        """Registra una version de migracion como aplicada."""
+        await self._db.execute(  # type: ignore
+            "INSERT INTO schema_version (version) VALUES (?)", (version,)
+        )
+
+    async def _run_migrations(self) -> None:
+        """Aplica migraciones pendientes en orden secuencial."""
+        current = await self._get_schema_version()
+        pending = [(v, desc, fn) for v, desc, fn in MIGRATIONS if v > current]
+        if not pending:
+            return
+        for version, description, migrate_fn in pending:
+            await migrate_fn(self._db)  # type: ignore
+            await self._set_schema_version(version)
+            logger.info("Migración v%d aplicada: %s", version, description)
 
     async def close(self) -> None:
         """Cierra la conexion."""
