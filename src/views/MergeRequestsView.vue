@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
+import { ref, computed } from 'vue';
 import type { GitLabMergeRequest } from '../lib/types';
 import { useMergeRequestsStore } from '../stores/merge_requests';
 import { usePolling } from '../composables/usePolling';
 import { provideCollapseAll } from '../composables/useCollapseAll';
+import { api } from '../lib/api';
 import ViewToolbar from '../components/shared/ViewToolbar.vue';
 import CustomSelect from '../components/shared/CustomSelect.vue';
 import CollapsibleGroup from '../components/shared/CollapsibleGroup.vue';
@@ -12,28 +13,19 @@ import LoadingState from '../components/shared/LoadingState.vue';
 import EmptyState from '../components/shared/EmptyState.vue';
 import MRTable from '../components/merge_requests/MRTable.vue';
 import MRDetailModal from '../components/merge_requests/MRDetailModal.vue';
+import ContextMenu from '../components/shared/ContextMenu.vue';
+import type { MenuEntry } from '../components/shared/ContextMenu.vue';
 
 const mrStore = useMergeRequestsStore();
 const refreshing = ref(false);
 const { allExpanded, toggle: toggleCollapseAll } = provideCollapseAll();
 usePolling(() => mrStore.fetchMergeRequests());
 
-// Search state
-const searchQuery = ref('');
-const showSearchDropdown = ref(false);
-let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-const searchContainer = ref<HTMLElement | null>(null);
-
-// Detail modal state
 const selectedMR = ref<GitLabMergeRequest | null>(null);
 const showDetail = ref(false);
 
-// Set of followed MR IDs for the dot indicator
-const followedIds = computed(() => {
-  return new Set(mrStore.followedMRs.map(mr => mr.id));
-});
+const followedIds = computed(() => new Set(mrStore.followedMRs.map(mr => mr.id)));
 
-// Filter tabs
 const filterTabs: { value: 'all' | 'assigned' | 'reviewer' | 'followed'; label: string }[] = [
   { value: 'all', label: 'Todas' },
   { value: 'assigned', label: 'Asignados' },
@@ -51,88 +43,91 @@ function openMRDetail(mr: GitLabMergeRequest) {
   showDetail.value = true;
 }
 
-// Debounced search
-watch(searchQuery, (q) => {
-  if (debounceTimer) clearTimeout(debounceTimer);
-  if (q.length < 2) {
-    mrStore.searchResults = [];
-    showSearchDropdown.value = false;
-    return;
-  }
-  debounceTimer = setTimeout(async () => {
-    await mrStore.searchMRs(q);
-    showSearchDropdown.value = mrStore.searchResults.length > 0;
-  }, 300);
-});
-
-async function handleFollow(mr: GitLabMergeRequest) {
-  await mrStore.followMR(mr.id);
-  // Remove from search results after following
-  mrStore.searchResults = mrStore.searchResults.filter(r => r.id !== mr.id);
-  if (mrStore.searchResults.length === 0) {
-    showSearchDropdown.value = false;
-  }
+async function onUpdateScore(mrId: number, value: number) {
+  await mrStore.updatePreference(mrId, { manual_score: value });
 }
 
-function closeSearchDropdown() {
-  showSearchDropdown.value = false;
+async function onUnfollow(mrId: number) {
+  await mrStore.unfollowMR(mrId);
 }
 
-// Close dropdown on outside click
-function handleClickOutside(e: MouseEvent) {
-  if (searchContainer.value && !searchContainer.value.contains(e.target as Node)) {
-    closeSearchDropdown();
+// --- Context menu ---
+const ctxVisible = ref(false);
+const ctxX = ref(0);
+const ctxY = ref(0);
+const ctxItems = ref<MenuEntry[]>([]);
+
+function onContextMenu(mr: GitLabMergeRequest, e: MouseEvent) {
+  e.preventDefault();
+  const isFollowed = followedIds.value.has(mr.id);
+  const isGithub = mr._source === 'github';
+  const currentManual = mr.manual_priority ?? 0;
+
+  async function addScore(delta: number) {
+    await mrStore.updatePreference(mr.id, { manual_score: currentManual + delta });
   }
-}
 
-function handleSearchKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') {
-    closeSearchDropdown();
+  async function openUrl(url: string) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('plugin:opener|open_url', { url });
+    } catch {
+      window.open(url, '_blank');
+    }
   }
+
+  ctxItems.value = [
+    { label: 'Ver detalle', icon: '\u25B6', action: () => openMRDetail(mr) },
+    { label: `Ir a ${isGithub ? 'GitHub' : 'GitLab'}`, icon: '\u2197', action: () => openUrl(mr.web_url) },
+    { separator: true },
+    isFollowed
+      ? { label: 'Dejar de seguir', icon: '\u2716', action: () => mrStore.unfollowMR(mr.id), danger: true }
+      : { label: 'Seguir', icon: '\u2605', action: async () => {
+          await api.updateItemPreferences('mr', mr.id, {
+            followed: true,
+            source: mr._source,
+            project_path: mr.project_path,
+            iid: mr.iid,
+            title: mr.title,
+          });
+          await mrStore.fetchFollowedMRs();
+        }},
+    { separator: true },
+    { label: `Score (${currentManual})`, icon: '#', action: () => {}, disabled: true },
+    {
+      label: 'Modificar score',
+      icon: '\u25B2\u25BC',
+      action: () => {},
+      select: {
+        options: [
+          { label: '+100', value: 100 },
+          { label: '+50', value: 50 },
+          { label: '+10', value: 10 },
+          { label: '+5', value: 5 },
+          { label: '+1', value: 1 },
+          { label: '-1', value: -1 },
+          { label: '-5', value: -5 },
+          { label: '-10', value: -10 },
+          { label: '-50', value: -50 },
+          { label: '-100', value: -100 },
+        ],
+        onSelect: (val: number) => addScore(val),
+      },
+    },
+    { separator: true },
+    { label: 'Copiar enlace', icon: '\u{1F517}', action: () => navigator.clipboard.writeText(mr.web_url) },
+    { label: 'Copiar referencia', icon: '#', action: () => navigator.clipboard.writeText(`${mr.project_path}!${mr.iid}`) },
+    { separator: true },
+    { label: 'Recargar ramas', icon: '\u21BB', action: () => refresh() },
+  ];
+  ctxX.value = e.clientX;
+  ctxY.value = e.clientY;
+  ctxVisible.value = true;
 }
-
-onMounted(() => {
-  document.addEventListener('click', handleClickOutside);
-});
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside);
-  if (debounceTimer) clearTimeout(debounceTimer);
-});
 </script>
 
 <template>
   <div class="mr-view">
-    <!-- Search bar -->
-    <div ref="searchContainer" class="search-section">
-      <div class="search-input-wrap">
-        <input
-          v-model="searchQuery"
-          type="text"
-          class="search-input"
-          placeholder="Buscar merge requests en GitLab..."
-          @keydown="handleSearchKeydown"
-        />
-        <span v-if="mrStore.searchLoading" class="search-spinner"></span>
-      </div>
-      <div v-if="showSearchDropdown" class="search-dropdown">
-        <div
-          v-for="result in mrStore.searchResults"
-          :key="result.id"
-          class="search-result"
-        >
-          <div class="search-result-info">
-            <span class="search-result-title">{{ result.title }}</span>
-            <span class="search-result-meta">
-              {{ result.project_path }}
-              <span v-for="label in result.labels.slice(0, 3)" :key="label" class="search-label-tag">{{ label }}</span>
-            </span>
-          </div>
-          <button class="follow-btn" @click.stop="handleFollow(result)">Seguir</button>
-        </div>
-      </div>
-    </div>
-
     <!-- Filter tabs -->
     <div class="filter-tabs">
       <button
@@ -171,148 +166,25 @@ onUnmounted(() => {
         :label="String(project)"
         :count="mrs.length"
       >
-        <MRTable :merge-requests="mrs" :followedIds="followedIds" @select="openMRDetail" />
+        <MRTable :merge-requests="mrs" :followedIds="followedIds" @select="openMRDetail" @update-score="onUpdateScore" @unfollow="onUnfollow" @contextmenu="onContextMenu" />
       </CollapsibleGroup>
 
       <EmptyState v-if="mrStore.filteredMRs.length === 0 && !mrStore.loading" text="Sin merge requests que mostrar" />
     </template>
 
     <MRDetailModal :mr="selectedMR" :open="showDetail" @close="showDetail = false" />
+
+    <ContextMenu
+      v-if="ctxVisible"
+      :items="ctxItems"
+      :x="ctxX"
+      :y="ctxY"
+      @close="ctxVisible = false"
+    />
   </div>
 </template>
 
 <style scoped>
-/* Search section */
-.search-section {
-  position: relative;
-  margin-bottom: 12px;
-}
-
-.search-input-wrap {
-  position: relative;
-}
-
-.search-input {
-  width: 100%;
-  padding: 8px 12px;
-  font-size: 13px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-primary);
-  outline: none;
-  transition: border-color 0.15s;
-  box-sizing: border-box;
-}
-
-.search-input:focus {
-  border-color: var(--accent);
-}
-
-.search-input::placeholder {
-  color: var(--text-secondary);
-}
-
-.search-spinner {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: translateY(-50%) rotate(360deg); }
-}
-
-.search-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-top: none;
-  border-radius: 0 0 6px 6px;
-  max-height: 300px;
-  overflow-y: auto;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.search-result {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
-  gap: 8px;
-}
-
-.search-result:last-child {
-  border-bottom: none;
-}
-
-.search-result:hover {
-  background: var(--bg-hover);
-}
-
-.search-result-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1;
-}
-
-.search-result-title {
-  font-size: 13px;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.search-result-meta {
-  font-size: 11px;
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex-wrap: wrap;
-}
-
-.search-label-tag {
-  display: inline-block;
-  padding: 0 4px;
-  background: var(--bg-card);
-  border-radius: 3px;
-  font-size: 10px;
-  color: var(--text-secondary);
-}
-
-.follow-btn {
-  flex-shrink: 0;
-  padding: 4px 10px;
-  font-size: 12px;
-  font-weight: 500;
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-.follow-btn:hover {
-  background: var(--accent-hover);
-}
-
 /* Filter tabs */
 .filter-tabs {
   display: flex;

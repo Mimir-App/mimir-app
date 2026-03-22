@@ -89,8 +89,12 @@ async function save() {
   }
 }
 
-function openInOdoo() {
-  if (odooEntryUrl.value) {
+async function openInOdoo() {
+  if (!odooEntryUrl.value) return;
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('plugin:opener|open_url', { url: odooEntryUrl.value });
+  } catch {
     window.open(odooEntryUrl.value, '_blank');
   }
 }

@@ -13,6 +13,7 @@ from fastapi import Body, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from . import __version__
 from .db import Database
 from .integrations.base import TimesheetEntryData
 from .integrations.registry import IntegrationRegistry
@@ -39,7 +40,7 @@ def create_server_app(
     source_registry: SourceRegistry | None = None,
     calendar_client: "GoogleCalendarClient | None" = None,
     notification_service: NotificationService | None = None,
-    version: str = "0.1.0",
+    version: str = __version__,
 ) -> FastAPI:
     """Crea la aplicacion FastAPI."""
 
@@ -116,13 +117,31 @@ def create_server_app(
 
     @app.post("/blocks/{block_id}/confirm")
     async def confirm_block(block_id: int) -> dict:
-        """Confirma un bloque para envio a Odoo."""
+        """Confirma un bloque para envio a Odoo.
+
+        Si el bloque tiene context_key y proyecto Odoo, aprende el mapeo
+        para auto-asignar bloques futuros con el mismo contexto.
+        """
         block = await db.get_block_by_id(block_id)
         if not block:
             raise HTTPException(404, "Bloque no encontrado")
         if block.get("status") == "synced":
             raise HTTPException(400, "El bloque ya fue enviado a Odoo")
         await db.update_block(block_id, status="confirmed")
+
+        # Aprender mapeo context_key -> Odoo
+        ctx = block.get("context_key")
+        proj = block.get("odoo_project_id")
+        if ctx and proj:
+            await db.set_context_mapping(
+                ctx,
+                proj,
+                block.get("odoo_project_name"),
+                block.get("odoo_task_id"),
+                block.get("odoo_task_name"),
+            )
+            logger.info("Mapping aprendido: %s -> %s", ctx, block.get("odoo_project_name"))
+
         logger.info("Bloque %d confirmado", block_id)
         return {"status": "confirmed"}
 
@@ -430,6 +449,48 @@ def create_server_app(
             "cached": result.cached,
         }
 
+    # --- Context Mappings ---
+
+    @app.get("/context-mappings")
+    async def get_context_mappings() -> list[dict]:
+        """Obtiene todos los mapeos context_key -> Odoo."""
+        return await db.get_all_context_mappings()
+
+    @app.get("/context-mappings/suggest")
+    async def suggest_context_mapping(context_key: str = Query()) -> dict:
+        """Sugiere un mapeo Odoo para un context_key.
+
+        Busca: exacto -> parcial -> historial de bloques.
+        Retorna el mapeo con campo 'match' (exact|partial|history) o 404.
+        """
+        suggestion = await db.suggest_mapping(context_key)
+        if not suggestion:
+            raise HTTPException(404, "Sin sugerencia para este contexto")
+        return suggestion
+
+    class ContextMappingRequest(BaseModel):
+        context_key: str
+        odoo_project_id: int | None = None
+        odoo_project_name: str | None = None
+        odoo_task_id: int | None = None
+        odoo_task_name: str | None = None
+
+    @app.put("/context-mappings")
+    async def upsert_context_mapping(req: ContextMappingRequest) -> dict:
+        """Crea o actualiza un mapeo context_key -> Odoo."""
+        await db.set_context_mapping(
+            req.context_key,
+            req.odoo_project_id, req.odoo_project_name,
+            req.odoo_task_id, req.odoo_task_name,
+        )
+        return {"status": "saved"}
+
+    @app.delete("/context-mappings/{context_key:path}")
+    async def delete_context_mapping(context_key: str) -> dict:
+        """Elimina un mapeo context_key -> Odoo."""
+        await db.delete_context_mapping(context_key)
+        return {"status": "deleted"}
+
     # --- Odoo ---
 
     @app.get("/odoo/projects")
@@ -570,6 +631,7 @@ def create_server_app(
         odoo_token: str = ""
         gitlab_url: str = ""
         gitlab_token: str = ""
+        github_token: str = ""
         ai_provider: str = "none"
         ai_api_key: str = ""
         ai_user_role: str = "technical"
@@ -588,6 +650,9 @@ def create_server_app(
         )
         safe_config["gitlab_configured"] = bool(
             _app_config.get("gitlab_url") and _app_config.get("gitlab_token")
+        )
+        safe_config["github_configured"] = bool(
+            _app_config.get("github_token")
         )
         safe_config["ai_configured"] = bool(
             _app_config.get("ai_provider", "none") != "none"
@@ -686,6 +751,16 @@ def create_server_app(
             except Exception as e:
                 logger.error("Error configurando GitLab: %s", e)
 
+        # Configurar GitHub source
+        if req.github_token:
+            try:
+                from .sources.github import GitHubSource
+                github_source = GitHubSource(token=req.github_token)
+                _source_registry.register_vcs("github", github_source)
+                logger.info("GitHub source configurado")
+            except Exception as e:
+                logger.error("Error configurando GitHub: %s", e)
+
         # Guardar configuracion en preferences cache de la DB
         try:
             safe = {k: v for k, v in config_data.items() if "token" not in k and "password" not in k}
@@ -705,6 +780,9 @@ def create_server_app(
             },
             "gitlab": {
                 "configured": "gitlab" in _source_registry._vcs_sources,
+            },
+            "github": {
+                "configured": "github" in _source_registry._vcs_sources,
             },
         }
 
@@ -747,23 +825,52 @@ def create_server_app(
             item_type=item_type,
             manual_score=body.get("manual_score"),
             followed=body.get("followed"),
+            source=body.get("source"),
+            project_path=body.get("project_path"),
+            iid=body.get("iid"),
+            title=body.get("title"),
         )
         return {"status": "updated", "item_id": item_id, "item_type": item_type}
 
     @app.get("/gitlab/issues/followed")
     async def get_gitlab_followed_issues() -> list:
-        """Obtiene issues seguidas con datos frescos de GitLab."""
+        """Obtiene issues seguidas con datos frescos de todas las fuentes."""
         try:
-            followed_ids = await db.get_followed_item_ids("issue")
-            if not followed_ids:
+            followed = await db.get_followed_items_with_meta("issue")
+            if not followed:
                 return []
-            gitlab = _source_registry._vcs_sources.get("gitlab")
-            if not gitlab:
-                return []
-            from .sources.gitlab import GitLabSource
-            if not isinstance(gitlab, GitLabSource):
-                return []
-            return await gitlab.get_issues_by_ids(followed_ids)
+            results = []
+            # GitLab items
+            gitlab_ids = [f["item_id"] for f in followed if f.get("source") != "github"]
+            if gitlab_ids:
+                gitlab = _source_registry._vcs_sources.get("gitlab")
+                if gitlab:
+                    from .sources.gitlab import GitLabSource
+                    if isinstance(gitlab, GitLabSource):
+                        results.extend(await gitlab.get_issues_by_ids(gitlab_ids))
+            # GitHub items — buscar individualmente por owner/repo/number
+            github = _source_registry._vcs_sources.get("github")
+            if github:
+                from .sources.github import GitHubSource
+                if isinstance(github, GitHubSource):
+                    for f in followed:
+                        if f.get("source") != "github":
+                            continue
+                        pp = f.get("project_path", "")
+                        iid = f.get("iid")
+                        if pp and iid and "/" in pp:
+                            owner, repo_name = pp.split("/", 1)
+                            try:
+                                # Buscar la issue via API individual
+                                resp = await github._client.get(f"/repos/{owner}/{repo_name}/issues/{iid}")
+                                if resp.status_code == 200:
+                                    item = resp.json()
+                                    from .sources.github import _normalize_issue
+                                    _normalize_issue(item)
+                                    results.append(item)
+                            except Exception:
+                                continue
+            return results
         except Exception as e:
             logger.error("Error obteniendo issues seguidas: %s", e)
             return []
@@ -830,18 +937,42 @@ def create_server_app(
 
     @app.get("/gitlab/merge_requests/followed")
     async def get_gitlab_followed_merge_requests() -> list:
-        """Obtiene MRs seguidas con datos frescos de GitLab."""
+        """Obtiene MRs seguidas con datos frescos de todas las fuentes."""
         try:
-            followed_ids = await db.get_followed_item_ids("mr")
-            if not followed_ids:
+            followed = await db.get_followed_items_with_meta("mr")
+            if not followed:
                 return []
-            gitlab = _source_registry._vcs_sources.get("gitlab")
-            if not gitlab:
-                return []
-            from .sources.gitlab import GitLabSource
-            if not isinstance(gitlab, GitLabSource):
-                return []
-            return await gitlab.get_merge_requests_by_ids(followed_ids)
+            results = []
+            # GitLab
+            gitlab_ids = [f["item_id"] for f in followed if f.get("source") != "github"]
+            if gitlab_ids:
+                gitlab = _source_registry._vcs_sources.get("gitlab")
+                if gitlab:
+                    from .sources.gitlab import GitLabSource
+                    if isinstance(gitlab, GitLabSource):
+                        results.extend(await gitlab.get_merge_requests_by_ids(gitlab_ids))
+            # GitHub — buscar individualmente
+            github = _source_registry._vcs_sources.get("github")
+            if github:
+                from .sources.github import GitHubSource
+                if isinstance(github, GitHubSource):
+                    for f in followed:
+                        if f.get("source") != "github":
+                            continue
+                        pp = f.get("project_path", "")
+                        iid = f.get("iid")
+                        if pp and iid and "/" in pp:
+                            owner, repo_name = pp.split("/", 1)
+                            try:
+                                resp = await github._client.get(f"/repos/{owner}/{repo_name}/pulls/{iid}")
+                                if resp.status_code == 200:
+                                    item = resp.json()
+                                    from .sources.github import _normalize_pr
+                                    _normalize_pr(item)
+                                    results.append(item)
+                            except Exception:
+                                continue
+            return results
         except Exception as e:
             logger.error("Error obteniendo MRs seguidas: %s", e)
             return []
@@ -904,6 +1035,116 @@ def create_server_app(
             return await gitlab.get_current_user()
         except Exception as e:
             logger.error("Error obteniendo usuario de GitLab: %s", e)
+            return {}
+
+    # --- GitHub ---
+
+    def _get_github():
+        """Helper para obtener el source de GitHub."""
+        gh = _source_registry._vcs_sources.get("github")
+        if not gh:
+            return None
+        from .sources.github import GitHubSource
+        return gh if isinstance(gh, GitHubSource) else None
+
+    @app.get("/github/issues")
+    async def get_github_issues() -> list:
+        """Obtiene issues de GitHub."""
+        try:
+            gh = _get_github()
+            return await gh.get_issues() if gh else []
+        except Exception as e:
+            logger.error("Error obteniendo issues de GitHub: %s", e)
+            return []
+
+    @app.get("/github/pull_requests")
+    async def get_github_pull_requests() -> list:
+        """Obtiene pull requests de GitHub."""
+        try:
+            gh = _get_github()
+            return await gh.get_merge_requests() if gh else []
+        except Exception as e:
+            logger.error("Error obteniendo PRs de GitHub: %s", e)
+            return []
+
+    @app.get("/github/issues/search")
+    async def search_github_issues(q: str = Query(), per_page: int = Query(default=20)) -> list:
+        """Busca issues en GitHub."""
+        try:
+            gh = _get_github()
+            return await gh.search_issues(q, per_page) if gh else []
+        except Exception as e:
+            logger.error("Error buscando issues en GitHub: %s", e)
+            return []
+
+    @app.get("/github/pull_requests/search")
+    async def search_github_pull_requests(q: str = Query(), per_page: int = Query(default=20)) -> list:
+        """Busca pull requests en GitHub."""
+        try:
+            gh = _get_github()
+            return await gh.search_pull_requests(q, per_page) if gh else []
+        except Exception as e:
+            logger.error("Error buscando PRs en GitHub: %s", e)
+            return []
+
+    @app.get("/github/issues/{owner}/{repo}/{issue_number}/comments")
+    async def get_github_issue_comments(owner: str, repo: str, issue_number: int) -> list:
+        """Obtiene comentarios de una issue de GitHub."""
+        try:
+            gh = _get_github()
+            return await gh.get_issue_notes(owner, repo, issue_number) if gh else []
+        except Exception as e:
+            logger.error("Error obteniendo comentarios de issue GitHub: %s", e)
+            return []
+
+    @app.get("/github/pull_requests/{owner}/{repo}/{pr_number}/comments")
+    async def get_github_pr_comments(owner: str, repo: str, pr_number: int) -> list:
+        """Obtiene comentarios de un PR de GitHub."""
+        try:
+            gh = _get_github()
+            return await gh.get_pr_notes(owner, repo, pr_number) if gh else []
+        except Exception as e:
+            logger.error("Error obteniendo comentarios de PR GitHub: %s", e)
+            return []
+
+    @app.get("/github/pull_requests/{owner}/{repo}/{pr_number}/reviews")
+    async def get_github_pr_reviews(owner: str, repo: str, pr_number: int) -> list:
+        """Obtiene reviews de un PR de GitHub."""
+        try:
+            gh = _get_github()
+            return await gh.get_pr_reviews(owner, repo, pr_number) if gh else []
+        except Exception as e:
+            logger.error("Error obteniendo reviews de PR GitHub: %s", e)
+            return []
+
+    @app.get("/github/pull_requests/{owner}/{repo}/{pr_number}/files")
+    async def get_github_pr_files(owner: str, repo: str, pr_number: int) -> list:
+        """Obtiene archivos cambiados de un PR de GitHub."""
+        try:
+            gh = _get_github()
+            return await gh.get_pr_files(owner, repo, pr_number) if gh else []
+        except Exception as e:
+            logger.error("Error obteniendo archivos de PR GitHub: %s", e)
+            return []
+
+    @app.get("/github/notifications")
+    async def get_github_notifications() -> list:
+        """Obtiene notificaciones pendientes de GitHub."""
+        try:
+            gh = _get_github()
+            return await gh.get_todos() if gh else []
+        except Exception as e:
+            logger.error("Error obteniendo notificaciones de GitHub: %s", e)
+            return []
+
+    @app.get("/github/user")
+    async def get_github_user() -> dict:
+        """Obtiene info del usuario actual de GitHub."""
+        try:
+            gh = _get_github()
+            return await gh.get_current_user() if gh else {}
+        except Exception as e:
+            logger.error("Error obteniendo usuario de GitHub: %s", e)
             return {}
 
     # --- Notifications ---

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import type { ActivityBlock, OdooProject, OdooTask } from '../../lib/types';
+import type { ActivityBlock, OdooProject, OdooTask, ContextMapping } from '../../lib/types';
 import { useBlocksStore } from '../../stores/blocks';
 import { api } from '../../lib/api';
 import CustomSelect from '../shared/CustomSelect.vue';
@@ -19,6 +19,8 @@ const loadingTasks = ref(false);
 const saving = ref(false);
 const generating = ref(false);
 const saveError = ref<string | null>(null);
+const suggestion = ref<ContextMapping | null>(null);
+
 
 const projectOptions = computed(() => [
   { value: null as number | null, label: loadingProjects.value ? 'Cargando...' : '-- Seleccionar proyecto --' },
@@ -42,8 +44,22 @@ onMounted(async () => {
 
   if (selectedProject.value) {
     await loadTasks(selectedProject.value);
+  } else if (props.block.context_key) {
+    // Sin proyecto asignado: buscar sugerencia
+    const s = await api.suggestMapping(props.block.context_key);
+    if (s?.odoo_project_id) {
+      suggestion.value = s;
+    }
   }
 });
+
+function applySuggestion() {
+  if (!suggestion.value) return;
+  selectedProject.value = suggestion.value.odoo_project_id;
+  selectedTask.value = suggestion.value.odoo_task_id ?? null;
+  if (selectedProject.value) loadTasks(selectedProject.value);
+  suggestion.value = null;
+}
 
 async function loadTasks(projectId: number) {
   loadingTasks.value = true;
@@ -148,22 +164,33 @@ async function saveAndConfirm() {
       </label>
       <div class="field">
         <span class="field-label">Proyecto Odoo</span>
-        <CustomSelect
-          :modelValue="selectedProject"
-          @update:modelValue="onProjectChange"
-          :options="projectOptions"
-          :disabled="loadingProjects"
-          :searchable="projects.length > 10"
-          placeholder="-- Seleccionar proyecto --"
-        />
+        <div class="field-with-suggestion">
+          <CustomSelect
+            :modelValue="selectedProject"
+            @update:modelValue="onProjectChange"
+            :options="projectOptions"
+            :disabled="loadingProjects"
+            :searchable="projects.length > 10"
+            placeholder="-- Seleccionar proyecto --"
+          />
+          <button
+            v-if="suggestion"
+            class="btn-suggestion"
+            @click="applySuggestion"
+            :title="`Sugerido (${suggestion.match}): ${suggestion.odoo_project_name}${suggestion.odoo_task_name ? ' / ' + suggestion.odoo_task_name : ''}`"
+          >
+            Usar: {{ suggestion.odoo_project_name }}
+          </button>
+        </div>
       </div>
       <div class="field">
-        <span class="field-label">Tarea</span>
+        <span class="field-label">Tarea Odoo</span>
         <CustomSelect
           :modelValue="selectedTask"
           @update:modelValue="onTaskChange"
           :options="taskOptions"
           :disabled="!selectedProject || loadingTasks"
+          :searchable="true"
           placeholder="-- Seleccionar tarea --"
         />
       </div>
@@ -363,4 +390,28 @@ async function saveAndConfirm() {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.field-with-suggestion {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.btn-suggestion {
+  align-self: flex-start;
+  background: rgba(78, 201, 176, 0.15);
+  color: var(--success);
+  border: 1px solid var(--success);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-suggestion:hover {
+  background: rgba(78, 201, 176, 0.25);
+}
+
 </style>

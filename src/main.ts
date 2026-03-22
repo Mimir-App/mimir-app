@@ -11,6 +11,7 @@ const router = createRouter({
     { path: '/review', component: () => import('./views/ReviewDayView.vue') },
     { path: '/issues', component: () => import('./views/IssuesView.vue') },
     { path: '/merge-requests', component: () => import('./views/MergeRequestsView.vue') },
+    { path: '/discover', component: () => import('./views/DiscoverView.vue') },
     { path: '/timesheets', component: () => import('./views/TimesheetsView.vue') },
     { path: '/settings', component: () => import('./views/SettingsView.vue') },
   ],

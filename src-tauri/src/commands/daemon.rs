@@ -28,6 +28,12 @@ pub async fn capture_health_check() -> Result<bool, String> {
 }
 
 #[tauri::command]
+pub async fn get_capture_health() -> Result<serde_json::Value, String> {
+    let client = DaemonClient::new(9476);
+    client.get("/health").await
+}
+
+#[tauri::command]
 pub async fn set_daemon_mode(mode: String) -> Result<(), String> {
     #[derive(serde::Serialize)]
     struct ModeReq { mode: String }
@@ -65,6 +71,30 @@ pub async fn sync_blocks_to_odoo(block_ids: Vec<i64>) -> Result<(), String> {
 pub async fn retry_sync_block(block_id: i64) -> Result<(), String> {
     get_client()
         .post_empty(&format!("/blocks/{}/retry", block_id), &())
+        .await
+}
+
+#[tauri::command]
+pub async fn get_context_mappings() -> Result<serde_json::Value, String> {
+    get_client().get("/context-mappings").await
+}
+
+#[tauri::command]
+pub async fn suggest_context_mapping(context_key: String) -> Result<serde_json::Value, String> {
+    get_client()
+        .get(&format!("/context-mappings/suggest?context_key={}", urlencoding::encode(&context_key)))
+        .await
+}
+
+#[tauri::command]
+pub async fn save_context_mapping(mapping: serde_json::Value) -> Result<serde_json::Value, String> {
+    get_client().put_json("/context-mappings", &mapping).await
+}
+
+#[tauri::command]
+pub async fn delete_context_mapping(context_key: String) -> Result<(), String> {
+    get_client()
+        .delete(&format!("/context-mappings/{}", urlencoding::encode(&context_key)))
         .await
 }
 
@@ -189,6 +219,7 @@ pub async fn push_config_to_daemon(config: AppConfig) -> Result<serde_json::Valu
     // Recuperar tokens del keyring (operacion sincrona)
     let odoo_token = read_keyring_token("odoo");
     let gitlab_token = read_keyring_token("gitlab");
+    let github_token = read_keyring_token("github");
     let ai_api_key = read_keyring_token("ai");
 
     #[derive(serde::Serialize)]
@@ -200,6 +231,7 @@ pub async fn push_config_to_daemon(config: AppConfig) -> Result<serde_json::Valu
         odoo_token: String,
         gitlab_url: String,
         gitlab_token: String,
+        github_token: String,
         ai_provider: String,
         ai_api_key: String,
         ai_user_role: String,
@@ -214,6 +246,7 @@ pub async fn push_config_to_daemon(config: AppConfig) -> Result<serde_json::Valu
         odoo_token,
         gitlab_url: config.gitlab_url,
         gitlab_token,
+        github_token,
         ai_provider: config.ai_provider,
         ai_api_key,
         ai_user_role: config.ai_user_role,
@@ -303,6 +336,23 @@ pub async fn get_mr_notes(project_id: String, mr_iid: u64, per_page: u32) -> Res
 #[tauri::command]
 pub async fn get_mr_conflicts(project_id: String, mr_iid: u64) -> Result<serde_json::Value, String> {
     get_client().get(&format!("/gitlab/merge_requests/{}/{}/conflicts", project_id, mr_iid)).await
+}
+
+// --- GitHub ---
+
+#[tauri::command]
+pub async fn get_github_issue_comments(owner: String, repo: String, issue_number: u64, per_page: u32) -> Result<Vec<serde_json::Value>, String> {
+    get_client().get(&format!("/github/issues/{}/{}/{}/comments?per_page={}", owner, repo, issue_number, per_page)).await
+}
+
+#[tauri::command]
+pub async fn search_github_issues(q: String) -> Result<Vec<serde_json::Value>, String> {
+    get_client().get(&format!("/github/issues/search?q={}", urlencoding::encode(&q))).await
+}
+
+#[tauri::command]
+pub async fn search_github_pull_requests(q: String) -> Result<Vec<serde_json::Value>, String> {
+    get_client().get(&format!("/github/pull_requests/search?q={}", urlencoding::encode(&q))).await
 }
 
 // --- GitLab Todos & User ---

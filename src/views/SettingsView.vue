@@ -26,7 +26,7 @@ const tabs = computed(() => [
   { id: 'general', label: 'General', enabled: true },
   { id: 'capture', label: 'Captura', enabled: true },
   { id: 'odoo', label: 'Odoo', enabled: true },
-  { id: 'gitlab', label: 'GitLab', enabled: true },
+  { id: 'vcs', label: 'Repositorios', enabled: true },
   { id: 'ai', label: 'IA', enabled: true },
   { id: 'google', label: 'Google', enabled: true },
   { id: 'services', label: 'Servicios', enabled: true },
@@ -110,7 +110,7 @@ function handleDisconnectGoogle() {
         @message="handleMessage"
       />
       <GitLabTab
-        v-show="activeTab === 'gitlab'"
+        v-show="activeTab === 'vcs'"
         :integration-status="integrationStatus"
         @refresh-status="refreshIntegrationStatus"
         @message="handleMessage"

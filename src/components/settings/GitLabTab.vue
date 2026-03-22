@@ -5,6 +5,7 @@ import { useDaemonStore } from '../../stores/daemon';
 import HelpTooltip from '../shared/HelpTooltip.vue';
 import IntegrationCard from '../shared/IntegrationCard.vue';
 import ModalDialog from '../shared/ModalDialog.vue';
+import SourceIcon from '../shared/SourceIcon.vue';
 
 const props = defineProps<{
   integrationStatus: Record<string, unknown>;
@@ -17,13 +18,16 @@ const emit = defineEmits<{
 
 const configStore = useConfigStore();
 const daemonStore = useDaemonStore();
+
+// --- GitLab ---
 const gitlabToken = ref('');
+const gitlabUrl = ref('');
 const showGitlabModal = ref(false);
 const testingGitlab = ref(false);
 const gitlabTestResult = ref<'ok' | 'fail' | null>(null);
 const gitlabTestMessage = ref('');
 
-const gitlabIntegrationConfigured = computed((): boolean => {
+const gitlabConfigured = computed((): boolean => {
   const gitlab = props.integrationStatus?.gitlab;
   return gitlab && typeof gitlab === 'object' ? Boolean((gitlab as Record<string, unknown>).configured) : false;
 });
@@ -45,26 +49,99 @@ async function testGitlabConnection() {
     if (!daemonStore.connected) { gitlabTestResult.value = 'fail'; gitlabTestMessage.value = 'Servidor API no conectado'; return; }
     const result = await configStore.pushToDaemon();
     emit('refresh-status');
-    if (result.status === 'ok' && gitlabIntegrationConfigured.value) {
+    if (result.status === 'ok' && gitlabConfigured.value) {
       gitlabTestResult.value = 'ok'; gitlabTestMessage.value = 'Conectado a GitLab';
     } else { gitlabTestResult.value = 'fail'; gitlabTestMessage.value = 'No se pudo conectar'; }
   } catch (e) { gitlabTestResult.value = 'fail'; gitlabTestMessage.value = e instanceof Error ? e.message : String(e); }
   finally { testingGitlab.value = false; }
 }
+
+function openGitlabModal() {
+  gitlabUrl.value = configStore.config.gitlab_url;
+  gitlabToken.value = '';
+  showGitlabModal.value = true;
+}
+
+async function confirmGitlabModal() {
+  configStore.config.gitlab_url = gitlabUrl.value;
+  if (gitlabToken.value) {
+    await configStore.setGitLabToken(gitlabToken.value);
+    gitlabToken.value = '';
+  }
+  await configStore.save(configStore.config);
+  showGitlabModal.value = false;
+  emit('message', 'Configuracion GitLab guardada', 'success');
+}
+
+// --- GitHub ---
+const githubToken = ref('');
+const showGithubModal = ref(false);
+const testingGithub = ref(false);
+const githubTestResult = ref<'ok' | 'fail' | null>(null);
+const githubTestMessage = ref('');
+
+const githubConfigured = computed((): boolean => {
+  const github = props.integrationStatus?.github;
+  return github && typeof github === 'object' ? Boolean((github as Record<string, unknown>).configured) : false;
+});
+
+function openGithubModal() {
+  githubToken.value = '';
+  showGithubModal.value = true;
+}
+
+async function confirmGithubModal() {
+  if (githubToken.value) {
+    await configStore.setGitHubToken(githubToken.value);
+    githubToken.value = '';
+  }
+  await configStore.save(configStore.config);
+  showGithubModal.value = false;
+  emit('message', 'Configuracion GitHub guardada', 'success');
+}
+
+async function clearGitHubToken() {
+  try {
+    await configStore.deleteGitHubToken();
+    emit('message', 'Token GitHub eliminado', 'success');
+  } catch (e) {
+    emit('message', `Error: ${e}`, 'error');
+  }
+}
+
+async function testGithubConnection() {
+  testingGithub.value = true; githubTestResult.value = null; githubTestMessage.value = '';
+  try {
+    if (githubToken.value) { await configStore.setGitHubToken(githubToken.value); githubToken.value = ''; }
+    await configStore.save(configStore.config);
+    if (!daemonStore.connected) { githubTestResult.value = 'fail'; githubTestMessage.value = 'Servidor API no conectado'; return; }
+    const result = await configStore.pushToDaemon();
+    emit('refresh-status');
+    if (result.status === 'ok' && githubConfigured.value) {
+      githubTestResult.value = 'ok'; githubTestMessage.value = 'Conectado a GitHub';
+    } else { githubTestResult.value = 'fail'; githubTestMessage.value = 'No se pudo conectar'; }
+  } catch (e) { githubTestResult.value = 'fail'; githubTestMessage.value = e instanceof Error ? e.message : String(e); }
+  finally { testingGithub.value = false; }
+}
 </script>
 
 <template>
   <div class="tab-content">
+    <!-- GitLab -->
     <IntegrationCard
       name="GitLab"
-      icon="G"
-      description="Conecta con tu instancia GitLab para ver issues y merge requests asignadas."
-      :connected="gitlabIntegrationConfigured"
+      description="Issues, merge requests y scoring desde tu instancia GitLab."
+      :connected="gitlabConfigured"
       connect-label="Configurar GitLab"
-      disconnect-label="Desconectar"
-      @connect="showGitlabModal = true"
+      :testing="testingGitlab"
+      :test-result="gitlabTestResult"
+      :test-message="gitlabTestMessage"
+      @connect="openGitlabModal"
+      @edit="openGitlabModal"
+      @test="testGitlabConnection"
       @disconnect="clearGitLabToken"
     >
+      <template #icon><SourceIcon source="gitlab" :size="24" /></template>
       <template #status>
         <p class="session-detail">{{ configStore.config.gitlab_url.replace(/^https?:\/\//, '') }}</p>
       </template>
@@ -79,18 +156,48 @@ async function testGitlabConnection() {
             </tr>
           </tbody>
         </table>
-        <div style="margin-top: 12px;">
-          <button type="button" class="btn btn-secondary btn-sm" @click="showGitlabModal = true">Editar configuracion</button>
-        </div>
       </template>
     </IntegrationCard>
 
-    <ModalDialog title="Configurar GitLab" :open="showGitlabModal" @close="showGitlabModal = false">
+    <!-- GitHub -->
+    <IntegrationCard
+      name="GitHub"
+      description="Issues, pull requests y notificaciones desde GitHub."
+      :connected="githubConfigured"
+      connect-label="Configurar GitHub"
+      :testing="testingGithub"
+      :test-result="githubTestResult"
+      :test-message="githubTestMessage"
+      @connect="openGithubModal"
+      @edit="openGithubModal"
+      @test="testGithubConnection"
+      @disconnect="clearGitHubToken"
+    >
+      <template #icon><SourceIcon source="github" :size="24" /></template>
+      <template #status>
+        <p class="session-detail">github.com</p>
+      </template>
+      <template #details>
+        <table class="settings-table">
+          <tbody>
+            <tr>
+              <td class="label-cell">Servidor</td>
+              <td>github.com</td>
+              <td class="label-cell">Auth</td>
+              <td>Personal Access Token</td>
+            </tr>
+          </tbody>
+        </table>
+      </template>
+    </IntegrationCard>
+
+    <!-- Modal GitLab -->
+    <ModalDialog title="Configurar GitLab" :open="showGitlabModal" showFooter @close="showGitlabModal = false" @confirm="confirmGitlabModal">
       <table class="settings-table">
         <tbody>
           <tr>
             <td class="label-cell">URL</td>
-            <td><input type="url" v-model="configStore.config.gitlab_url" placeholder="https://gitlab.example.com" /></td>
+            <td><input type="url" v-model="gitlabUrl" placeholder="https://gitlab.example.com" /></td>
           </tr>
           <tr>
             <td class="label-cell">Token</td>
@@ -100,16 +207,26 @@ async function testGitlabConnection() {
               </div>
             </td>
           </tr>
+        </tbody>
+      </table>
+    </ModalDialog>
+
+    <!-- Modal GitHub -->
+    <ModalDialog title="Configurar GitHub" :open="showGithubModal" showFooter @close="showGithubModal = false" @confirm="confirmGithubModal">
+      <table class="settings-table">
+        <tbody>
+          <tr>
+            <td class="label-cell">Token</td>
+            <td>
+              <div class="token-field">
+                <input type="password" v-model="githubToken" :placeholder="configStore.config.github_token_stored ? '***** (guardado)' : 'Personal Access Token (classic o fine-grained)'" />
+              </div>
+            </td>
+          </tr>
           <tr>
             <td></td>
             <td>
-              <div class="connection-test">
-                <button type="button" class="btn btn-secondary btn-sm" @click="testGitlabConnection" :disabled="testingGitlab">
-                  {{ testingGitlab ? 'Probando...' : 'Probar conexion' }}
-                </button>
-                <span v-if="gitlabTestResult === 'ok'" class="conn-ok">{{ gitlabTestMessage }}</span>
-                <span v-else-if="gitlabTestResult === 'fail'" class="conn-fail">{{ gitlabTestMessage }}</span>
-              </div>
+              <p class="token-hint">Permisos necesarios: <code>repo</code>, <code>read:org</code>, <code>notifications</code></p>
             </td>
           </tr>
         </tbody>
@@ -133,7 +250,7 @@ async function testGitlabConnection() {
       </table>
 
       <p class="section-hint" style="margin-top: 16px;">
-        Mapeo de prioridad de labels: asigna un peso (0-100) a cada label de GitLab para influir en el scoring de issues.
+        Mapeo de prioridad de labels: asigna un peso (0-100) a cada label para influir en el scoring de issues.
       </p>
       <table class="settings-table priority-labels-table">
         <thead>
@@ -223,6 +340,19 @@ async function testGitlabConnection() {
 
 .token-field input {
   flex: 1;
+}
+
+.token-hint {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.token-hint code {
+  background: var(--bg-card);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 10px;
 }
 
 .connection-test {

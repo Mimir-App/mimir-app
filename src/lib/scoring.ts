@@ -70,19 +70,19 @@ function scoreDueDate(dueDate: string | null): number {
 
 export function computeIssueScore(issue: GitLabIssue): number {
   const manual = issue.manual_priority ?? 0;
-  const label = scoreLabelPriority(issue.labels);
-  const state = scoreStateMilestone(issue.state, issue.milestone);
-  const comments = scoreComments(issue.user_notes_count);
-  const due = scoreDueDate(issue.due_date);
+  const label = scoreLabelPriority(issue.labels ?? []);
+  const state = scoreStateMilestone(issue.state, issue.milestone ?? null);
+  const comments = scoreComments(issue.user_notes_count ?? 0);
+  const due = scoreDueDate(issue.due_date ?? null);
 
   return manual + label + state + comments + due;
 }
 
 export function computeMRScore(mr: GitLabMergeRequest): number {
   const manual = mr.manual_priority ?? 0;
-  const label = scoreLabelPriority(mr.labels);
+  const label = scoreLabelPriority(mr.labels ?? []);
   const state = scoreStateMilestone(mr.state, null);
-  const comments = scoreComments(mr.user_notes_count);
+  const comments = scoreComments(mr.user_notes_count ?? 0);
   const conflicts = mr.has_conflicts ? WEIGHTS.MR_CONFLICTS : 0;
   const pipeline = mr.pipeline_status === 'failed' ? WEIGHTS.FAILED_PIPELINE : 0;
 

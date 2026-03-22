@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue';
+import { ref, watch } from 'vue';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import type { GitLabMergeRequest, GitLabNote, GitLabLabel, MRConflict } from '../../lib/types';
@@ -28,9 +28,6 @@ const conflicts = ref<MRConflict[]>([]);
 const loadingConflicts = ref(false);
 
 // Manual score inline editing
-const editingScore = ref(false);
-const editScoreValue = ref(0);
-const scoreInput = ref<HTMLInputElement | null>(null);
 
 /** Mapa de labels -> color para chips coloreados */
 const labelColorMap = ref<Record<string, string>>({});
@@ -86,34 +83,16 @@ async function loadConflicts(mr: GitLabMergeRequest) {
   }
 }
 
-/** Inicia edicion inline del manual score */
-function startEditScore() {
+/** Guarda el manual score desde ScoreBadge editable */
+async function saveManualScoreValue(val: number) {
   if (!props.mr) return;
-  editScoreValue.value = props.mr.manual_priority ?? 0;
-  editingScore.value = true;
-  nextTick(() => {
-    scoreInput.value?.focus();
-    scoreInput.value?.select();
-  });
-}
-
-/** Guarda el manual score */
-async function saveManualScore() {
-  if (!props.mr) return;
-  editingScore.value = false;
-  const val = Math.max(0, Math.min(200, editScoreValue.value));
+  const clamped = Math.max(0, Math.min(200, val));
   try {
-    await api.updateItemPreferences('mr', props.mr.id, { manual_score: val });
-    // Actualizar localmente
-    props.mr.manual_priority = val;
+    await api.updateItemPreferences('mr', props.mr.id, { manual_score: clamped });
+    props.mr.manual_priority = clamped;
   } catch {
     // Silenciar error
   }
-}
-
-/** Cancela la edicion */
-function cancelEditScore() {
-  editingScore.value = false;
 }
 
 /** Devuelve clase CSS segun el estado del pipeline */
@@ -137,7 +116,6 @@ watch(
   (newMR) => {
     notes.value = [];
     conflicts.value = [];
-    editingScore.value = false;
     if (newMR) {
       loadNotes(newMR);
       loadConflicts(newMR);
@@ -228,23 +206,12 @@ watch(
         </div>
         <div class="score-row">
           <span class="meta-label">Score manual</span>
-          <span v-if="!editingScore" class="manual-score-display" @click="startEditScore">
-            {{ mr.manual_priority ?? 0 }}
-            <span class="edit-hint">editar</span>
-          </span>
-          <span v-else class="manual-score-edit">
-            <input
-              ref="scoreInput"
-              v-model.number="editScoreValue"
-              type="number"
-              min="0"
-              max="200"
-              class="score-input"
-              @keyup.enter="saveManualScore"
-              @keyup.escape="cancelEditScore"
-              @blur="saveManualScore"
-            />
-          </span>
+          <ScoreBadge
+            :score="mr.manual_priority ?? 0"
+            :manual-score="mr.manual_priority ?? 0"
+            editable
+            @update:manual-score="saveManualScoreValue"
+          />
         </div>
       </div>
 
@@ -272,11 +239,10 @@ watch(
         </div>
       </div>
 
-      <!-- Footer -->
-      <div class="modal-footer">
-        <a :href="mr.web_url" target="_blank" class="gitlab-link">Ir a GitLab</a>
-      </div>
     </div>
+    <template #footer>
+      <a v-if="mr" :href="mr.web_url" target="_blank" class="gitlab-link">Ir a {{ mr._source === 'github' ? 'GitHub' : 'GitLab' }}</a>
+    </template>
   </ModalDialog>
 </template>
 
@@ -661,12 +627,6 @@ watch(
   font-size: 12px;
 }
 
-/* Footer */
-.modal-footer {
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-  text-align: right;
-}
 
 .gitlab-link {
   display: inline-block;

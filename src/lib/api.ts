@@ -4,7 +4,7 @@
  * En navegador: llama directamente al daemon HTTP en localhost:9477.
  */
 
-import type { ItemPreference, GitLabIssue, GitLabMergeRequest, GitLabLabel, GitLabNote, MRConflict, GitLabTodo, AppNotification } from './types';
+import type { ItemPreference, GitLabIssue, GitLabMergeRequest, GitLabLabel, GitLabNote, MRConflict, GitLabTodo, AppNotification, ContextMapping } from './types';
 
 const DAEMON_BASE = 'http://127.0.0.1:9477';
 
@@ -85,6 +85,17 @@ export const api = {
     }
   },
 
+  async getCaptureHealth(): Promise<{ version?: string } | null> {
+    if (await isTauri()) return tauriInvoke('get_capture_health');
+    try {
+      const resp = await fetch('http://127.0.0.1:9476/health');
+      if (!resp.ok) return null;
+      return resp.json();
+    } catch {
+      return null;
+    }
+  },
+
   async setDaemonMode(mode: string) {
     if (await isTauri()) return tauriInvoke('set_daemon_mode', { mode });
     return httpPost('/mode', { mode });
@@ -152,6 +163,30 @@ export const api = {
   async disconnectGoogleCalendar() {
     if (await isTauri()) return tauriInvoke('disconnect_google_calendar');
     return httpPost('/google/calendar/disconnect');
+  },
+
+  async getContextMappings(): Promise<ContextMapping[]> {
+    if (await isTauri()) return tauriInvoke('get_context_mappings');
+    return httpGet('/context-mappings');
+  },
+
+  async suggestMapping(contextKey: string): Promise<ContextMapping | null> {
+    if (await isTauri()) return tauriInvoke('suggest_context_mapping', { contextKey });
+    try {
+      return await httpGet(`/context-mappings/suggest?context_key=${encodeURIComponent(contextKey)}`);
+    } catch {
+      return null;
+    }
+  },
+
+  async saveContextMapping(mapping: ContextMapping) {
+    if (await isTauri()) return tauriInvoke('save_context_mapping', { mapping });
+    return httpPut('/context-mappings', mapping);
+  },
+
+  async deleteContextMapping(contextKey: string) {
+    if (await isTauri()) return tauriInvoke('delete_context_mapping', { contextKey });
+    return httpDelete(`/context-mappings/${encodeURIComponent(contextKey)}`);
   },
 
   async getOdooProjects() {
@@ -296,6 +331,16 @@ export const api = {
     return httpGet(`/gitlab/issues/search?q=${encodeURIComponent(q)}`);
   },
 
+  async searchGithubIssues(q: string): Promise<GitLabIssue[]> {
+    if (await isTauri()) return tauriInvoke('search_github_issues', { q });
+    return httpGet(`/github/issues/search?q=${encodeURIComponent(q)}`);
+  },
+
+  async searchGithubPullRequests(q: string): Promise<GitLabMergeRequest[]> {
+    if (await isTauri()) return tauriInvoke('search_github_pull_requests', { q });
+    return httpGet(`/github/pull_requests/search?q=${encodeURIComponent(q)}`);
+  },
+
   async getFollowedIssues(): Promise<GitLabIssue[]> {
     if (await isTauri()) return tauriInvoke('get_followed_issues');
     return httpGet('/gitlab/issues/followed');
@@ -309,6 +354,11 @@ export const api = {
   async getIssueNotes(projectId: string, issueIid: number, perPage: number = 5): Promise<GitLabNote[]> {
     if (await isTauri()) return tauriInvoke('get_issue_notes', { projectId, issueIid, perPage });
     return httpGet(`/gitlab/issues/${projectId}/${issueIid}/notes?per_page=${perPage}`);
+  },
+
+  async getGithubIssueComments(owner: string, repo: string, issueNumber: number, perPage: number = 5): Promise<GitLabNote[]> {
+    if (await isTauri()) return tauriInvoke('get_github_issue_comments', { owner, repo, issueNumber, perPage });
+    return httpGet(`/github/issues/${owner}/${repo}/${issueNumber}/comments?per_page=${perPage}`);
   },
 
   async updateTimesheetEntry(entryId: number, body: { description?: string; hours?: number; project_id?: number; task_id?: number }): Promise<void> {

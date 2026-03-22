@@ -7,6 +7,7 @@ const DEFAULT_CONFIG: AppConfig = {
   daemon_port: 9477,
   gitlab_url: '',
   gitlab_token_stored: false,
+  github_token_stored: false,
   odoo_url: '',
   odoo_version: 'v16',
   odoo_db: '',
@@ -36,6 +37,7 @@ const DEFAULT_CONFIG: AppConfig = {
   capture_idle: true,
   capture_audio: true,
   capture_ssh: true,
+  inactivity_threshold_minutes: 5,
   gitlab_priority_labels: [],
   issue_notes_count: 5,
   dashboard_widgets: [],
@@ -96,6 +98,18 @@ export const useConfigStore = defineStore('config', () => {
     await api.saveConfig(config.value);
   }
 
+  async function setGitHubToken(token: string) {
+    await api.storeCredential('github', token);
+    config.value.github_token_stored = true;
+    await api.saveConfig(config.value);
+  }
+
+  async function deleteGitHubToken() {
+    await api.deleteCredential('github');
+    config.value.github_token_stored = false;
+    await api.saveConfig(config.value);
+  }
+
   async function setOdooToken(token: string) {
     await api.storeCredential('odoo', token);
     config.value.odoo_token_stored = true;
@@ -147,6 +161,8 @@ export const useConfigStore = defineStore('config', () => {
     save,
     setGitLabToken,
     deleteGitLabToken,
+    setGitHubToken,
+    deleteGitHubToken,
     setOdooToken,
     deleteOdooToken,
     setAIToken,

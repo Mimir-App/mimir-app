@@ -7,15 +7,6 @@ import { useConfigStore } from './config';
 
 export type IssueGroupBy = 'project' | 'priority' | 'none';
 
-const PRIORITY_ORDER = ['priority::critical', 'priority::high', 'priority::medium', 'priority::low'];
-
-function getPriorityLabel(labels: string[]): string {
-  for (const p of PRIORITY_ORDER) {
-    if (labels.includes(p)) return p.replace('priority::', '').toUpperCase();
-  }
-  return 'Sin prioridad';
-}
-
 export const useIssuesStore = defineStore('issues', () => {
   const issues = ref<GitLabIssue[]>([]);
   const loading = ref(false);
@@ -27,20 +18,24 @@ export const useIssuesStore = defineStore('issues', () => {
   const searchResults = ref<GitLabIssue[]>([]);
   const searchLoading = ref(false);
   const activeFilter = ref<'all' | 'assigned' | 'followed'>('all');
+  const sourceFilter = ref<'all' | 'gitlab' | 'github'>('all');
+  const projectFilter = ref<string[]>([]);
 
-  /** Merge assigned + followed, deduplicando por id */
+  /** Merge assigned + followed, deduplicando por project_path + iid */
   const allIssues = computed(() => {
-    const seen = new Set<number>();
+    const seen = new Set<string>();
     const result: GitLabIssue[] = [];
     for (const issue of issues.value) {
-      if (!seen.has(issue.id)) {
-        seen.add(issue.id);
+      const key = `${issue.project_path}#${issue.iid}`;
+      if (!seen.has(key)) {
+        seen.add(key);
         result.push(issue);
       }
     }
     for (const issue of followedIssues.value) {
-      if (!seen.has(issue.id)) {
-        seen.add(issue.id);
+      const key = `${issue.project_path}#${issue.iid}`;
+      if (!seen.has(key)) {
+        seen.add(key);
         result.push(issue);
       }
     }
@@ -65,14 +60,24 @@ export const useIssuesStore = defineStore('issues', () => {
   const filteredIssues = computed(() => {
     let result = scoredIssues.value;
 
-    // Aplicar filtro activo
+    // Filtro por fuente
+    if (sourceFilter.value !== 'all') {
+      result = result.filter(i => (i as any)._source === sourceFilter.value);
+    }
+
+    // Filtro por proyecto(s)
+    if (projectFilter.value.length > 0) {
+      result = result.filter(i => projectFilter.value.includes(i.project_path));
+    }
+
+    // Filtro activo (asignadas/seguidas)
     if (activeFilter.value === 'assigned') {
       result = result.filter(i => !i._followed || issues.value.some(a => a.id === i.id));
     } else if (activeFilter.value === 'followed') {
       result = result.filter(i => i._followed);
     }
 
-    // Aplicar filtro de texto
+    // Filtro de texto
     if (filterText.value) {
       const q = filterText.value.toLowerCase();
       result = result.filter(
@@ -86,18 +91,32 @@ export const useIssuesStore = defineStore('issues', () => {
     return result;
   });
 
+  /** Proyectos disponibles en las issues cargadas */
+  const availableProjects = computed(() => {
+    const projects = new Set<string>();
+    for (const issue of allIssues.value) {
+      if (issue.project_path) projects.add(issue.project_path);
+    }
+    return Array.from(projects).sort();
+  });
+
   const groupedByProject = computed(() => groupByProject(filteredIssues.value));
 
   const groupedByPriority = computed(() => {
     const groups: Record<string, (typeof filteredIssues.value)> = {};
     for (const issue of filteredIssues.value) {
-      const key = getPriorityLabel(issue.labels);
+      const mp = issue.manual_priority ?? 0;
+      let key: string;
+      if (mp >= 100) key = 'Critica';
+      else if (mp >= 75) key = 'Alta';
+      else if (mp >= 50) key = 'Media';
+      else if (mp > 0) key = 'Baja';
+      else key = 'Sin prioridad';
       if (!groups[key]) groups[key] = [];
       groups[key].push(issue);
     }
-    // Ordenar por prioridad
     const sorted: Record<string, typeof filteredIssues.value> = {};
-    for (const label of ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'Sin prioridad']) {
+    for (const label of ['Critica', 'Alta', 'Media', 'Baja', 'Sin prioridad']) {
       if (groups[label]) sorted[label] = groups[label];
     }
     return sorted;
@@ -120,11 +139,14 @@ export const useIssuesStore = defineStore('issues', () => {
     followedIssues.value = await api.getFollowedIssues();
   }
 
-  async function searchIssues(query: string) {
+  async function searchIssues(query: string, source: 'all' | 'gitlab' | 'github' = 'all') {
     if (query.length < 2) { searchResults.value = []; return; }
     searchLoading.value = true;
     try {
-      searchResults.value = await api.searchGitlabIssues(query);
+      const results: GitLabIssue[] = [];
+      if (source !== 'github') results.push(...await api.searchGitlabIssues(query));
+      if (source !== 'gitlab') results.push(...await api.searchGithubIssues(query));
+      searchResults.value = results;
     } finally {
       searchLoading.value = false;
     }
@@ -133,7 +155,9 @@ export const useIssuesStore = defineStore('issues', () => {
   async function updatePreference(issueId: number, data: Partial<ItemPreference>) {
     await api.updateItemPreferences('issue', issueId, data);
     const existing = preferences.value.get(issueId) || { item_id: issueId, item_type: 'issue' as const, manual_score: 0, followed: false };
-    preferences.value.set(issueId, { ...existing, ...data } as ItemPreference);
+    const updated = new Map(preferences.value);
+    updated.set(issueId, { ...existing, ...data } as ItemPreference);
+    preferences.value = updated;
   }
 
   async function followIssue(issueId: number) {
@@ -177,6 +201,9 @@ export const useIssuesStore = defineStore('issues', () => {
     searchResults,
     searchLoading,
     activeFilter,
+    sourceFilter,
+    projectFilter,
+    availableProjects,
     allIssues,
     scoredIssues,
     filteredIssues,

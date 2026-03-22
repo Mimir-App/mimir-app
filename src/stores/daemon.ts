@@ -15,6 +15,9 @@ export const useDaemonStore = defineStore('daemon', () => {
 
   const connected = ref(false);
   const captureConnected = ref(false);
+  const captureVersion = ref('');
+  const serverVersion = ref('');
+  const versionMismatch = ref(false);
   const error = ref<string | null>(null);
   const checking = ref(false);
 
@@ -55,6 +58,8 @@ export const useDaemonStore = defineStore('daemon', () => {
       if (ok) {
         error.value = null;
         await fetchStatus();
+        serverVersion.value = status.value.version || '';
+        checkVersionMismatch();
       }
       return ok;
     } catch (e) {
@@ -68,12 +73,24 @@ export const useDaemonStore = defineStore('daemon', () => {
 
   async function captureHealthCheck(): Promise<boolean> {
     try {
-      const ok = await api.captureHealthCheck();
-      captureConnected.value = ok;
-      return ok;
+      const result = await api.getCaptureHealth() as { version?: string } | boolean;
+      if (typeof result === 'object' && result !== null) {
+        captureConnected.value = true;
+        captureVersion.value = result.version || '';
+        checkVersionMismatch();
+      } else {
+        captureConnected.value = Boolean(result);
+      }
+      return captureConnected.value;
     } catch {
       captureConnected.value = false;
       return false;
+    }
+  }
+
+  function checkVersionMismatch() {
+    if (serverVersion.value && captureVersion.value) {
+      versionMismatch.value = serverVersion.value !== captureVersion.value;
     }
   }
 
@@ -95,6 +112,9 @@ export const useDaemonStore = defineStore('daemon', () => {
     statusText,
     modeLabel,
     captureConnected,
+    captureVersion,
+    serverVersion,
+    versionMismatch,
     fetchStatus,
     healthCheck,
     captureHealthCheck,

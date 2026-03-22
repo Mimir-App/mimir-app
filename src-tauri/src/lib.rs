@@ -24,6 +24,7 @@ pub fn run() {
             daemon::get_daemon_status,
             daemon::daemon_health_check,
             daemon::capture_health_check,
+            daemon::get_capture_health,
             daemon::set_daemon_mode,
             daemon::get_blocks,
             daemon::confirm_block,
@@ -61,6 +62,10 @@ pub fn run() {
             daemon::get_followed_merge_requests,
             daemon::get_mr_notes,
             daemon::get_mr_conflicts,
+            // GitHub
+            daemon::get_github_issue_comments,
+            daemon::search_github_issues,
+            daemon::search_github_pull_requests,
             // GitLab todos & user
             daemon::get_gitlab_todos,
             daemon::get_gitlab_user,
@@ -69,6 +74,11 @@ pub fn run() {
             daemon::get_notification_count,
             daemon::mark_notification_read,
             daemon::mark_all_notifications_read,
+            // Context mappings
+            daemon::get_context_mappings,
+            daemon::suggest_context_mapping,
+            daemon::save_context_mapping,
+            daemon::delete_context_mapping,
             // Odoo entries
             daemon::update_timesheet_entry,
             // Config

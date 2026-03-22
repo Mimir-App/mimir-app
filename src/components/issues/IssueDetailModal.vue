@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from 'vue';
+import { ref, watch } from 'vue';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import type { GitLabIssue, GitLabNote, GitLabLabel, TimesheetEntry } from '../../lib/types';
@@ -27,10 +27,6 @@ const labels = ref<GitLabLabel[]>([]);
 const timeSpentHours = ref(0);
 const loadingTime = ref(false);
 
-// Manual score inline editing
-const editingScore = ref(false);
-const editScoreValue = ref(0);
-const scoreInput = ref<HTMLInputElement | null>(null);
 
 /** Mapa de labels -> color para chips coloreados */
 const labelColorMap = ref<Record<string, string>>({});
@@ -60,9 +56,14 @@ async function loadNotes(issue: GitLabIssue) {
   loadingNotes.value = true;
   try {
     const perPage = configStore.config.issue_notes_count || 5;
-    // project_path viene como "group/project", se pasa url-encoded
-    const projectId = encodeURIComponent(issue.project_path);
-    notes.value = await api.getIssueNotes(projectId, issue.iid, perPage);
+    if (issue._source === 'github') {
+      // GitHub: project_path es "owner/repo"
+      const [owner, repo] = issue.project_path.split('/');
+      notes.value = await api.getGithubIssueComments(owner, repo, issue.iid, perPage);
+    } else {
+      const projectId = encodeURIComponent(issue.project_path);
+      notes.value = await api.getIssueNotes(projectId, issue.iid, perPage);
+    }
   } catch {
     notes.value = [];
   } finally {
@@ -72,9 +73,13 @@ async function loadNotes(issue: GitLabIssue) {
 
 /** Carga horas imputadas en Odoo para la tarea vinculada */
 async function loadTimeSpent(issue: GitLabIssue) {
+  // Solo buscar si es GitLab (puede tener vinculo con Odoo)
+  if (issue._source === 'github') {
+    timeSpentHours.value = -1; // -1 = no vinculado
+    return;
+  }
   loadingTime.value = true;
   try {
-    // Buscar en un rango amplio (ultimo anno)
     const now = new Date();
     const yearAgo = new Date(now);
     yearAgo.setFullYear(yearAgo.getFullYear() - 1);
@@ -83,9 +88,6 @@ async function loadTimeSpent(issue: GitLabIssue) {
 
     const entries = await api.getTimesheetEntries(dateFrom, dateTo) as TimesheetEntry[];
 
-    // Filtrar por task_id si la issue tiene un odoo_task_id equivalente
-    // Usamos el iid como referencia; las entries que tienen el issue title en description
-    // o que match por task. Simplificamos: sumamos entries cuya description contenga #iid
     const pattern = `#${issue.iid}`;
     const matching = entries.filter(e =>
       e.description?.includes(pattern) ||
@@ -99,34 +101,16 @@ async function loadTimeSpent(issue: GitLabIssue) {
   }
 }
 
-/** Inicia edicion inline del manual score */
-function startEditScore() {
+/** Guarda el manual score desde ScoreBadge editable */
+async function saveManualScoreValue(val: number) {
   if (!props.issue) return;
-  editScoreValue.value = props.issue.manual_priority ?? 0;
-  editingScore.value = true;
-  nextTick(() => {
-    scoreInput.value?.focus();
-    scoreInput.value?.select();
-  });
-}
-
-/** Guarda el manual score */
-async function saveManualScore() {
-  if (!props.issue) return;
-  editingScore.value = false;
-  const val = Math.max(0, Math.min(200, editScoreValue.value));
+  const clamped = Math.max(0, Math.min(200, val));
   try {
-    await api.updateItemPreferences('issue', props.issue.id, { manual_score: val });
-    // Actualizar localmente
-    props.issue.manual_priority = val;
+    await api.updateItemPreferences('issue', props.issue.id, { manual_score: clamped });
+    props.issue.manual_priority = clamped;
   } catch {
     // Silenciar error
   }
-}
-
-/** Cancela la edicion */
-function cancelEditScore() {
-  editingScore.value = false;
 }
 
 // Watch: cuando cambia la issue, cargar datos
@@ -135,7 +119,6 @@ watch(
   (newIssue) => {
     notes.value = [];
     timeSpentHours.value = 0;
-    editingScore.value = false;
     if (newIssue) {
       loadNotes(newIssue);
       loadTimeSpent(newIssue);
@@ -199,28 +182,17 @@ watch(
         </div>
         <div class="score-row">
           <span class="meta-label">Score manual</span>
-          <span v-if="!editingScore" class="manual-score-display" @click="startEditScore">
-            {{ issue.manual_priority ?? 0 }}
-            <span class="edit-hint">editar</span>
-          </span>
-          <span v-else class="manual-score-edit">
-            <input
-              ref="scoreInput"
-              v-model.number="editScoreValue"
-              type="number"
-              min="0"
-              max="200"
-              class="score-input"
-              @keyup.enter="saveManualScore"
-              @keyup.escape="cancelEditScore"
-              @blur="saveManualScore"
-            />
-          </span>
+          <ScoreBadge
+            :score="issue.manual_priority ?? 0"
+            :manual-score="issue.manual_priority ?? 0"
+            editable
+            @update:manual-score="saveManualScoreValue"
+          />
         </div>
       </div>
 
       <!-- Tiempo imputado -->
-      <div class="time-section">
+      <div v-if="timeSpentHours !== -1" class="time-section">
         <span class="meta-label">Tiempo imputado (Odoo)</span>
         <span v-if="loadingTime" class="meta-value loading-text">Cargando...</span>
         <span v-else class="meta-value">{{ formatHours(timeSpentHours) }}</span>
@@ -250,11 +222,10 @@ watch(
         </div>
       </div>
 
-      <!-- Footer -->
-      <div class="modal-footer">
-        <a :href="issue.web_url" target="_blank" class="gitlab-link">Ir a GitLab</a>
-      </div>
     </div>
+    <template #footer>
+      <a v-if="issue" :href="issue.web_url" target="_blank" class="gitlab-link">Ir a {{ issue._source === 'github' ? 'GitHub' : 'GitLab' }}</a>
+    </template>
   </ModalDialog>
 </template>
 
@@ -513,12 +484,6 @@ watch(
   font-size: 12px;
 }
 
-/* Footer */
-.modal-footer {
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-  text-align: right;
-}
 
 .gitlab-link {
   display: inline-block;

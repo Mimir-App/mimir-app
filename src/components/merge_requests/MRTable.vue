@@ -5,9 +5,15 @@ import { formatDate } from '../../composables/useFormatting';
 import { useSortable } from '../../composables/useSortable';
 import { useColumnWidths } from '../../composables/useColumnWidths';
 import ScoreBadge from '../shared/ScoreBadge.vue';
+import SourceIcon from '../shared/SourceIcon.vue';
 
 const props = defineProps<{ mergeRequests: GitLabMergeRequest[]; followedIds?: Set<number> }>();
-const emit = defineEmits<{ select: [mr: GitLabMergeRequest] }>();
+const emit = defineEmits<{
+  select: [mr: GitLabMergeRequest];
+  'update-score': [mrId: number, value: number];
+  unfollow: [mrId: number];
+  contextmenu: [mr: GitLabMergeRequest, event: MouseEvent];
+}>();
 const { toggleSort, sortIcon, sorted } = useSortable(toRef(props, 'mergeRequests'), 'score', 'desc');
 const { colStyle, startResize } = useColumnWidths();
 </script>
@@ -16,7 +22,8 @@ const { colStyle, startResize } = useColumnWidths();
   <table class="data-table">
     <thead>
       <tr>
-        <th :style="colStyle('score')" class="sortable" @click="toggleSort('score')">Score{{ sortIcon('score') }}</th>
+        <th style="width: 24px; padding: 0 4px;"></th>
+        <th style="width: 80px;" class="sortable" @click="toggleSort('score')">Score{{ sortIcon('score') }}</th>
         <th :style="colStyle('iid')" class="sortable" @click="toggleSort('iid')">!{{ sortIcon('iid') }}</th>
         <th class="sortable col-expand resizable" @click="toggleSort('title')">
           Titulo{{ sortIcon('title') }}
@@ -35,12 +42,18 @@ const { colStyle, startResize } = useColumnWidths();
       </tr>
     </thead>
     <tbody>
-      <tr v-for="mr in sorted" :key="mr.id" class="data-row clickable-row" @click="emit('select', mr)">
-        <td :style="colStyle('score')">
-          <span class="score-cell">
-            <span v-if="followedIds?.has(mr.id)" class="followed-dot" title="Seguida"></span>
-            <ScoreBadge :score="mr.score" />
-          </span>
+      <tr v-for="mr in sorted" :key="mr.id" class="data-row clickable-row" @click="emit('select', mr)" @contextmenu.prevent="emit('contextmenu', mr, $event)">
+        <td class="icon-cell">
+          <SourceIcon :source="mr._source" :size="16" />
+          <button v-if="followedIds?.has(mr.id)" class="followed-dot" title="Dejar de seguir" @click.stop="emit('unfollow', mr.id)"></button>
+        </td>
+        <td class="score-td">
+          <ScoreBadge
+            :score="mr.score"
+            :manual-score="mr.manual_priority ?? 0"
+            editable
+            @update:manual-score="(v) => emit('update-score', mr.id, v)"
+          />
         </td>
         <td :style="colStyle('iid')" class="muted">{{ mr.iid }}</td>
         <td class="col-expand">
@@ -101,19 +114,39 @@ const { colStyle, startResize } = useColumnWidths();
 .link { color: var(--text-primary); text-decoration: none; overflow: hidden; text-overflow: ellipsis; display: block; }
 .link:hover { color: var(--accent); text-decoration: underline; }
 
-.score-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+.icon-cell {
+  padding: 0 4px !important;
+  text-align: center;
+  position: relative;
 }
 
 .followed-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
+  position: absolute;
+  top: 2px;
+  right: 0;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--accent);
-  flex-shrink: 0;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.followed-dot:hover {
+  background: var(--error);
+}
+
+.score-td {
+  padding: 4px !important;
+}
+
+.score-td :deep(.score-badge),
+.score-td :deep(.score-input) {
+  width: 100%;
+  min-width: unset;
+  font-size: 14px;
+  padding: 6px 8px;
 }
 
 .pipeline-success { color: var(--success); }

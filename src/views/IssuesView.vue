@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, computed } from 'vue';
+import { ref, computed } from 'vue';
 import type { GitLabIssue } from '../lib/types';
 import { useIssuesStore } from '../stores/issues';
+import { useConfigStore } from '../stores/config';
+import { api } from '../lib/api';
 import { usePolling } from '../composables/usePolling';
 import { provideCollapseAll } from '../composables/useCollapseAll';
 import ViewToolbar from '../components/shared/ViewToolbar.vue';
@@ -12,17 +14,14 @@ import LoadingState from '../components/shared/LoadingState.vue';
 import EmptyState from '../components/shared/EmptyState.vue';
 import IssueTable from '../components/issues/IssueTable.vue';
 import IssueDetailModal from '../components/issues/IssueDetailModal.vue';
+import ContextMenu from '../components/shared/ContextMenu.vue';
+import type { MenuEntry } from '../components/shared/ContextMenu.vue';
 
 const issuesStore = useIssuesStore();
+const configStore = useConfigStore();
 const refreshing = ref(false);
 const { allExpanded, toggle: toggleCollapseAll } = provideCollapseAll();
 usePolling(() => issuesStore.fetchIssues());
-
-// Search state
-const searchQuery = ref('');
-const showSearchDropdown = ref(false);
-let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-const searchContainer = ref<HTMLElement | null>(null);
 
 // Detail modal state
 const selectedIssue = ref<GitLabIssue | null>(null);
@@ -40,6 +39,133 @@ const filterTabs: { value: 'all' | 'assigned' | 'followed'; label: string }[] = 
   { value: 'followed', label: 'Seguidas' },
 ];
 
+const hasGitlab = computed(() => Boolean(configStore.config.gitlab_url && configStore.config.gitlab_token_stored));
+const hasGithub = computed(() => Boolean(configStore.config.github_token_stored));
+
+const sourceTabs = computed(() => {
+  const tabs: { value: 'all' | 'gitlab' | 'github'; label: string }[] = [];
+  if (hasGitlab.value && hasGithub.value) {
+    tabs.push({ value: 'all', label: 'Todas' });
+  }
+  if (hasGitlab.value) tabs.push({ value: 'gitlab', label: 'GitLab' });
+  if (hasGithub.value) tabs.push({ value: 'github', label: 'GitHub' });
+  return tabs;
+});
+
+// Project filter
+const projectQuery = ref('');
+const showProjectDropdown = ref(false);
+const projectSuggestions = computed(() => {
+  if (!projectQuery.value) return issuesStore.availableProjects;
+  const q = projectQuery.value.toLowerCase();
+  return issuesStore.availableProjects.filter(p => p.toLowerCase().includes(q));
+});
+
+function selectProject(project: string) {
+  if (!issuesStore.projectFilter.includes(project)) {
+    issuesStore.projectFilter.push(project);
+  }
+  projectQuery.value = '';
+  showProjectDropdown.value = false;
+}
+
+function removeProject(project: string) {
+  issuesStore.projectFilter = issuesStore.projectFilter.filter(p => p !== project);
+}
+
+function clearProjectFilter() {
+  issuesStore.projectFilter = [];
+  projectQuery.value = '';
+}
+
+function hideProjectDropdown() {
+  window.setTimeout(() => { showProjectDropdown.value = false; }, 150);
+}
+
+async function onUpdateScore(issueId: number, value: number) {
+  await issuesStore.updatePreference(issueId, { manual_score: value });
+}
+
+async function onUnfollow(issueId: number) {
+  await issuesStore.unfollowIssue(issueId);
+}
+
+// --- Context menu ---
+const contextMenuVisible = ref(false);
+const contextMenuX = ref(0);
+const contextMenuY = ref(0);
+const contextMenuItems = ref<MenuEntry[]>([]);
+
+function onContextMenu(issue: GitLabIssue, e: MouseEvent) {
+  e.preventDefault();
+  const isFollowed = followedIds.value.has(issue.id);
+  const isGithub = issue._source === 'github';
+  const currentManual = issue.manual_priority ?? 0;
+
+  async function addScore(delta: number) {
+    await issuesStore.updatePreference(issue.id, { manual_score: currentManual + delta });
+  }
+
+  async function openUrl(url: string) {
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('plugin:opener|open_url', { url });
+    } catch {
+      window.open(url, '_blank');
+    }
+  }
+
+  const items: MenuEntry[] = [
+    { label: 'Ver detalle', icon: '\u25B6', action: () => openIssueDetail(issue) },
+    { label: `Ir a ${isGithub ? 'GitHub' : 'GitLab'}`, icon: '\u2197', action: () => openUrl(issue.web_url) },
+    { separator: true },
+    isFollowed
+      ? { label: 'Dejar de seguir', icon: '\u2716', action: () => issuesStore.unfollowIssue(issue.id), danger: true }
+      : { label: 'Seguir', icon: '\u2605', action: async () => {
+          await api.updateItemPreferences('issue', issue.id, {
+            followed: true,
+            source: issue._source,
+            project_path: issue.project_path,
+            iid: issue.iid,
+            title: issue.title,
+          });
+          await issuesStore.fetchFollowedIssues();
+        }},
+    { separator: true },
+    { label: `Score (${currentManual})`, icon: '#', action: () => {}, disabled: true },
+    {
+      label: 'Modificar score',
+      icon: '\u25B2\u25BC',
+      action: () => {},
+      select: {
+        options: [
+          { label: '+100', value: 100 },
+          { label: '+50', value: 50 },
+          { label: '+10', value: 10 },
+          { label: '+5', value: 5 },
+          { label: '+1', value: 1 },
+          { label: '-1', value: -1 },
+          { label: '-5', value: -5 },
+          { label: '-10', value: -10 },
+          { label: '-50', value: -50 },
+          { label: '-100', value: -100 },
+        ],
+        onSelect: (val: number) => addScore(val),
+      },
+    },
+    { separator: true },
+    { label: 'Copiar enlace', icon: '\u{1F517}', action: () => navigator.clipboard.writeText(issue.web_url) },
+    { label: 'Copiar referencia', icon: '#', action: () => navigator.clipboard.writeText(`${issue.project_path}#${issue.iid}`) },
+    { separator: true },
+    { label: 'Recargar issues', icon: '\u21BB', action: () => refresh() },
+  ];
+
+  contextMenuItems.value = items;
+  contextMenuX.value = e.clientX;
+  contextMenuY.value = e.clientY;
+  contextMenuVisible.value = true;
+}
+
 async function refresh() {
   refreshing.value = true;
   try { await issuesStore.fetchIssues(); } finally { refreshing.value = false; }
@@ -50,97 +176,62 @@ function openIssueDetail(issue: GitLabIssue) {
   showDetail.value = true;
 }
 
-// Debounced search
-watch(searchQuery, (q) => {
-  if (debounceTimer) clearTimeout(debounceTimer);
-  if (q.length < 2) {
-    issuesStore.searchResults = [];
-    showSearchDropdown.value = false;
-    return;
-  }
-  debounceTimer = setTimeout(async () => {
-    await issuesStore.searchIssues(q);
-    showSearchDropdown.value = issuesStore.searchResults.length > 0;
-  }, 300);
-});
-
-async function handleFollow(issue: GitLabIssue) {
-  await issuesStore.followIssue(issue.id);
-  // Remove from search results after following
-  issuesStore.searchResults = issuesStore.searchResults.filter(r => r.id !== issue.id);
-  if (issuesStore.searchResults.length === 0) {
-    showSearchDropdown.value = false;
-  }
-}
-
-function closeSearchDropdown() {
-  showSearchDropdown.value = false;
-}
-
-// Close dropdown on outside click
-function handleClickOutside(e: MouseEvent) {
-  if (searchContainer.value && !searchContainer.value.contains(e.target as Node)) {
-    closeSearchDropdown();
-  }
-}
-
-function handleSearchKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') {
-    closeSearchDropdown();
-  }
-}
-
-onMounted(() => {
-  document.addEventListener('click', handleClickOutside);
-});
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside);
-  if (debounceTimer) clearTimeout(debounceTimer);
-});
 </script>
 
 <template>
   <div class="issues-view">
-    <!-- Search bar -->
-    <div ref="searchContainer" class="search-section">
-      <div class="search-input-wrap">
-        <input
-          v-model="searchQuery"
-          type="text"
-          class="search-input"
-          placeholder="Buscar issues en GitLab..."
-          @keydown="handleSearchKeydown"
-        />
-        <span v-if="issuesStore.searchLoading" class="search-spinner"></span>
+    <!-- Filter tabs -->
+    <div class="filter-bar">
+      <div class="filter-tabs">
+        <button
+          v-for="tab in filterTabs"
+          :key="tab.value"
+          class="filter-tab"
+          :class="{ active: issuesStore.activeFilter === tab.value }"
+          @click="issuesStore.activeFilter = tab.value"
+        >{{ tab.label }}</button>
       </div>
-      <div v-if="showSearchDropdown" class="search-dropdown">
-        <div
-          v-for="result in issuesStore.searchResults"
-          :key="result.id"
-          class="search-result"
-        >
-          <div class="search-result-info">
-            <span class="search-result-title">{{ result.title }}</span>
-            <span class="search-result-meta">
-              {{ result.project_path }}
-              <span v-for="label in result.labels.slice(0, 3)" :key="label" class="search-label-tag">{{ label }}</span>
-            </span>
+
+      <div class="filter-right">
+        <!-- Project filter -->
+        <div class="project-filter-group">
+          <div v-for="p in issuesStore.projectFilter" :key="p" class="project-chip">
+            <span>{{ p.split('/').pop() }}</span>
+            <button class="chip-clear" @click="removeProject(p)" :title="p">&times;</button>
           </div>
-          <button class="follow-btn" @click.stop="handleFollow(result)">Seguir</button>
+          <div class="project-filter">
+            <input
+              v-model="projectQuery"
+              type="text"
+              class="project-input"
+              placeholder="Proyecto..."
+              @focus="showProjectDropdown = true"
+              @blur="hideProjectDropdown"
+            />
+            <div v-if="showProjectDropdown && projectSuggestions.length" class="project-dropdown">
+              <div
+                v-for="project in projectSuggestions"
+                :key="project"
+                class="project-option"
+                :class="{ selected: issuesStore.projectFilter.includes(project) }"
+                @mousedown.prevent="selectProject(project)"
+              >{{ project }}</div>
+            </div>
+          </div>
+          <button v-if="issuesStore.projectFilter.length" class="chip-clear-all" @click="clearProjectFilter" title="Limpiar filtros">&times;</button>
+        </div>
+
+        <!-- Source tabs -->
+        <div v-if="sourceTabs.length > 1" class="filter-tabs source-tabs">
+          <button
+            v-for="tab in sourceTabs"
+            :key="tab.value"
+            class="filter-tab source-tab"
+            :class="{ active: issuesStore.sourceFilter === tab.value }"
+            @click="issuesStore.sourceFilter = tab.value"
+          >{{ tab.label }}</button>
         </div>
       </div>
-    </div>
-
-    <!-- Filter tabs -->
-    <div class="filter-tabs">
-      <button
-        v-for="tab in filterTabs"
-        :key="tab.value"
-        class="filter-tab"
-        :class="{ active: issuesStore.activeFilter === tab.value }"
-        @click="issuesStore.activeFilter = tab.value"
-      >{{ tab.label }}</button>
     </div>
 
     <ViewToolbar
@@ -170,153 +261,148 @@ onUnmounted(() => {
         :label="String(project)"
         :count="issues.length"
       >
-        <IssueTable :issues="issues" :followedIds="followedIds" @select="openIssueDetail" />
+        <IssueTable :issues="issues" :followedIds="followedIds" @select="openIssueDetail" @update-score="onUpdateScore" @unfollow="onUnfollow" @contextmenu="onContextMenu" />
       </CollapsibleGroup>
 
       <EmptyState v-if="issuesStore.filteredIssues.length === 0 && !issuesStore.loading" text="Sin issues que mostrar" />
     </template>
 
     <IssueDetailModal :issue="selectedIssue" :open="showDetail" @close="showDetail = false" />
+
+    <ContextMenu
+      v-if="contextMenuVisible"
+      :items="contextMenuItems"
+      :x="contextMenuX"
+      :y="contextMenuY"
+      @close="contextMenuVisible = false"
+    />
   </div>
 </template>
 
 <style scoped>
-/* Search section */
-.search-section {
-  position: relative;
+/* Filter bar */
+.filter-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 12px;
 }
 
-.search-input-wrap {
-  position: relative;
+.filter-tabs {
+  display: flex;
+  gap: 4px;
 }
 
-.search-input {
-  width: 100%;
-  padding: 8px 12px;
-  font-size: 13px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-primary);
-  outline: none;
-  transition: border-color 0.15s;
-  box-sizing: border-box;
-}
-
-.search-input:focus {
-  border-color: var(--accent);
-}
-
-.search-input::placeholder {
-  color: var(--text-secondary);
-}
-
-.search-spinner {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 14px;
-  height: 14px;
-  border: 2px solid var(--border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: translateY(-50%) rotate(360deg); }
-}
-
-.search-dropdown {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  z-index: 100;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-top: none;
-  border-radius: 0 0 6px 6px;
-  max-height: 300px;
-  overflow-y: auto;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.search-result {
+.filter-right {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
   gap: 8px;
 }
 
-.search-result:last-child {
-  border-bottom: none;
-}
-
-.search-result:hover {
-  background: var(--bg-hover);
-}
-
-.search-result-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  flex: 1;
-}
-
-.search-result-title {
-  font-size: 13px;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.search-result-meta {
+.source-tab {
   font-size: 11px;
-  color: var(--text-secondary);
+  padding: 4px 10px;
+}
+
+/* Project filter */
+.project-filter-group {
   display: flex;
   align-items: center;
   gap: 4px;
   flex-wrap: wrap;
 }
 
-.search-label-tag {
-  display: inline-block;
-  padding: 0 4px;
-  background: var(--bg-card);
-  border-radius: 3px;
-  font-size: 10px;
+.project-filter {
+  position: relative;
+}
+
+.project-input {
+  width: 130px;
+  padding: 4px 10px;
+  font-size: 12px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+}
+
+.project-input:focus {
+  border-color: var(--accent);
+}
+
+.project-input::placeholder {
   color: var(--text-secondary);
 }
 
-.follow-btn {
-  flex-shrink: 0;
-  padding: 4px 10px;
+.project-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  background: var(--bg-secondary, #2d2d33);
+  border: 1px solid var(--accent);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  max-height: 200px;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.project-option {
+  padding: 6px 10px;
   font-size: 12px;
-  font-weight: 500;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.project-option:hover {
+  background: var(--bg-hover);
+}
+
+.project-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 12px;
   background: var(--accent);
   color: #fff;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+.chip-clear {
+  background: none;
   border: none;
-  border-radius: 4px;
+  color: #fff;
+  font-size: 14px;
   cursor: pointer;
-  transition: background 0.15s;
+  padding: 0 2px;
+  opacity: 0.8;
 }
 
-.follow-btn:hover {
-  background: var(--accent-hover);
+.chip-clear:hover {
+  opacity: 1;
 }
 
-/* Filter tabs */
-.filter-tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 12px;
+.chip-clear-all {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.chip-clear-all:hover {
+  color: var(--error);
+}
+
+.project-option.selected {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .filter-tab {

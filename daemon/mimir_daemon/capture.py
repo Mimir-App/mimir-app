@@ -22,7 +22,7 @@ from .tray import TrayIcon
 
 logger = logging.getLogger("mimir_capture")
 
-VERSION = "0.3.0"
+from . import __version__ as VERSION  # noqa: E402
 CAPTURE_PORT = 9476
 
 

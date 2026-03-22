@@ -7,15 +7,6 @@ import { useConfigStore } from './config';
 
 export type MRGroupBy = 'project' | 'priority' | 'none';
 
-const PRIORITY_ORDER = ['priority::critical', 'priority::high', 'priority::medium', 'priority::low'];
-
-function getPriorityLabel(labels: string[]): string {
-  for (const p of PRIORITY_ORDER) {
-    if (labels.includes(p)) return p.replace('priority::', '').toUpperCase();
-  }
-  return 'Sin prioridad';
-}
-
 export const useMergeRequestsStore = defineStore('merge_requests', () => {
   const mergeRequests = ref<GitLabMergeRequest[]>([]);
   const loading = ref(false);
@@ -29,19 +20,21 @@ export const useMergeRequestsStore = defineStore('merge_requests', () => {
   const activeFilter = ref<'all' | 'assigned' | 'reviewer' | 'followed'>('all');
   const currentUsername = ref('');
 
-  /** Merge assigned + followed, deduplicando por id */
+  /** Merge assigned + followed, deduplicando por project_path + iid */
   const allMRs = computed(() => {
-    const seen = new Set<number>();
+    const seen = new Set<string>();
     const result: GitLabMergeRequest[] = [];
     for (const mr of mergeRequests.value) {
-      if (!seen.has(mr.id)) {
-        seen.add(mr.id);
+      const key = `${mr.project_path}#${mr.iid}`;
+      if (!seen.has(key)) {
+        seen.add(key);
         result.push(mr);
       }
     }
     for (const mr of followedMRs.value) {
-      if (!seen.has(mr.id)) {
-        seen.add(mr.id);
+      const key = `${mr.project_path}#${mr.iid}`;
+      if (!seen.has(key)) {
+        seen.add(key);
         result.push(mr);
       }
     }
@@ -95,12 +88,18 @@ export const useMergeRequestsStore = defineStore('merge_requests', () => {
   const groupedByPriority = computed(() => {
     const groups: Record<string, (typeof filteredMRs.value)> = {};
     for (const mr of filteredMRs.value) {
-      const key = getPriorityLabel(mr.labels);
+      const mp = mr.manual_priority ?? 0;
+      let key: string;
+      if (mp >= 100) key = 'Critica';
+      else if (mp >= 75) key = 'Alta';
+      else if (mp >= 50) key = 'Media';
+      else if (mp > 0) key = 'Baja';
+      else key = 'Sin prioridad';
       if (!groups[key]) groups[key] = [];
       groups[key].push(mr);
     }
     const sorted: Record<string, typeof filteredMRs.value> = {};
-    for (const label of ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'Sin prioridad']) {
+    for (const label of ['Critica', 'Alta', 'Media', 'Baja', 'Sin prioridad']) {
       if (groups[label]) sorted[label] = groups[label];
     }
     return sorted;
@@ -145,7 +144,9 @@ export const useMergeRequestsStore = defineStore('merge_requests', () => {
   async function updatePreference(mrId: number, data: Partial<ItemPreference>) {
     await api.updateItemPreferences('mr', mrId, data);
     const existing = preferences.value.get(mrId) || { item_id: mrId, item_type: 'mr' as const, manual_score: 0, followed: false };
-    preferences.value.set(mrId, { ...existing, ...data } as ItemPreference);
+    const updated = new Map(preferences.value);
+    updated.set(mrId, { ...existing, ...data } as ItemPreference);
+    preferences.value = updated;
   }
 
   async function followMR(mrId: number) {

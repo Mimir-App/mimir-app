@@ -103,6 +103,9 @@ package_deb() {
     cp "$DIST_DIR/mimir-server" "$REPACK_DIR/usr/bin/mimir-server"
     chmod 755 "$REPACK_DIR/usr/bin/mimir-server"
 
+    # Actualizar version en control
+    sed -i "s/^Version:.*/Version: $VERSION/" "$REPACK_DIR/DEBIAN/control"
+
     # Regenerar md5sums
     (cd "$REPACK_DIR" && find usr -type f -exec md5sum {} \;) > "$REPACK_DIR/DEBIAN/md5sums"
 

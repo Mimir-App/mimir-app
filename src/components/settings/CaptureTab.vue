@@ -28,13 +28,13 @@ const configStore = useConfigStore();
           <td class="label-cell">Umbral inactividad <HelpTooltip text="Minutos sin actividad para cerrar un bloque automaticamente." /></td>
           <td>
             <div class="inline-field">
-              <input type="number" v-model.number="configStore.config.refresh_interval_seconds" min="1" max="30" />
+              <input type="number" v-model.number="configStore.config.inactivity_threshold_minutes" min="1" max="30" />
               <span class="suffix">min</span>
             </div>
           </td>
         </tr>
         <tr>
-          <td class="label-cell">Retencion senales <HelpTooltip text="Dias que se conservan las senales crudas. Pasado este tiempo se eliminan automaticamente para liberar espacio." /></td>
+          <td class="label-cell">Retencion señales <HelpTooltip text="Dias que se conservan las señales crudas. Pasado este tiempo se eliminan automaticamente para liberar espacio." /></td>
           <td>
             <div class="inline-field">
               <input type="number" v-model.number="configStore.config.signals_retention_days" min="30" max="730" />

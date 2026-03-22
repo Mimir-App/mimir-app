@@ -18,6 +18,10 @@ const emit = defineEmits<{
 const configStore = useConfigStore();
 const daemonStore = useDaemonStore();
 const odooToken = ref('');
+const odooUrl = ref('');
+const odooVersion = ref('v16');
+const odooDb = ref('');
+const odooUsername = ref('');
 const showOdooModal = ref(false);
 const testingOdoo = ref(false);
 const odooTestResult = ref<'ok' | 'fail' | null>(null);
@@ -43,6 +47,29 @@ async function clearOdooToken() {
   }
 }
 
+function openOdooModal() {
+  odooUrl.value = configStore.config.odoo_url;
+  odooVersion.value = configStore.config.odoo_version;
+  odooDb.value = configStore.config.odoo_db;
+  odooUsername.value = configStore.config.odoo_username;
+  odooToken.value = '';
+  showOdooModal.value = true;
+}
+
+async function confirmOdooModal() {
+  configStore.config.odoo_url = odooUrl.value;
+  configStore.config.odoo_version = odooVersion.value as 'v11' | 'v16';
+  configStore.config.odoo_db = odooDb.value;
+  configStore.config.odoo_username = odooUsername.value;
+  if (odooToken.value) {
+    await configStore.setOdooToken(odooToken.value);
+    odooToken.value = '';
+  }
+  await configStore.save(configStore.config);
+  showOdooModal.value = false;
+  emit('message', 'Configuracion Odoo guardada', 'success');
+}
+
 async function testOdooConnection() {
   testingOdoo.value = true; odooTestResult.value = null; odooTestMessage.value = '';
   try {
@@ -63,16 +90,29 @@ async function testOdooConnection() {
   <div class="tab-content">
     <IntegrationCard
       name="Odoo"
-      icon="O"
-      description="Conecta con tu servidor Odoo para imputar horas, gestionar proyectos y fichar jornada."
+      description="Imputar horas, gestionar proyectos y fichar jornada."
       :connected="odooIntegrationStatus.configured"
       connect-label="Configurar Odoo"
-      disconnect-label="Desconectar"
-      @connect="showOdooModal = true"
+      :testing="testingOdoo"
+      :test-result="odooTestResult"
+      :test-message="odooTestMessage"
+      @connect="openOdooModal"
+      @edit="openOdooModal"
+      @test="testOdooConnection"
       @disconnect="clearOdooToken"
     >
+      <template #icon>
+        <img
+          v-if="configStore.config.odoo_url"
+          :src="configStore.config.odoo_url.replace(/\/$/, '') + '/web/image/res.company/1/logo'"
+          :alt="'Odoo'"
+          style="width: 24px; height: 24px; object-fit: contain;"
+          @error="($event.target as HTMLImageElement).style.display = 'none'"
+        />
+        <span v-else style="font-size: 18px; font-weight: 700; color: #714B67;">O</span>
+      </template>
       <template #status>
-        <p class="session-detail">{{ configStore.config.odoo_username }} — {{ configStore.config.odoo_url }}</p>
+        <p class="session-detail">{{ configStore.config.odoo_username }} — {{ configStore.config.odoo_url.replace(/^https?:\/\//, '') }}</p>
       </template>
       <template #details>
         <table class="settings-table">
@@ -91,23 +131,20 @@ async function testOdooConnection() {
             </tr>
           </tbody>
         </table>
-        <div style="margin-top: 12px;">
-          <button type="button" class="btn btn-secondary btn-sm" @click="showOdooModal = true">Editar configuracion</button>
-        </div>
       </template>
     </IntegrationCard>
 
-    <ModalDialog title="Configurar Odoo" :open="showOdooModal" @close="showOdooModal = false">
+    <ModalDialog title="Configurar Odoo" :open="showOdooModal" showFooter @close="showOdooModal = false" @confirm="confirmOdooModal">
       <table class="settings-table">
         <tbody>
           <tr>
             <td class="label-cell">URL</td>
-            <td><input type="url" v-model="configStore.config.odoo_url" placeholder="https://odoo.example.com" /></td>
+            <td><input type="url" v-model="odooUrl" placeholder="https://odoo.example.com" /></td>
           </tr>
           <tr>
             <td class="label-cell">Version</td>
             <td>
-              <CustomSelect v-model="configStore.config.odoo_version" :options="[
+              <CustomSelect v-model="odooVersion" :options="[
                 { value: 'v11', label: 'Odoo v11', hint: 'XMLRPC' },
                 { value: 'v16', label: 'Odoo v16+', hint: 'REST / OAuth' },
               ]" />
@@ -115,29 +152,17 @@ async function testOdooConnection() {
           </tr>
           <tr>
             <td class="label-cell">Base de datos</td>
-            <td><input type="text" v-model="configStore.config.odoo_db" placeholder="nombre_base_datos" /></td>
+            <td><input type="text" v-model="odooDb" placeholder="nombre_base_datos" /></td>
           </tr>
           <tr>
             <td class="label-cell">Usuario</td>
-            <td><input type="text" v-model="configStore.config.odoo_username" placeholder="usuario@empresa.com" /></td>
+            <td><input type="text" v-model="odooUsername" placeholder="usuario@empresa.com" /></td>
           </tr>
           <tr>
             <td class="label-cell">Token</td>
             <td>
               <div class="token-field">
                 <input type="password" v-model="odooToken" :placeholder="configStore.config.odoo_token_stored ? '***** (guardado)' : 'Contrasena o API key'" />
-              </div>
-            </td>
-          </tr>
-          <tr>
-            <td></td>
-            <td>
-              <div class="connection-test">
-                <button type="button" class="btn btn-secondary btn-sm" @click="testOdooConnection" :disabled="testingOdoo">
-                  {{ testingOdoo ? 'Probando...' : 'Probar conexion' }}
-                </button>
-                <span v-if="odooTestResult === 'ok'" class="conn-ok">{{ odooTestMessage }}</span>
-                <span v-else-if="odooTestResult === 'fail'" class="conn-fail">{{ odooTestMessage }}</span>
               </div>
             </td>
           </tr>

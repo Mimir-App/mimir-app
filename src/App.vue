@@ -33,8 +33,7 @@ function applyTheme(theme: string) {
 
 function applyZoomLevel(size: number) {
   const zoomPercent = Math.round((size / 14) * 100);
-  const layout = document.querySelector('.app-layout') as HTMLElement | null;
-  if (layout) layout.style.zoom = `${zoomPercent}%`;
+  document.body.style.zoom = `${zoomPercent}%`;
 }
 
 onMounted(async () => {
@@ -43,11 +42,18 @@ onMounted(async () => {
   applyTheme(configStore.config.theme);
   applyZoomLevel(configStore.config.font_size);
 
-  // Health check de ambos procesos
+  // Health check de ambos procesos + push config con retry
   await daemonStore.captureHealthCheck();
-  const ok = await daemonStore.healthCheck();
+  let ok = await daemonStore.healthCheck();
+  if (!ok) {
+    // Server puede tardar en arrancar, reintentar
+    for (let i = 0; i < 5 && !ok; i++) {
+      await new Promise(r => window.setTimeout(r, 1000));
+      ok = await daemonStore.healthCheck();
+    }
+  }
   if (ok) {
-    configStore.pushToDaemon();
+    await configStore.pushToDaemon();
   }
 
   pollTimer = setInterval(() => {
@@ -75,6 +81,10 @@ watch(() => configStore.config.font_size, (size) => {
     <AppSidebar />
     <div class="app-main">
       <AppHeader />
+      <div v-if="daemonStore.versionMismatch" class="version-mismatch-banner">
+        Capture (v{{ daemonStore.captureVersion }}) y Server (v{{ daemonStore.serverVersion }}) tienen versiones distintas.
+        Actualiza mimir-capture: <code>sudo dpkg -i mimir-capture_{{ daemonStore.serverVersion }}_amd64.deb</code>
+      </div>
       <main class="app-content">
         <router-view />
       </main>
@@ -204,6 +214,23 @@ th.sortable:hover {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.version-mismatch-banner {
+  padding: 8px 16px;
+  background: rgba(220, 220, 170, 0.15);
+  border-bottom: 1px solid var(--warning);
+  color: var(--warning);
+  font-size: 12px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.version-mismatch-banner code {
+  background: var(--bg-card);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
 }
 
 .app-content {
