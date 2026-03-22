@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
+import TrayStatus from './TrayStatus.vue';
+import NotificationBell from '../shared/NotificationBell.vue';
+
 const route = useRoute();
 
 const titles: Record<string, string> = {
@@ -19,14 +22,11 @@ const pageTitle = computed(() => titles[route.path] ?? 'Mimir');
   <header class="app-header">
     <h1 class="page-title">{{ pageTitle }}</h1>
     <div class="header-actions">
+      <NotificationBell />
       <TrayStatus />
     </div>
   </header>
 </template>
-
-<script lang="ts">
-import TrayStatus from './TrayStatus.vue';
-</script>
 
 <style scoped>
 .app-header {
@@ -43,5 +43,11 @@ import TrayStatus from './TrayStatus.vue';
 .page-title {
   font-size: 16px;
   font-weight: 600;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 </style>

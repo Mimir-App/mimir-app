@@ -12,6 +12,7 @@ import CollapsibleGroup from '../components/shared/CollapsibleGroup.vue';
 import StatusBanner from '../components/shared/StatusBanner.vue';
 import LoadingState from '../components/shared/LoadingState.vue';
 import EmptyState from '../components/shared/EmptyState.vue';
+import TimesheetEditModal from '../components/timesheets/TimesheetEditModal.vue';
 
 const tsStore = useTimesheetsStore();
 const { allExpanded, toggle: toggleCollapseAll } = provideCollapseAll();
@@ -49,6 +50,18 @@ function sortEntries(entries: TimesheetEntry[]): TimesheetEntry[] {
 }
 
 const dummyFilter = ref('');
+
+const selectedEntry = ref<TimesheetEntry | null>(null);
+const showEditModal = ref(false);
+
+function openEntry(entry: TimesheetEntry) {
+  selectedEntry.value = entry;
+  showEditModal.value = true;
+}
+
+function onSaved() {
+  tsStore.fetchEntries();
+}
 </script>
 
 <template>
@@ -108,7 +121,7 @@ const dummyFilter = ref('');
             </tr>
           </thead>
           <tbody>
-            <tr v-for="entry in sortEntries(group.entries)" :key="entry.id">
+            <tr v-for="entry in sortEntries(group.entries)" :key="entry.id" class="clickable-row" @click="openEntry(entry)">
               <td v-if="tsStore.groupBy !== 'date'" :style="colStyle('date')">{{ formatDate(entry.date) }}</td>
               <td v-if="tsStore.groupBy !== 'project'" :style="colStyle('project')">{{ entry.project_name }}</td>
               <td :style="colStyle('task')">{{ entry.task_name ?? '—' }}</td>
@@ -121,6 +134,13 @@ const dummyFilter = ref('');
 
       <EmptyState v-if="tsStore.entries.length === 0" text="Sin entradas de timesheet" />
     </template>
+
+    <TimesheetEditModal
+      :entry="selectedEntry"
+      :open="showEditModal"
+      @close="showEditModal = false"
+      @saved="onSaved"
+    />
   </div>
 </template>
 
@@ -199,5 +219,7 @@ const dummyFilter = ref('');
   position: absolute; right: 0; top: 0; bottom: 0; width: 4px; cursor: col-resize; background: transparent;
 }
 .resize-handle:hover, .resize-handle:active { background: var(--accent); }
+
+.clickable-row { cursor: pointer; }
 
 </style>

@@ -11,8 +11,9 @@ const collapsed = ref(false);
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: '⊞' },
   { path: '/review', label: 'Revisar Dia', icon: '✓' },
-  { path: '/issues', label: 'Issues', icon: '◉' },
-  { path: '/merge-requests', label: 'MRs', icon: '⑂' },
+  { path: '/issues', label: 'Tareas', icon: '◉' },
+  { path: '/merge-requests', label: 'Ramas', icon: '⑂' },
+  { path: '/discover', label: 'Descubrir', icon: '🔍' },
   { path: '/timesheets', label: 'Parte de horas', icon: '⏱' },
   { path: '/settings', label: 'Ajustes', icon: '⚙' },
 ];

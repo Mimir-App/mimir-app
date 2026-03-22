@@ -11,7 +11,7 @@ impl DaemonClient {
         Self {
             base_url: format!("http://127.0.0.1:{}", port),
             client: reqwest::Client::builder()
-                .timeout(std::time::Duration::from_secs(10))
+                .timeout(std::time::Duration::from_secs(30))
                 .build()
                 .expect("Failed to create HTTP client"),
         }

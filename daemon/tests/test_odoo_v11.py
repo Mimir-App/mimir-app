@@ -206,3 +206,48 @@ async def test_get_entries_error(client):
     with patch.object(client, "_execute", new_callable=AsyncMock, side_effect=Exception("Timeout")):
         entries = await client.get_entries("2026-03-01", "2026-03-31")
     assert entries == []
+
+
+@pytest.mark.asyncio
+async def test_get_today_attendance_uses_timezone(client):
+    """get_today_attendance usa la zona horaria configurada."""
+    client._employee_id = 1
+    mock_result = [
+        {
+            "id": 10,
+            "check_in": "2026-03-17 07:00:00",
+            "check_out": False,
+            "employee_id": [1, "Admin"],
+        },
+    ]
+    with patch.object(client, "_execute", new_callable=AsyncMock, return_value=mock_result):
+        result = await client.get_today_attendance()
+    assert result is not None
+    assert result["id"] == 10
+    assert result["check_in"].endswith("Z")
+
+
+@pytest.mark.asyncio
+async def test_get_today_attendance_custom_timezone():
+    """get_today_attendance respeta timezone personalizada."""
+    custom_client = OdooV11Client(
+        url="https://odoo-test.example.com",
+        db="testdb",
+        username="admin",
+        password="admin-pass",
+        timezone="America/New_York",
+    )
+    custom_client._employee_id = 1
+    assert custom_client._timezone == "America/New_York"
+    with patch.object(custom_client, "_execute", new_callable=AsyncMock, return_value=[]):
+        result = await custom_client.get_today_attendance()
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_today_attendance_error(client):
+    """Error obteniendo attendance devuelve None."""
+    client._employee_id = 1
+    with patch.object(client, "_execute", new_callable=AsyncMock, side_effect=Exception("Timeout")):
+        result = await client.get_today_attendance()
+    assert result is None

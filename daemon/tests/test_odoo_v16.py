@@ -249,6 +249,53 @@ async def test_get_entries_null_result(client):
 
 
 @pytest.mark.asyncio
+async def test_get_today_attendance_uses_timezone(client):
+    """get_today_attendance usa la zona horaria configurada."""
+    client._employee_id = 1
+    mock_response = _resp(200, json={
+        "result": [
+            {
+                "id": 10,
+                "check_in": "2026-03-17 07:00:00",
+                "check_out": False,
+                "employee_id": [1, "Admin"],
+            },
+        ]
+    })
+    with patch.object(client._client, "post", return_value=mock_response):
+        result = await client.get_today_attendance()
+    assert result is not None
+    assert result["id"] == 10
+    assert result["check_in"].endswith("Z")
+
+
+@pytest.mark.asyncio
+async def test_get_today_attendance_custom_timezone():
+    """get_today_attendance respeta timezone personalizada."""
+    custom_client = OdooV16Client(
+        url="https://odoo16-test.example.com",
+        db="testdb",
+        token="test-api-key-123",
+        timezone="America/New_York",
+    )
+    custom_client._employee_id = 1
+    assert custom_client._timezone == "America/New_York"
+    mock_response = _resp(200, json={"result": []})
+    with patch.object(custom_client._client, "post", return_value=mock_response):
+        result = await custom_client.get_today_attendance()
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_today_attendance_error(client):
+    """Error obteniendo attendance devuelve None."""
+    client._employee_id = 1
+    with patch.object(client._client, "post", side_effect=Exception("Timeout")):
+        result = await client.get_today_attendance()
+    assert result is None
+
+
+@pytest.mark.asyncio
 async def test_close(client):
     """Cierra el cliente HTTP."""
     with patch.object(client._client, "aclose") as mock_close:

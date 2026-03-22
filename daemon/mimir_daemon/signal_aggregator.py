@@ -168,6 +168,16 @@ class SignalAggregator:
 
         # Crear bloque nuevo si no hay uno activo
         if self._current_block_id is None:
+            # Auto-asignar proyecto Odoo desde context_mappings
+            mapping = await self._db.get_context_mapping(context_key)
+            extra = {}
+            if mapping and mapping.get("odoo_project_id"):
+                extra["odoo_project_id"] = mapping["odoo_project_id"]
+                extra["odoo_project_name"] = mapping.get("odoo_project_name")
+                extra["odoo_task_id"] = mapping.get("odoo_task_id")
+                extra["odoo_task_name"] = mapping.get("odoo_task_name")
+                logger.info("Auto-asignado: %s -> %s", context_key, mapping.get("odoo_project_name"))
+
             block_id = await self._db.create_block(
                 start_time=timestamp_str,
                 end_time=timestamp_str,
@@ -177,7 +187,9 @@ class SignalAggregator:
                 project_path=signal.get("project_path"),
                 git_branch=signal.get("git_branch"),
                 git_remote=signal.get("git_remote"),
+                context_key=context_key,
                 status="auto",
+                **extra,
             )
             self._current_block_id = block_id
             self._current_context_key = context_key

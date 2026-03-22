@@ -24,6 +24,16 @@ export interface ActivityBlock {
   status: BlockStatus;
   sync_error: string | null;
   odoo_entry_id: number | null;
+  context_key: string | null;
+}
+
+export interface ContextMapping {
+  context_key: string;
+  odoo_project_id: number | null;
+  odoo_project_name: string | null;
+  odoo_task_id: number | null;
+  odoo_task_name: string | null;
+  match?: 'exact' | 'partial' | 'history';
 }
 
 // --- Signals ---
@@ -49,7 +59,12 @@ export interface Signal {
   created_at: string;
 }
 
-// --- GitLab ---
+// --- GitLab / GitHub ---
+
+export interface LabelInfo {
+  name: string;
+  color: string;
+}
 
 export interface GitLabIssue {
   id: number;
@@ -60,6 +75,7 @@ export interface GitLabIssue {
   web_url: string;
   project_path: string;
   labels: string[];
+  label_objects?: LabelInfo[];
   assignees: GitLabUser[];
   milestone: string | null;
   due_date: string | null;
@@ -69,6 +85,7 @@ export interface GitLabIssue {
   has_conflicts: boolean;
   score: number;
   manual_priority: number | null;
+  _source?: 'gitlab' | 'github';
 }
 
 export interface GitLabMergeRequest {
@@ -80,6 +97,7 @@ export interface GitLabMergeRequest {
   web_url: string;
   project_path: string;
   labels: string[];
+  label_objects?: LabelInfo[];
   assignees: GitLabUser[];
   reviewers: GitLabUser[];
   source_branch: string;
@@ -91,6 +109,62 @@ export interface GitLabMergeRequest {
   user_notes_count: number;
   score: number;
   manual_priority: number | null;
+  _source?: 'gitlab' | 'github';
+}
+
+export interface ItemPreference {
+  item_id: number;
+  item_type: 'issue' | 'mr';
+  manual_score: number;
+  followed: boolean;
+  source?: string;
+  project_path?: string;
+  iid?: number;
+  title?: string;
+}
+
+export interface GitLabLabel {
+  name: string;
+  color: string;
+}
+
+export interface GitLabNote {
+  id: number;
+  body: string;
+  author: { username: string };
+  created_at: string;
+}
+
+export interface MRConflict {
+  old_path: string;
+  new_path: string;
+}
+
+export interface GitLabTodo {
+  id: number;
+  action_name: string;
+  target_type: string;
+  target: { title: string; iid: number; web_url: string };
+  project: { path_with_namespace: string };
+}
+
+export interface AppNotification {
+  id: number;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  item_id: number | null;
+  read: boolean;
+  created_at: string;
+}
+
+export interface DashboardWidgetConfig {
+  id: string;
+  type: string;
+  position: number;
+  span: [number, number];
+  config: Record<string, any>;
 }
 
 export interface GitLabUser {
@@ -144,6 +218,7 @@ export interface AppConfig {
   daemon_port: number;
   gitlab_url: string;
   gitlab_token_stored: boolean;
+  github_token_stored: boolean;
   odoo_url: string;
   odoo_version: 'v11' | 'v16';
   odoo_db: string;
@@ -176,4 +251,17 @@ export interface AppConfig {
   capture_idle: boolean;
   capture_audio: boolean;
   capture_ssh: boolean;
+  inactivity_threshold_minutes: number;
+  gitlab_priority_labels: Array<{ label: string; weight: number }>;
+  issue_notes_count: number;
+  dashboard_widgets: DashboardWidgetConfig[];
+  notification_enabled: boolean;
+  notification_interval_minutes: number;
+  notification_retention_days: number;
+  notification_comments: boolean;
+  notification_pipeline_failed: boolean;
+  notification_mr_approved: boolean;
+  notification_changes_requested: boolean;
+  notification_conflicts: boolean;
+  notification_todos: boolean;
 }

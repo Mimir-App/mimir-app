@@ -1,8 +1,9 @@
 """Tests para el platform layer Linux (X11 + Wayland)."""
 
 import os
+import subprocess
 import pytest
-from unittest.mock import patch, AsyncMock, Mock
+from unittest.mock import patch, AsyncMock, Mock, MagicMock
 
 from mimir_daemon.platform.linux import LinuxProvider
 from mimir_daemon.platform.base import WindowInfo
@@ -24,7 +25,9 @@ async def test_setup_detects_wayland():
 @pytest.mark.asyncio
 async def test_setup_detects_x11():
     """Detecta X11 via XDG_SESSION_TYPE."""
-    with patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11"}):
+    mock_result = MagicMock(returncode=0, stdout="12345\n", stderr="")
+    with patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11"}), \
+         patch("subprocess.run", return_value=mock_result):
         provider = LinuxProvider()
         provider._dbus_task = None
         with patch.object(provider, '_listen_dbus', new_callable=AsyncMock):
@@ -36,7 +39,9 @@ async def test_setup_detects_x11():
 async def test_setup_missing_session_type_defaults_x11():
     """Sin XDG_SESSION_TYPE usa X11 como fallback."""
     env = {k: v for k, v in os.environ.items() if k != "XDG_SESSION_TYPE"}
-    with patch.dict(os.environ, env, clear=True):
+    mock_result = MagicMock(returncode=0, stdout="12345\n", stderr="")
+    with patch.dict(os.environ, env, clear=True), \
+         patch("subprocess.run", return_value=mock_result):
         provider = LinuxProvider()
         provider._dbus_task = None
         with patch.object(provider, '_listen_dbus', new_callable=AsyncMock):
@@ -117,6 +122,48 @@ async def test_x11_backend_used_when_not_wayland():
     assert result is not None
     assert result.app_name == "code"
     provider._get_active_window_x11.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_setup_x11_xdotool_diagnostic_success():
+    """Setup en X11 logea verificacion exitosa de xdotool."""
+    mock_result = MagicMock(returncode=0, stdout="12345\n", stderr="")
+    with patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11"}), \
+         patch("subprocess.run", return_value=mock_result) as mock_run:
+        provider = LinuxProvider()
+        provider._dbus_task = None
+        with patch.object(provider, '_listen_dbus', new_callable=AsyncMock):
+            await provider.setup()
+        mock_run.assert_called_once_with(
+            ["xdotool", "getactivewindow"],
+            capture_output=True, text=True, timeout=3
+        )
+
+
+@pytest.mark.asyncio
+async def test_setup_x11_xdotool_not_installed():
+    """Setup en X11 logea error si xdotool no esta instalado."""
+    with patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11"}), \
+         patch("subprocess.run", side_effect=FileNotFoundError):
+        provider = LinuxProvider()
+        provider._dbus_task = None
+        with patch.object(provider, '_listen_dbus', new_callable=AsyncMock):
+            await provider.setup()
+        # No debe crashear
+        assert provider._use_wayland is False
+
+
+@pytest.mark.asyncio
+async def test_setup_x11_xdotool_fails():
+    """Setup en X11 logea error si xdotool falla."""
+    mock_result = MagicMock(returncode=1, stdout="", stderr="No window found")
+    with patch.dict(os.environ, {"XDG_SESSION_TYPE": "x11"}), \
+         patch("subprocess.run", return_value=mock_result):
+        provider = LinuxProvider()
+        provider._dbus_task = None
+        with patch.object(provider, '_listen_dbus', new_callable=AsyncMock):
+            await provider.setup()
+        assert provider._use_wayland is False
 
 
 @pytest.mark.asyncio

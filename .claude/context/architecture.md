@@ -1,6 +1,6 @@
 ## Arquitectura
 
-Version actual: v0.3.0. Arquitectura de senales implementada.
+Version actual: v0.3.1. Multi-source (GitHub + GitLab) + Descubrir + auto-asignacion.
 
 ### Procesos
 
@@ -9,64 +9,24 @@ Version actual: v0.3.0. Arquitectura de senales implementada.
 - Poller (ciclo cada 30s), SignalAggregator, Context Enricher, Tray Icon
 - Platform layer: X11 (xdotool) + Wayland (GNOME Shell extension D-Bus) + D-Bus logind
 - Deteccion automatica de entorno via $XDG_SESSION_TYPE
+- Context enricher: baja al proceso hijo mas profundo para detectar git repo en terminales
 - System context: idle time (Mutter), audio/reuniones (pactl), workspace
+- Auto-asignacion: consulta context_mappings al crear bloque
 - Endpoint /health y /status (incluye backend activo)
-- Siempre corriendo en background, independiente de la app
 
 **mimir-server** (puerto 9477)
 - Lanzado por Tauri como child process al abrir la app
-- FastAPI completo: CRUD blocks, signals, split/merge, sync Odoo, GitLab, IA, config
+- FastAPI completo: CRUD blocks, signals, split/merge, sync Odoo, GitLab, GitHub, IA, config
 - Google Calendar OAuth2 + consulta de eventos
+- NotificationService como background task (asyncio, lifespan)
+- Context mappings: CRUD + suggest + aprendizaje al confirmar
 - Se mata al cerrar la app Tauri
 
 **SQLite compartida**
 - Ambos procesos acceden a la misma base de datos
 - WAL mode para concurrencia segura entre capture y server
-- Tablas: blocks, signals, block_signals, ai_cache, source_tokens, preferences_cache
-
-### Flujo de captura (v0.3.0)
-
-```
-Poller (cada 30s)
-  |
-  +-- Platform: get_active_window() [X11 o Wayland]
-  +-- Context Enricher: enrich_pid() [git, SSH]
-  +-- System Context: get_system_context() [idle, audio, workspace]
-  +-- Google Calendar: get_current_event() [evento activo]
-  |
-  v
-Senal -> SQLite (signals table)
-  |
-  v
-SignalAggregator (determinista, tiempo real)
-  |-- Reglas: git project > browser domain > app name
-  |-- Meeting detection: audio + calendario
-  |-- Transient apps: heredan contexto
-  |-- Inactivity threshold: 5 min (configurable)
-  |
-  v
-Bloques -> SQLite (blocks + block_signals tables)
-  |
-  v
-Usuario revisa en "Revisar dia"
-  +-- Bloques agrupados (vista normal)
-  +-- Senales crudas (vista detalle)
-  +-- Split/merge bloques
-  +-- IA: descripciones + sugerencias
-```
-
-### Ciclo de vida de bloques
-
-```
-auto -> closed -> confirmed -> synced
-                            -> error
-```
-
-- auto: bloque abierto, el aggregator lo construye
-- closed: aggregator lo cerro (cambio contexto / inactividad)
-- confirmed: usuario lo aprobo
-- synced: enviado a Odoo
-- error: fallo al enviar
+- Migration registry versionado (schema_version table, 3 migraciones)
+- Tablas: blocks, signals, block_signals, ai_cache, source_tokens, preferences_cache, item_preferences, notifications, context_mappings
 
 ### Integraciones
 
@@ -74,19 +34,44 @@ auto -> closed -> confirmed -> synced
 |---|---|---|
 | Odoo v11 | XMLRPC + password | Timesheets, proyectos, tareas, fichaje |
 | Odoo v16+ | REST + API key | Timesheets, proyectos, tareas, fichaje |
-| GitLab | Personal Access Token | Issues, merge requests, scoring |
+| GitLab | Personal Access Token | Issues, MRs, TODOs, scoring, notas, conflictos, labels |
+| GitHub | Personal Access Token | Issues, PRs, search, comments, reviews, files, notifications, labels |
 | Google Calendar | OAuth2 | Eventos actuales, deteccion reuniones |
 | Gemini/Claude/OpenAI | API key | Descripciones automaticas de bloques |
+
+### Multi-source VCS
+
+- SourceRegistry con adaptadores (GitLabSource, GitHubSource)
+- Adaptadores normalizan datos al mismo formato (_source, _type, user_notes_count, label_objects, etc.)
+- Endpoints genericos (/gitlab/issues, /gitlab/merge_requests) agregan todas las fuentes
+- Endpoints especificos (/github/issues/search, /gitlab/issues/{id}/notes) por fuente
+- item_preferences guarda metadatos (source, project_path, iid, title) para recuperar items individualmente
+- Deduplicacion por project_path#iid (no por id)
+
+### Dashboard
+
+Sistema de widgets configurable:
+- Widget registry (`src/lib/widget-registry.ts`) con 10 tipos
+- Cada widget es un componente independiente en `src/components/dashboard/widgets/`
+- DashboardGrid soporta drag & drop, resize, add/remove
+- Config persistente por widget en `dashboard_widgets` de AppConfig
+- Galeria para anadir nuevos widgets + modal de configuracion
+
+### Notificaciones
+
+- NotificationService: background task async en el server (FastAPI lifespan)
+- Tabla `notifications` en SQLite con TTL configurable
+- NotificationBell en header con polling 30s + dropdown
+- Configurable por tipo de evento en Settings > Notificaciones
+- Pendiente: desktop notifications (tauri-plugin-notification), deteccion real de cambios
 
 ### Empaquetado
 
 Dos paquetes .deb + AppImage:
 - `mimir` (.deb): app Tauri + mimir-server en /usr/bin/
 - `mimir-capture` (.deb): captura + systemd service + extension GNOME Shell
-- AppImage: app Tauri standalone
-
-Build: `bash scripts/build.sh deb`
-CI: GitHub Actions, trigger en push de tag `v*`
+- Version bump bot: /bump patch|minor|major en PRs
+- Version check obligatorio en CI
 
 ### Comunicacion entre componentes
 
@@ -100,6 +85,7 @@ Frontend (Vue 3 + Tauri)
     |         mimir-server (FastAPI)
     |           localhost:9477
     |           [child process de Tauri]
+    |           [NotificationService background task]
     |                 |
     |                 | SQLite compartida (WAL)
     |                 |
@@ -113,5 +99,7 @@ Frontend (Vue 3 + Tauri)
     |      |
     |   Platform (xdotool / GNOME D-Bus)
     |      |
-    |   SignalAggregator -> SQLite (signals + blocks)
+    |   Context Enricher (git, SSH, child processes)
+    |      |
+    |   SignalAggregator -> SQLite (signals + blocks + auto-assign)
 ```

@@ -26,11 +26,17 @@ class EnrichedContext:
 
 
 async def enrich_pid(pid: int) -> EnrichedContext:
-    """Enriquece el contexto de un PID activo."""
+    """Enriquece el contexto de un PID activo.
+
+    Intenta encontrar el repo git del proceso. Si el proceso es un
+    emulador de terminal, busca en los procesos hijos (shell, editor)
+    ya que su CWD suele ser mas relevante.
+    """
     ctx = EnrichedContext()
 
-    # Obtener CWD del proceso directamente desde /proc
-    ctx.cwd = _read_proc_cwd(pid)
+    # Obtener CWD: intentar hijos primero (para terminales)
+    child_cwd = _read_deepest_child_cwd(pid)
+    ctx.cwd = child_cwd or _read_proc_cwd(pid)
 
     # Detectar sesion SSH
     ctx.ssh_host = _detect_ssh_session(pid)
@@ -44,8 +50,7 @@ async def enrich_pid(pid: int) -> EnrichedContext:
             ctx.git_branch = branch
             ctx.git_remote = remote
             ctx.last_commit_message = await _get_last_commit_message(str(git_root))
-        else:
-            ctx.project_path = ctx.cwd
+        # Sin git root: no asignar project_path (evita /home/user como proyecto)
 
     return ctx
 
@@ -59,6 +64,74 @@ def _read_proc_cwd(pid: int) -> str | None:
     except (PermissionError, OSError):
         pass
     return None
+
+
+def _read_deepest_child_cwd(pid: int, max_depth: int = 5) -> str | None:
+    """Busca el CWD del proceso hijo mas profundo.
+
+    Util para terminales: el PID de la ventana es el emulador (ghostty),
+    pero el proceso relevante es el shell o el programa que corre dentro.
+    Baja por el arbol de procesos hasta encontrar uno con un repo git,
+    o el mas profundo si ninguno tiene git.
+    """
+    best_cwd = None
+    best_git = None
+    current_pid = pid
+
+    for _ in range(max_depth):
+        children = _get_child_pids(current_pid)
+        if not children:
+            break
+        # Tomar el primer hijo (normalmente el shell o proceso principal)
+        child_pid = children[0]
+        cwd = _read_proc_cwd(child_pid)
+        if cwd:
+            best_cwd = cwd
+            git_root = _find_git_root(cwd)
+            if git_root:
+                best_git = cwd
+        current_pid = child_pid
+
+    return best_git or best_cwd
+
+
+def _get_child_pids(pid: int) -> list[int]:
+    """Obtiene PIDs hijos directos de un proceso.
+
+    Intenta /proc/children primero, luego escanea /proc buscando PPIDs.
+    """
+    # Metodo 1: /proc/pid/task/pid/children (rapido, no siempre disponible)
+    try:
+        children_path = Path(f"/proc/{pid}/task/{pid}/children")
+        if children_path.exists():
+            text = children_path.read_text().strip()
+            if text:
+                return [int(p) for p in text.split()]
+    except (PermissionError, OSError, ValueError):
+        pass
+
+    # Metodo 2: escanear /proc/*/stat buscando PPID == pid
+    children = []
+    try:
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdigit():
+                continue
+            try:
+                stat = (entry / "stat").read_text()
+                # Formato: pid (comm) state ppid ...
+                # El PPID es el 4to campo, pero comm puede contener espacios/parentesis
+                close_paren = stat.rfind(")")
+                if close_paren < 0:
+                    continue
+                fields = stat[close_paren + 2:].split()
+                ppid = int(fields[1])  # state=fields[0], ppid=fields[1]
+                if ppid == pid:
+                    children.append(int(entry.name))
+            except (PermissionError, OSError, ValueError, IndexError):
+                continue
+    except (PermissionError, OSError):
+        pass
+    return children
 
 
 def _detect_ssh_session(pid: int) -> str | None:

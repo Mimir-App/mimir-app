@@ -66,8 +66,12 @@ sed -i "0,/^version = \".*\"/s//version = \"$NEW\"/" "$ROOT/src-tauri/Cargo.toml
 # --- pyproject.toml ---
 sed -i "s/^version = \".*\"/version = \"$NEW\"/" "$ROOT/daemon/pyproject.toml"
 
+# --- __init__.py (daemon version) ---
+sed -i "s/__version__ = \".*\"/__version__ = \"$NEW\"/" "$ROOT/daemon/mimir_daemon/__init__.py"
+
 echo "Version actualizada a $NEW en:"
 echo "  - package.json"
 echo "  - src-tauri/tauri.conf.json"
 echo "  - src-tauri/Cargo.toml"
 echo "  - daemon/pyproject.toml"
+echo "  - daemon/mimir_daemon/__init__.py"

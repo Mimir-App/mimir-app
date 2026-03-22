@@ -16,8 +16,8 @@ const WEIGHTS = {
   FAILED_PIPELINE: 15,
 } as const;
 
-/** Labels que incrementan prioridad */
-const PRIORITY_LABELS: Record<string, number> = {
+/** Labels que incrementan prioridad (dinamicos, configurables desde settings) */
+let dynamicPriorityLabels: Record<string, number> = {
   'priority::critical': 100,
   'priority::high': 75,
   'priority::medium': 50,
@@ -25,10 +25,19 @@ const PRIORITY_LABELS: Record<string, number> = {
   'Expedite': 100,
 };
 
+export function setPriorityLabels(labels: Array<{ label: string; weight: number }>) {
+  if (labels.length > 0) {
+    dynamicPriorityLabels = {};
+    for (const { label, weight } of labels) {
+      dynamicPriorityLabels[label] = weight;
+    }
+  }
+}
+
 function scoreLabelPriority(labels: string[]): number {
   let max = 0;
   for (const label of labels) {
-    const val = PRIORITY_LABELS[label];
+    const val = dynamicPriorityLabels[label];
     if (val !== undefined && val > max) max = val;
   }
   return max;
@@ -61,19 +70,19 @@ function scoreDueDate(dueDate: string | null): number {
 
 export function computeIssueScore(issue: GitLabIssue): number {
   const manual = issue.manual_priority ?? 0;
-  const label = scoreLabelPriority(issue.labels);
-  const state = scoreStateMilestone(issue.state, issue.milestone);
-  const comments = scoreComments(issue.user_notes_count);
-  const due = scoreDueDate(issue.due_date);
+  const label = scoreLabelPriority(issue.labels ?? []);
+  const state = scoreStateMilestone(issue.state, issue.milestone ?? null);
+  const comments = scoreComments(issue.user_notes_count ?? 0);
+  const due = scoreDueDate(issue.due_date ?? null);
 
   return manual + label + state + comments + due;
 }
 
 export function computeMRScore(mr: GitLabMergeRequest): number {
   const manual = mr.manual_priority ?? 0;
-  const label = scoreLabelPriority(mr.labels);
+  const label = scoreLabelPriority(mr.labels ?? []);
   const state = scoreStateMilestone(mr.state, null);
-  const comments = scoreComments(mr.user_notes_count);
+  const comments = scoreComments(mr.user_notes_count ?? 0);
   const conflicts = mr.has_conflicts ? WEIGHTS.MR_CONFLICTS : 0;
   const pipeline = mr.pipeline_status === 'failed' ? WEIGHTS.FAILED_PIPELINE : 0;
 

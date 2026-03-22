@@ -21,11 +21,12 @@ class OdooV11Client(TimesheetClient):
     en un hilo separado via asyncio.to_thread para no bloquear el event loop.
     """
 
-    def __init__(self, url: str, db: str, username: str, password: str) -> None:
+    def __init__(self, url: str, db: str, username: str, password: str, timezone: str = "Europe/Madrid") -> None:
         self._url = url.rstrip("/")
         self._db = db
         self._username = username
         self._password = password
+        self._timezone = timezone
         self._uid: int | None = None
         self._employee_id: int | None = None
 
@@ -228,8 +229,10 @@ class OdooV11Client(TimesheetClient):
 
     async def get_today_attendance(self) -> dict[str, Any] | None:
         """Obtiene el attendance de hoy del empleado."""
-        from datetime import datetime, timezone
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        import zoneinfo
+        from datetime import datetime
+        user_tz = zoneinfo.ZoneInfo(self._timezone)
+        today = datetime.now(user_tz).strftime("%Y-%m-%d")
         domain = [
             ("employee_id", "=", self._employee_id),
             ("check_in", ">=", f"{today} 00:00:00"),

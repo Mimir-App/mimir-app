@@ -233,12 +233,12 @@ const isToday = computed(() =>
       </table>
     </CollapsibleGroup>
 
-    <!-- Senales crudas -->
+    <!-- Señales crudas -->
     <CollapsibleGroup
-      label="Senales crudas"
+      label="Señales crudas"
       :count="blocksStore.signals.length"
     >
-      <LoadingState v-if="blocksStore.signalsLoading" text="Cargando senales..." />
+      <LoadingState v-if="blocksStore.signalsLoading" text="Cargando señales..." />
       <div v-else-if="blocksStore.signals.length > 0" class="signals-table-wrap">
         <table class="signals-table">
           <thead>
@@ -261,7 +261,7 @@ const isToday = computed(() =>
           </tbody>
         </table>
       </div>
-      <div v-else class="signals-empty">Sin senales para esta fecha</div>
+      <div v-else class="signals-empty">Sin señales para esta fecha</div>
     </CollapsibleGroup>
   </div>
 </template>

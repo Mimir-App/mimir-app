@@ -17,11 +17,12 @@ from .db import Database
 from .integrations.registry import IntegrationRegistry
 from .sources.registry import SourceRegistry
 from .ai.service import AIService
+from . import __version__
 from .server import create_server_app
 
 logger = logging.getLogger("mimir_server")
 
-VERSION = "0.2.0"
+VERSION = __version__
 SERVER_PORT = 9477
 
 
