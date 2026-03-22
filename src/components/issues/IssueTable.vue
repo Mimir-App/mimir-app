@@ -9,7 +9,7 @@ import SourceIcon from '../shared/SourceIcon.vue';
 
 const props = defineProps<{
   issues: GitLabIssue[];
-  followedIds?: Set<number>;
+  followedKeys?: Set<string>;
 }>();
 const emit = defineEmits<{
   select: [issue: GitLabIssue];
@@ -65,7 +65,7 @@ function getLabels(issue: GitLabIssue) {
         <td class="icon-cell">
           <SourceIcon :source="issue._source" :size="16" />
           <button
-            v-if="followedIds?.has(issue.id)"
+            v-if="followedKeys?.has(`${issue.project_path}#${issue.iid}`)"
             class="followed-dot"
             title="Dejar de seguir"
             @click.stop="emit('unfollow', issue.id)"

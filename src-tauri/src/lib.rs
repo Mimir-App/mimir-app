@@ -69,6 +69,9 @@ pub fn run() {
             // GitLab todos & user
             daemon::get_gitlab_todos,
             daemon::get_gitlab_user,
+            // GitHub OAuth
+            daemon::github_oauth_start,
+            daemon::github_oauth_poll,
             // Notifications
             daemon::get_notifications,
             daemon::get_notification_count,

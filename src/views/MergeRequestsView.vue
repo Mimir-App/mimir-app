@@ -4,7 +4,6 @@ import type { GitLabMergeRequest } from '../lib/types';
 import { useMergeRequestsStore } from '../stores/merge_requests';
 import { usePolling } from '../composables/usePolling';
 import { provideCollapseAll } from '../composables/useCollapseAll';
-import { api } from '../lib/api';
 import ViewToolbar from '../components/shared/ViewToolbar.vue';
 import CustomSelect from '../components/shared/CustomSelect.vue';
 import CollapsibleGroup from '../components/shared/CollapsibleGroup.vue';
@@ -24,7 +23,7 @@ usePolling(() => mrStore.fetchMergeRequests());
 const selectedMR = ref<GitLabMergeRequest | null>(null);
 const showDetail = ref(false);
 
-const followedIds = computed(() => new Set(mrStore.followedMRs.map(mr => mr.id)));
+const followedKeys = computed(() => new Set(mrStore.followedMRs.map(mr => `${mr.project_path}#${mr.iid}`)));
 
 const filterTabs: { value: 'all' | 'assigned' | 'reviewer' | 'followed'; label: string }[] = [
   { value: 'all', label: 'Todas' },
@@ -59,7 +58,7 @@ const ctxItems = ref<MenuEntry[]>([]);
 
 function onContextMenu(mr: GitLabMergeRequest, e: MouseEvent) {
   e.preventDefault();
-  const isFollowed = followedIds.value.has(mr.id);
+  const isFollowed = followedKeys.value.has(`${mr.project_path}#${mr.iid}`);
   const isGithub = mr._source === 'github';
   const currentManual = mr.manual_priority ?? 0;
 
@@ -82,16 +81,12 @@ function onContextMenu(mr: GitLabMergeRequest, e: MouseEvent) {
     { separator: true },
     isFollowed
       ? { label: 'Dejar de seguir', icon: '\u2716', action: () => mrStore.unfollowMR(mr.id), danger: true }
-      : { label: 'Seguir', icon: '\u2605', action: async () => {
-          await api.updateItemPreferences('mr', mr.id, {
-            followed: true,
+      : { label: 'Seguir', icon: '\u2605', action: () => mrStore.followMR(mr.id, {
             source: mr._source,
             project_path: mr.project_path,
             iid: mr.iid,
             title: mr.title,
-          });
-          await mrStore.fetchFollowedMRs();
-        }},
+          })},
     { separator: true },
     { label: `Score (${currentManual})`, icon: '#', action: () => {}, disabled: true },
     {
@@ -166,7 +161,7 @@ function onContextMenu(mr: GitLabMergeRequest, e: MouseEvent) {
         :label="String(project)"
         :count="mrs.length"
       >
-        <MRTable :merge-requests="mrs" :followedIds="followedIds" @select="openMRDetail" @update-score="onUpdateScore" @unfollow="onUnfollow" @contextmenu="onContextMenu" />
+        <MRTable :merge-requests="mrs" :followedKeys="followedKeys" @select="openMRDetail" @update-score="onUpdateScore" @unfollow="onUnfollow" @contextmenu="onContextMenu" />
       </CollapsibleGroup>
 
       <EmptyState v-if="mrStore.filteredMRs.length === 0 && !mrStore.loading" text="Sin merge requests que mostrar" />

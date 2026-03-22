@@ -7,7 +7,7 @@ type DiscoverItem = (GitLabIssue | GitLabMergeRequest) & { _type?: string; _sour
 
 defineProps<{
   items: DiscoverItem[];
-  followedIds: Set<number>;
+  followedKeys: Set<string>;
 }>();
 
 const emit = defineEmits<{
@@ -85,7 +85,7 @@ function labelStyle(label: { name: string; color: string }) {
         <td class="col-date muted">{{ formatDate(item.updated_at) }}</td>
         <td class="col-action">
           <button
-            v-if="followedIds.has(item.id)"
+            v-if="followedKeys.has(`${item.project_path}#${item.iid}`)"
             class="btn-following"
             @click.stop="emit('unfollow', item.id)"
           >Siguiendo</button>

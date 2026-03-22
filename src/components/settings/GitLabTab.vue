@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onUnmounted } from 'vue';
 import { useConfigStore } from '../../stores/config';
 import { useDaemonStore } from '../../stores/daemon';
+import { api } from '../../lib/api';
 import HelpTooltip from '../shared/HelpTooltip.vue';
 import IntegrationCard from '../shared/IntegrationCard.vue';
 import ModalDialog from '../shared/ModalDialog.vue';
@@ -19,6 +20,10 @@ const emit = defineEmits<{
 const configStore = useConfigStore();
 const daemonStore = useDaemonStore();
 
+onUnmounted(() => {
+  if (oauthPollTimer) clearInterval(oauthPollTimer);
+});
+
 // --- GitLab ---
 const gitlabToken = ref('');
 const gitlabUrl = ref('');
@@ -35,6 +40,8 @@ const gitlabConfigured = computed((): boolean => {
 async function clearGitLabToken() {
   try {
     await configStore.deleteGitLabToken();
+    await configStore.pushToDaemon();
+    emit('refresh-status');
     emit('message', 'Token GitLab eliminado', 'success');
   } catch (e) {
     emit('message', `Error: ${e}`, 'error');
@@ -76,9 +83,19 @@ async function confirmGitlabModal() {
 // --- GitHub ---
 const githubToken = ref('');
 const showGithubModal = ref(false);
+const githubAuthTab = ref<'oauth' | 'pat'>('oauth');
 const testingGithub = ref(false);
 const githubTestResult = ref<'ok' | 'fail' | null>(null);
 const githubTestMessage = ref('');
+
+// OAuth Device Flow state
+const oauthLoading = ref(false);
+const oauthUserCode = ref('');
+const oauthVerificationUri = ref('');
+const oauthDeviceCode = ref('');
+const oauthPolling = ref(false);
+const oauthStatus = ref('');
+let oauthPollTimer: ReturnType<typeof setInterval> | null = null;
 
 const githubConfigured = computed((): boolean => {
   const github = props.integrationStatus?.github;
@@ -87,7 +104,83 @@ const githubConfigured = computed((): boolean => {
 
 function openGithubModal() {
   githubToken.value = '';
+  githubAuthTab.value = 'oauth';
+  oauthUserCode.value = '';
+  oauthStatus.value = '';
+  oauthPolling.value = false;
+  stopOAuthPolling();
   showGithubModal.value = true;
+}
+
+async function startOAuthFlow() {
+  oauthLoading.value = true;
+  oauthStatus.value = '';
+  try {
+    const result = await api.githubOAuthStart();
+    if (result.error) {
+      oauthStatus.value = `Error: ${result.error}`;
+      return;
+    }
+    oauthUserCode.value = result.user_code;
+    oauthVerificationUri.value = result.verification_uri;
+    oauthDeviceCode.value = result.device_code;
+    oauthStatus.value = 'waiting';
+
+    // Abrir el navegador
+    try {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('open_url', { url: result.verification_uri });
+    } catch {
+      // Fallback: el usuario abrirá manualmente
+    }
+
+    // Iniciar polling (añadir 1s de margen para evitar slow_down)
+    const interval = ((result.interval || 5) + 1) * 1000;
+    oauthPolling.value = true;
+    oauthPollTimer = setInterval(() => pollOAuth(), interval);
+  } catch (e) {
+    oauthStatus.value = `Error: ${e}`;
+  } finally {
+    oauthLoading.value = false;
+  }
+}
+
+async function pollOAuth() {
+  if (!oauthDeviceCode.value) return;
+  try {
+    const result = await api.githubOAuthPoll(oauthDeviceCode.value);
+    console.log('[OAuth poll]', JSON.stringify(result));
+    if (result.status === 'complete' && result.access_token) {
+      stopOAuthPolling();
+      oauthStatus.value = 'complete';
+      // Guardar token en keyring
+      await configStore.setGitHubToken(result.access_token);
+      await configStore.save(configStore.config);
+      emit('refresh-status');
+      emit('message', 'GitHub conectado via OAuth', 'success');
+      showGithubModal.value = false;
+    } else if (result.status === 'expired') {
+      stopOAuthPolling();
+      oauthStatus.value = 'El código ha expirado. Inténtalo de nuevo.';
+    } else if (result.status === 'error') {
+      stopOAuthPolling();
+      oauthStatus.value = `Error: ${result.error}`;
+    } else if (result.status === 'slow_down') {
+      // Reiniciar timer con intervalo mayor
+      stopOAuthPolling();
+      const newInterval = (result.interval || 10) * 1000;
+      oauthPolling.value = true;
+      oauthPollTimer = setInterval(() => pollOAuth(), newInterval);
+    }
+    // 'pending' → seguir polling con intervalo actual
+  } catch {
+    // Error de red → seguir intentando
+  }
+}
+
+function stopOAuthPolling() {
+  oauthPolling.value = false;
+  if (oauthPollTimer) { clearInterval(oauthPollTimer); oauthPollTimer = null; }
 }
 
 async function confirmGithubModal() {
@@ -97,12 +190,15 @@ async function confirmGithubModal() {
   }
   await configStore.save(configStore.config);
   showGithubModal.value = false;
-  emit('message', 'Configuracion GitHub guardada', 'success');
+  emit('message', 'Configuración GitHub guardada', 'success');
 }
 
 async function clearGitHubToken() {
+  stopOAuthPolling();
   try {
     await configStore.deleteGitHubToken();
+    await configStore.pushToDaemon();
+    emit('refresh-status');
     emit('message', 'Token GitHub eliminado', 'success');
   } catch (e) {
     emit('message', `Error: ${e}`, 'error');
@@ -184,7 +280,7 @@ async function testGithubConnection() {
               <td class="label-cell">Servidor</td>
               <td>github.com</td>
               <td class="label-cell">Auth</td>
-              <td>Personal Access Token</td>
+              <td>{{ githubConfigured ? 'Token configurado' : 'No configurado' }}</td>
             </tr>
           </tbody>
         </table>
@@ -212,25 +308,62 @@ async function testGithubConnection() {
     </ModalDialog>
 
     <!-- Modal GitHub -->
-    <ModalDialog title="Configurar GitHub" :open="showGithubModal" showFooter @close="showGithubModal = false" @confirm="confirmGithubModal">
-      <table class="settings-table">
-        <tbody>
-          <tr>
-            <td class="label-cell">Token</td>
-            <td>
-              <div class="token-field">
-                <input type="password" v-model="githubToken" :placeholder="configStore.config.github_token_stored ? '***** (guardado)' : 'Personal Access Token (classic o fine-grained)'" />
-              </div>
-            </td>
-          </tr>
-          <tr>
-            <td></td>
-            <td>
-              <p class="token-hint">Permisos necesarios: <code>repo</code>, <code>read:org</code>, <code>notifications</code></p>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <ModalDialog title="Configurar GitHub" :open="showGithubModal" :showFooter="githubAuthTab === 'pat'" @close="showGithubModal = false; stopOAuthPolling()" @confirm="confirmGithubModal">
+      <div class="github-auth-tabs">
+        <button class="auth-tab" :class="{ active: githubAuthTab === 'oauth' }" @click="githubAuthTab = 'oauth'; stopOAuthPolling()">OAuth (recomendado)</button>
+        <button class="auth-tab" :class="{ active: githubAuthTab === 'pat' }" @click="githubAuthTab = 'pat'; stopOAuthPolling()">Token manual</button>
+      </div>
+
+      <!-- OAuth Tab -->
+      <div v-if="githubAuthTab === 'oauth'" class="oauth-flow">
+        <template v-if="!oauthUserCode">
+          <p class="oauth-description">Autoriza Mimir en tu cuenta de GitHub. Se abrirá una ventana del navegador para completar el proceso.</p>
+          <button class="btn-oauth" @click="startOAuthFlow" :disabled="oauthLoading || !daemonStore.connected">
+            <SourceIcon source="github" :size="18" />
+            {{ oauthLoading ? 'Conectando...' : 'Conectar con GitHub' }}
+          </button>
+          <p v-if="!daemonStore.connected" class="oauth-hint error">Servidor API no conectado</p>
+          <p v-if="oauthStatus && oauthStatus !== 'waiting'" class="oauth-hint error">{{ oauthStatus }}</p>
+        </template>
+
+        <template v-else>
+          <div class="oauth-code-box">
+            <p class="oauth-instruction">Introduce este código en GitHub:</p>
+            <div class="oauth-code">{{ oauthUserCode }}</div>
+            <p class="oauth-url">
+              <a :href="oauthVerificationUri" target="_blank" rel="noopener">{{ oauthVerificationUri }}</a>
+            </p>
+          </div>
+          <div v-if="oauthPolling" class="oauth-waiting">
+            <span class="oauth-spinner"></span>
+            Esperando autorización...
+          </div>
+          <p v-if="oauthStatus === 'complete'" class="oauth-hint success">Conectado correctamente</p>
+          <p v-if="oauthStatus && !['waiting', 'complete'].includes(oauthStatus)" class="oauth-hint error">{{ oauthStatus }}</p>
+        </template>
+      </div>
+
+      <!-- PAT Tab -->
+      <div v-if="githubAuthTab === 'pat'">
+        <table class="settings-table">
+          <tbody>
+            <tr>
+              <td class="label-cell">Token</td>
+              <td>
+                <div class="token-field">
+                  <input type="password" v-model="githubToken" :placeholder="configStore.config.github_token_stored ? '***** (guardado)' : 'Personal Access Token (classic o fine-grained)'" />
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td></td>
+              <td>
+                <p class="token-hint">Permisos necesarios: <code>repo</code>, <code>read:org</code>, <code>notifications</code></p>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </ModalDialog>
 
     <!-- Scoring: prioridad de labels + notas -->
@@ -432,4 +565,150 @@ async function testGithubConnection() {
 .btn-danger { background: transparent; color: var(--error); border: 1px solid var(--error); }
 .btn-danger:hover:not(:disabled) { background: rgba(241, 76, 76, 0.1); }
 .btn:disabled { opacity: 0.5; }
+
+/* GitHub OAuth tabs */
+.github-auth-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: var(--space-4, 16px);
+  border-bottom: 2px solid var(--border);
+}
+
+.auth-tab {
+  flex: 1;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: var(--text-sm, 13px);
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.15s;
+}
+
+.auth-tab:hover {
+  color: var(--text-primary);
+}
+
+.auth-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* OAuth flow */
+.oauth-flow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3, 12px);
+  padding: var(--space-4, 16px) 0;
+}
+
+.oauth-description {
+  font-size: var(--text-sm, 13px);
+  color: var(--text-secondary);
+  text-align: center;
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+.btn-oauth {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding: var(--space-3, 12px) var(--space-6, 24px);
+  border-radius: var(--radius-lg, 12px);
+  background: var(--text-primary);
+  color: var(--bg-primary);
+  font-size: var(--text-sm, 13px);
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-oauth:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.btn-oauth:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.oauth-code-box {
+  text-align: center;
+  padding: var(--space-4, 16px);
+  background: var(--bg-card, #383840);
+  border-radius: var(--radius-lg, 12px);
+  border: 1px solid var(--border);
+  width: 100%;
+}
+
+.oauth-instruction {
+  font-size: var(--text-sm, 13px);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-2, 8px);
+}
+
+.oauth-code {
+  font-size: 28px;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  letter-spacing: 0.15em;
+  color: var(--accent);
+  padding: var(--space-2, 8px) 0;
+  user-select: all;
+}
+
+.oauth-url {
+  font-size: var(--text-xs, 11px);
+  margin-top: var(--space-2, 8px);
+}
+
+.oauth-url a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.oauth-url a:hover {
+  text-decoration: underline;
+}
+
+.oauth-waiting {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  font-size: var(--text-sm, 13px);
+  color: var(--text-secondary);
+}
+
+.oauth-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: oauth-spin 0.8s linear infinite;
+}
+
+@keyframes oauth-spin {
+  to { transform: rotate(360deg); }
+}
+
+.oauth-hint {
+  font-size: var(--text-xs, 11px);
+  text-align: center;
+}
+
+.oauth-hint.error {
+  color: var(--error);
+}
+
+.oauth-hint.success {
+  color: var(--success);
+}
 </style>

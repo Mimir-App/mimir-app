@@ -63,7 +63,7 @@ onMounted(() => fetchOdooData());
 </script>
 
 <template>
-  <h3 class="card-title">Progreso</h3>
+  <h3 class="card-title">progreso</h3>
   <div v-if="showHoy" class="progress-row">
     <span class="progress-label">Hoy</span>
     <div class="progress-bar-wrap">
@@ -101,15 +101,63 @@ onMounted(() => fetchOdooData());
 </template>
 
 <style scoped>
-.card-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
-.progress-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-.progress-label { min-width: 60px; font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+.card-title {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: var(--space-3);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.progress-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+.progress-label {
+  min-width: 55px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
 .progress-bar-wrap { flex: 1; }
-.progress-bar { height: 8px; background: var(--bg-card); border-radius: 4px; overflow: hidden; display: flex; }
-.progress-fill { height: 100%; transition: width 0.3s ease; }
-.progress-fill.confirmed { background: var(--accent); border-radius: 4px 0 0 4px; }
-.progress-fill.unconfirmed { background: var(--accent); opacity: 0.3; }
-.progress-value { font-size: 14px; font-weight: 600; color: var(--text-primary); min-width: 50px; text-align: right; }
-.progress-target { font-size: 12px; color: var(--text-secondary); min-width: 55px; }
-.progress-hint { font-size: 11px; color: var(--text-secondary); opacity: 0.7; margin-top: -4px; padding-left: 70px; }
+.progress-bar {
+  height: 6px;
+  background: var(--bg-card);
+  border-radius: 3px;
+  overflow: hidden;
+  display: flex;
+}
+.progress-fill {
+  height: 100%;
+  transition: width var(--duration-slow) var(--ease-out);
+}
+.progress-fill.confirmed {
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-hover) 100%);
+  border-radius: 3px 0 0 3px;
+}
+.progress-fill.unconfirmed {
+  background: var(--accent);
+  opacity: 0.2;
+}
+.progress-value {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 48px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.progress-target {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  min-width: 50px;
+}
+.progress-hint {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-top: calc(-1 * var(--space-1));
+  padding-left: 68px;
+}
 </style>

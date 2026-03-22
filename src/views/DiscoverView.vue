@@ -111,24 +111,25 @@ async function refresh() {
   if (query.value.length >= 2) await executeSearch();
 }
 
-// Followed IDs
-const localFollowedIds = ref(new Set<number>());
+// Followed keys (project_path#iid)
+const localFollowedKeys = ref(new Set<string>());
 
-const followedIds = computed(() => {
-  const ids = new Set(localFollowedIds.value);
-  for (const i of issuesStore.followedIssues) ids.add(i.id);
+const followedKeys = computed(() => {
+  const keys = new Set(localFollowedKeys.value);
+  for (const i of issuesStore.followedIssues) keys.add(`${i.project_path}#${i.iid}`);
   if (mrStore.followedMRs) {
-    for (const m of mrStore.followedMRs) ids.add(m.id);
+    for (const m of mrStore.followedMRs) keys.add(`${m.project_path}#${m.iid}`);
   }
-  return ids;
+  return keys;
 });
 
 // Init followed data from stores
 issuesStore.fetchFollowedIssues();
 mrStore.fetchFollowedMRs();
 
-// Track item types for unfollow
+// Track item types and keys for unfollow
 const itemTypeMap = new Map<number, string>();
+const itemKeyMap = new Map<number, string>();
 
 async function followItem(item: DiscoverItem) {
   const type = item._type === 'merge_request' ? 'mr' : 'issue';
@@ -139,8 +140,10 @@ async function followItem(item: DiscoverItem) {
     iid: item.iid,
     title: item.title,
   });
-  localFollowedIds.value = new Set([...localFollowedIds.value, item.id]);
+  const key = `${item.project_path}#${item.iid}`;
+  localFollowedKeys.value = new Set([...localFollowedKeys.value, key]);
   itemTypeMap.set(item.id, type);
+  itemKeyMap.set(item.id, key);
   if (type === 'issue') issuesStore.fetchFollowedIssues();
   else mrStore.fetchFollowedMRs();
 }
@@ -148,9 +151,12 @@ async function followItem(item: DiscoverItem) {
 async function unfollowItem(itemId: number) {
   const type = itemTypeMap.get(itemId) || 'issue';
   await api.updateItemPreferences(type, itemId, { followed: false });
-  const updated = new Set(localFollowedIds.value);
-  updated.delete(itemId);
-  localFollowedIds.value = updated;
+  const key = itemKeyMap.get(itemId);
+  if (key) {
+    const updated = new Set(localFollowedKeys.value);
+    updated.delete(key);
+    localFollowedKeys.value = updated;
+  }
   if (type === 'issue') issuesStore.fetchFollowedIssues();
   else mrStore.fetchFollowedMRs();
 }
@@ -176,7 +182,7 @@ const ctxY = ref(0);
 const ctxItems = ref<MenuEntry[]>([]);
 
 function onContextMenu(item: DiscoverItem, e: MouseEvent) {
-  const isFollowed = followedIds.value.has(item.id);
+  const isFollowed = followedKeys.value.has(`${item.project_path}#${item.iid}`);
   const isGithub = item._source === 'github';
 
   async function openUrl(url: string) {
@@ -258,7 +264,7 @@ function onContextMenu(item: DiscoverItem, e: MouseEvent) {
     <DiscoverTable
       v-else-if="results.length > 0"
       :items="results"
-      :followed-ids="followedIds"
+      :followed-keys="followedKeys"
       @select="openDetail"
       @follow="(id) => { const item = allResults.find(r => r.id === id); if (item) followItem(item); }"
       @unfollow="unfollowItem"

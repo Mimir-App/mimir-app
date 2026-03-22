@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, type Component } from 'vue';
 import type { DashboardWidget } from '../../lib/widget-registry';
+import { X, Settings2 } from 'lucide-vue-next';
 
 const props = defineProps<{
   widgets: DashboardWidget[];
@@ -105,10 +106,10 @@ function onDragEnd() { dragId.value = null; dragOverId.value = null; }
       <div v-if="editing" class="cell-controls">
         <span class="widget-label">{{ widget.type }}</span>
         <button class="control-btn remove-btn" @click.stop="emit('remove', widget.id)" title="Eliminar widget">
-          &times;
+          <X :size="12" :stroke-width="2" />
         </button>
         <button class="control-btn gear-btn" @click.stop="emit('configure', widget)" title="Configurar widget">
-          &#x2699;
+          <Settings2 :size="12" :stroke-width="2" />
         </button>
         <button class="control-btn" @click.stop="toggleMenu(widget.id, $event)" title="Cambiar tamano">
           {{ getRows(widget) }}x{{ getCols(widget) }}
@@ -153,17 +154,24 @@ function onDragEnd() { dragId.value = null; dragOverId.value = null; }
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-auto-rows: minmax(120px, auto);
-  gap: 16px;
+  gap: var(--space-4);
 }
 
 .grid-cell {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px;
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
   position: relative;
-  transition: box-shadow 0.15s, opacity 0.15s;
+  transition: box-shadow var(--duration-base) var(--ease-out),
+              transform var(--duration-base) var(--ease-out),
+              opacity var(--duration-fast);
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.grid-cell:hover {
+  box-shadow: var(--shadow-md);
 }
 
 /* Modo edicion */
@@ -176,37 +184,41 @@ function onDragEnd() { dragId.value = null; dragOverId.value = null; }
   cursor: grabbing;
 }
 
-.grid-cell.dragging { opacity: 0.4; }
-.grid-cell.drag-over { box-shadow: 0 0 0 2px var(--accent); border-color: var(--accent); }
+.grid-cell.dragging { opacity: 0.4; transform: scale(0.97); }
+.grid-cell.drag-over { box-shadow: var(--shadow-glow); border-color: var(--accent); }
 
 /* Controles */
 .cell-controls {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
   position: relative;
 }
 
 .widget-label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--accent);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.06em;
   flex: 1;
 }
 
 .control-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   background: var(--bg-card);
   border: 1px solid var(--border);
   color: var(--text-secondary);
-  font-size: 11px;
+  font-size: var(--text-xs);
   font-weight: 500;
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  font-family: monospace;
+  font-family: var(--font-mono);
+  transition: all var(--duration-fast) var(--ease-out);
 }
 
 .control-btn:hover {
@@ -218,6 +230,7 @@ function onDragEnd() { dragId.value = null; dragOverId.value = null; }
 .remove-btn:hover {
   border-color: var(--error);
   color: var(--error);
+  background: var(--error-soft);
 }
 
 /* Size menu */
@@ -225,11 +238,11 @@ function onDragEnd() { dragId.value = null; dragOverId.value = null; }
   position: absolute;
   top: calc(100% + 4px);
   right: 0;
-  background: var(--bg-card);
+  background: var(--bg-elevated);
   border: 1px solid var(--accent);
-  border-radius: 6px;
-  padding: 10px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  box-shadow: var(--shadow-lg);
   z-index: 50;
 }
 

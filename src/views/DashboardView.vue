@@ -9,6 +9,7 @@ import {
   getDefaultWidgets,
   type DashboardWidget,
 } from '../lib/widget-registry';
+import { Pencil, Plus, RotateCcw, X as XIcon, Save } from 'lucide-vue-next';
 
 // Widget components
 import JornadaWidget from '../components/dashboard/widgets/JornadaWidget.vue';
@@ -134,17 +135,17 @@ onMounted(() => {
   <div class="dashboard">
     <!-- Barra de edicion -->
     <div v-if="editing" class="edit-bar">
-      <span class="edit-hint">Modo edicion: arrastra widgets, usa &times; para eliminar y ⚙ para configurar</span>
+      <span class="edit-hint">Arrastra widgets para reordenar. Usa los controles de cada widget para configurar o eliminar.</span>
       <div class="edit-actions">
-        <button class="btn-edit add" @click="openGallery">+ Anadir widget</button>
-        <button class="btn-edit reset" @click="resetLayout">Resetear</button>
-        <button class="btn-edit cancel" @click="cancelEditing">Cancelar</button>
-        <button class="btn-edit save" @click="saveLayout">Guardar</button>
+        <button class="btn-edit add" @click="openGallery"><Plus :size="14" :stroke-width="2" /> Añadir</button>
+        <button class="btn-edit reset" @click="resetLayout"><RotateCcw :size="14" :stroke-width="2" /> Resetear</button>
+        <button class="btn-edit cancel" @click="cancelEditing"><XIcon :size="14" :stroke-width="2" /> Cancelar</button>
+        <button class="btn-edit save" @click="saveLayout"><Save :size="14" :stroke-width="2" /> Guardar</button>
       </div>
     </div>
     <div v-else class="edit-toggle">
       <button class="btn-edit-start" @click="startEditing" title="Editar layout del dashboard">
-        &#x270E; Editar dashboard
+        <Pencil :size="13" :stroke-width="2" /> Editar dashboard
       </button>
     </div>
 
@@ -175,89 +176,98 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* Edit bar */
 .edit-toggle {
   display: flex;
   justify-content: flex-end;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-4);
 }
 
 .btn-edit-start {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   background: none;
   border: 1px solid var(--border);
   color: var(--text-secondary);
-  padding: 4px 12px;
-  border-radius: 4px;
-  font-size: 12px;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--duration-base) var(--ease-out);
 }
 
 .btn-edit-start:hover {
   border-color: var(--accent);
   color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .edit-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 14px;
-  background: rgba(203, 27, 33, 0.08);
+  padding: var(--space-3) var(--space-4);
+  background: var(--accent-soft);
   border: 1px solid var(--accent);
-  border-radius: 8px;
-  margin-bottom: 12px;
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-4);
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .edit-hint {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--text-secondary);
 }
 
 .edit-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .btn-edit {
-  padding: 5px 14px;
-  border-radius: 4px;
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
   font-weight: 500;
   cursor: pointer;
   border: none;
-  transition: all 0.15s;
+  transition: all var(--duration-base) var(--ease-out);
 }
 
 .btn-edit.save {
   background: var(--accent);
   color: white;
+  box-shadow: 0 2px 8px var(--accent-glow);
 }
 
 .btn-edit.save:hover {
   background: var(--accent-hover);
+  transform: translateY(-1px);
 }
 
 .btn-edit.add {
-  background: none;
+  background: var(--success-soft);
   color: var(--success);
-  border: 1px solid var(--success);
+  border: 1px solid transparent;
 }
 
 .btn-edit.add:hover {
-  background: rgba(78, 201, 176, 0.1);
+  border-color: var(--success);
 }
 
 .btn-edit.reset {
-  background: none;
+  background: var(--warning-soft);
   color: var(--warning);
-  border: 1px solid var(--warning);
+  border: 1px solid transparent;
 }
 
 .btn-edit.reset:hover {
-  background: rgba(220, 220, 170, 0.1);
+  border-color: var(--warning);
 }
 
 .btn-edit.cancel {
@@ -268,5 +278,6 @@ onMounted(() => {
 
 .btn-edit.cancel:hover {
   background: var(--bg-hover);
+  color: var(--text-primary);
 }
 </style>
