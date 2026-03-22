@@ -103,6 +103,39 @@ package_deb() {
     cp "$DIST_DIR/mimir-server" "$REPACK_DIR/usr/bin/mimir-server"
     chmod 755 "$REPACK_DIR/usr/bin/mimir-server"
 
+    # Inyectar mimir-uninstall
+    cp "$PROJECT_DIR/scripts/uninstall.sh" "$REPACK_DIR/usr/bin/mimir-uninstall"
+    chmod 755 "$REPACK_DIR/usr/bin/mimir-uninstall"
+
+    # Inyectar postinst y prerm para el paquete mimir
+    cat > "$REPACK_DIR/DEBIAN/postinst" << 'POSTINST'
+#!/bin/bash
+if [ "$1" = "configure" ]; then
+    echo ""
+    echo "=== Mimir instalado ==="
+    echo "Ejecuta 'mimir' para abrir la aplicación."
+    echo "Para desinstalar: mimir-uninstall"
+    echo ""
+fi
+POSTINST
+    chmod 755 "$REPACK_DIR/DEBIAN/postinst"
+
+    cat > "$REPACK_DIR/DEBIAN/prerm" << 'PRERM'
+#!/bin/bash
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    echo ""
+    echo "=== Desinstalando mimir ==="
+    # Parar server si esta corriendo
+    pkill -f 'mimir-server' 2>/dev/null || true
+    pkill -x 'mimir' 2>/dev/null || true
+    echo "Para limpieza completa (datos, capture, config):"
+    echo "  mimir-uninstall --full"
+    echo "  (ejecutar ANTES de desinstalar si quieres limpiar datos)"
+    echo ""
+fi
+PRERM
+    chmod 755 "$REPACK_DIR/DEBIAN/prerm"
+
     # Actualizar version en control
     sed -i "s/^Version:.*/Version: $VERSION/" "$REPACK_DIR/DEBIAN/control"
 
@@ -213,6 +246,10 @@ if [ -n "$CAPTURE_DEB" ]; then
     echo "  Capture .deb: $CAPTURE_DEB ($(du -h "$CAPTURE_DEB" | cut -f1))"
 fi
 
+echo ""
+echo "Para desinstalar:"
+echo "  mimir-uninstall           # Interactivo"
+echo "  mimir-uninstall --full    # Todo"
 echo ""
 echo "Para instalar:"
 if [ -n "${MIMIR_DEB:-}" ]; then
