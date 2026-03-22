@@ -3,6 +3,8 @@
 ## Descripcion
 Mimir es un asistente inteligente de imputacion de horas. Captura automaticamente la actividad del empleado mediante senales (cada 30s), construye bloques con un algoritmo determinista, sugiere descripciones con IA, y permite imputar horas a Odoo.
 
+**Version actual: v0.4.2**
+
 ## Stack
 - **Frontend**: Tauri 2 + Vue 3 + TypeScript + Vite
 - **Backend desktop**: Rust (Tauri commands)
@@ -23,7 +25,7 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 python -m mimir_daemon      # Arranca daemon (capture + server)
-pytest tests/ -v            # Tests del daemon (~142 tests)
+pytest tests/ -v            # Tests del daemon (~147 tests)
 
 # Build
 bash scripts/build.sh capture   # Solo capture
@@ -38,6 +40,21 @@ npx vue-tsc --noEmit        # TypeScript check
 cd src-tauri && cargo check  # Rust check
 ```
 
+## Slash Commands (Claude Code)
+
+| Comando | Descripcion |
+|---|---|
+| `/test` | Suite completa: pytest + vue-tsc + cargo check |
+| `/check` | Verificacion rapida: vue-tsc + cargo check (sin tests) |
+| `/build [target]` | Ejecuta scripts/build.sh |
+| `/status` | Estado del proyecto: version, git, tests |
+| `/learn` | Extrae patrones de la sesion y los guarda |
+| `/brainstorm` | Explora una idea: contexto → preguntas → diseno |
+| `/update-docs` | Actualiza CLAUDE.md, architecture.md, conventions.md |
+| `/review-code [fase]` | Revisa codigo contra el plan |
+| `/implement-phase N` | Implementa una fase del plan |
+| `/verify-phase N` | Verifica que una fase esta completa |
+
 ## Arquitectura
 - `src/` — Frontend Vue 3 + TypeScript
 - `src-tauri/` — Backend Rust (Tauri 2)
@@ -45,7 +62,7 @@ cd src-tauri && cargo check  # Rust check
 - mimir-capture: puerto 9476, systemd user service, poller + signals + tray + health
 - mimir-server: puerto 9477, lanzado por Tauri como child process, FastAPI completo
 - SQLite compartida entre ambos procesos (WAL mode)
-- Tablas: blocks, signals, block_signals, ai_cache, source_tokens, preferences_cache
+- Tablas: blocks, signals, block_signals, ai_cache, source_tokens, preferences_cache, item_preferences, notifications, context_mappings
 
 ## Progreso
 Ver `PROGRESS.md` para el estado detallado de cada fase.
