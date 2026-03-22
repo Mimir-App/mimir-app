@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import FilterBar from './FilterBar.vue';
+import { RefreshCw, ChevronsUpDown } from 'lucide-vue-next';
 
 withDefaults(defineProps<{
   filterPlaceholder?: string;
@@ -41,18 +42,18 @@ const emit = defineEmits<{ refresh: []; toggleCollapse: [] }>();
       class="btn btn-ghost btn-collapse"
       @click="emit('toggleCollapse')"
     >
-      <span class="collapse-icon">{{ allExpanded ? '&#x25B6;' : '&#x25BC;' }}</span>
-      {{ allExpanded ? 'Collapse all' : 'Expand all' }}
+      <ChevronsUpDown :size="14" :stroke-width="2" />
+      {{ allExpanded ? 'Colapsar' : 'Expandir' }}
     </button>
 
     <button
       v-if="showRefresh"
-      class="btn btn-ghost"
+      class="btn btn-ghost btn-icon"
       @click="emit('refresh')"
       :disabled="refreshing || loading"
       title="Refrescar"
     >
-      &#x21bb;
+      <RefreshCw :size="15" :stroke-width="2" :class="{ spinning: refreshing }" />
     </button>
   </div>
 </template>
@@ -61,12 +62,13 @@ const emit = defineEmits<{ refresh: []; toggleCollapse: [] }>();
 .view-toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-  padding: 8px 12px;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+  padding: var(--space-2) var(--space-3);
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 
 .toolbar-filter {
@@ -81,7 +83,7 @@ const emit = defineEmits<{ refresh: []; toggleCollapse: [] }>();
 .toolbar-widgets {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-3);
   flex-shrink: 0;
 }
 
@@ -90,27 +92,45 @@ const emit = defineEmits<{ refresh: []; toggleCollapse: [] }>();
 }
 
 .btn {
-  padding: 6px 14px;
-  border-radius: 4px;
-  font-size: 13px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
   cursor: pointer;
   border: 1px solid transparent;
+  transition: all var(--duration-fast) var(--ease-out);
 }
 
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   background: transparent;
   color: var(--text-secondary);
-  font-size: 16px;
-  padding: 6px 10px;
+  padding: var(--space-2);
+  font-size: var(--text-sm);
 }
 
 .btn-ghost:hover:not(:disabled) {
   color: var(--text-primary);
   background: var(--bg-hover);
+}
+
+.btn-icon {
+  padding: 6px;
+  border-radius: var(--radius-md);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
 }
 </style>

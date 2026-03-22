@@ -18,6 +18,12 @@ class SourceRegistry:
         self._vcs_sources[name] = source
         logger.info("Fuente VCS registrada: %s", name)
 
+    def unregister_vcs(self, name: str) -> None:
+        """Elimina una fuente VCS del registro."""
+        if name in self._vcs_sources:
+            del self._vcs_sources[name]
+            logger.info("Fuente VCS desregistrada: %s", name)
+
     async def get_all_issues(self) -> list[dict[str, Any]]:
         results = []
         for name, source in self._vcs_sources.items():

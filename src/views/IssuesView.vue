@@ -3,7 +3,6 @@ import { ref, computed } from 'vue';
 import type { GitLabIssue } from '../lib/types';
 import { useIssuesStore } from '../stores/issues';
 import { useConfigStore } from '../stores/config';
-import { api } from '../lib/api';
 import { usePolling } from '../composables/usePolling';
 import { provideCollapseAll } from '../composables/useCollapseAll';
 import ViewToolbar from '../components/shared/ViewToolbar.vue';
@@ -27,9 +26,9 @@ usePolling(() => issuesStore.fetchIssues());
 const selectedIssue = ref<GitLabIssue | null>(null);
 const showDetail = ref(false);
 
-// Set of followed issue IDs for the dot indicator
-const followedIds = computed(() => {
-  return new Set(issuesStore.followedIssues.map(i => i.id));
+// Set of followed issue keys for the dot indicator
+const followedKeys = computed(() => {
+  return new Set(issuesStore.followedIssues.map(i => `${i.project_path}#${i.iid}`));
 });
 
 // Filter tabs
@@ -98,7 +97,7 @@ const contextMenuItems = ref<MenuEntry[]>([]);
 
 function onContextMenu(issue: GitLabIssue, e: MouseEvent) {
   e.preventDefault();
-  const isFollowed = followedIds.value.has(issue.id);
+  const isFollowed = followedKeys.value.has(`${issue.project_path}#${issue.iid}`);
   const isGithub = issue._source === 'github';
   const currentManual = issue.manual_priority ?? 0;
 
@@ -121,16 +120,12 @@ function onContextMenu(issue: GitLabIssue, e: MouseEvent) {
     { separator: true },
     isFollowed
       ? { label: 'Dejar de seguir', icon: '\u2716', action: () => issuesStore.unfollowIssue(issue.id), danger: true }
-      : { label: 'Seguir', icon: '\u2605', action: async () => {
-          await api.updateItemPreferences('issue', issue.id, {
-            followed: true,
+      : { label: 'Seguir', icon: '\u2605', action: () => issuesStore.followIssue(issue.id, {
             source: issue._source,
             project_path: issue.project_path,
             iid: issue.iid,
             title: issue.title,
-          });
-          await issuesStore.fetchFollowedIssues();
-        }},
+          })},
     { separator: true },
     { label: `Score (${currentManual})`, icon: '#', action: () => {}, disabled: true },
     {
@@ -261,7 +256,7 @@ function openIssueDetail(issue: GitLabIssue) {
         :label="String(project)"
         :count="issues.length"
       >
-        <IssueTable :issues="issues" :followedIds="followedIds" @select="openIssueDetail" @update-score="onUpdateScore" @unfollow="onUnfollow" @contextmenu="onContextMenu" />
+        <IssueTable :issues="issues" :followedKeys="followedKeys" @select="openIssueDetail" @update-score="onUpdateScore" @unfollow="onUnfollow" @contextmenu="onContextMenu" />
       </CollapsibleGroup>
 
       <EmptyState v-if="issuesStore.filteredIssues.length === 0 && !issuesStore.loading" text="Sin issues que mostrar" />

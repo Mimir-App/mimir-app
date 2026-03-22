@@ -2,6 +2,15 @@
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDaemonStore } from '../../stores/daemon';
+import {
+  LayoutDashboard,
+  ClipboardCheck,
+  CircleDot,
+  GitBranch,
+  Compass,
+  Clock,
+  Settings,
+} from 'lucide-vue-next';
 
 const route = useRoute();
 const router = useRouter();
@@ -9,13 +18,13 @@ const daemonStore = useDaemonStore();
 const collapsed = ref(false);
 
 const navItems = [
-  { path: '/dashboard', label: 'Dashboard', icon: '⊞' },
-  { path: '/review', label: 'Revisar Dia', icon: '✓' },
-  { path: '/issues', label: 'Tareas', icon: '◉' },
-  { path: '/merge-requests', label: 'Ramas', icon: '⑂' },
-  { path: '/discover', label: 'Descubrir', icon: '🔍' },
-  { path: '/timesheets', label: 'Parte de horas', icon: '⏱' },
-  { path: '/settings', label: 'Ajustes', icon: '⚙' },
+  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/review', label: 'Revisar Día', icon: ClipboardCheck },
+  { path: '/issues', label: 'Tareas', icon: CircleDot },
+  { path: '/merge-requests', label: 'Ramas', icon: GitBranch },
+  { path: '/discover', label: 'Descubrir', icon: Compass },
+  { path: '/timesheets', label: 'Parte de horas', icon: Clock },
+  { path: '/settings', label: 'Ajustes', icon: Settings },
 ];
 
 const currentPath = computed(() => route.path);
@@ -32,8 +41,12 @@ function toggleCollapse() {
 <template>
   <aside class="sidebar" :class="{ collapsed }">
     <div class="sidebar-header" @click="toggleCollapse" title="Colapsar/expandir sidebar">
-      <img src="../../assets/mimir-silhouette.svg" alt="Mimir" class="logo-icon" />
-      <span v-if="!collapsed" class="logo-text">Mimir</span>
+      <div class="logo-mark">
+        <img src="../../assets/mimir-silhouette.svg" alt="Mimir" class="logo-icon" />
+      </div>
+      <transition name="fade">
+        <span v-if="!collapsed" class="logo-text">Mimir</span>
+      </transition>
     </div>
 
     <nav class="sidebar-nav">
@@ -45,15 +58,20 @@ function toggleCollapse() {
         :title="collapsed ? item.label : undefined"
         @click="navigate(item.path)"
       >
-        <span class="nav-icon">{{ item.icon }}</span>
-        <span v-if="!collapsed" class="nav-label">{{ item.label }}</span>
+        <span class="nav-indicator"></span>
+        <component :is="item.icon" class="nav-icon" :size="18" :stroke-width="1.75" />
+        <transition name="fade">
+          <span v-if="!collapsed" class="nav-label">{{ item.label }}</span>
+        </transition>
       </button>
     </nav>
 
     <div class="sidebar-footer">
       <div class="daemon-status" :class="daemonStore.statusClass" :title="daemonStore.statusText">
         <span class="status-dot"></span>
-        <span v-if="!collapsed" class="status-text">{{ daemonStore.statusText }}</span>
+        <transition name="fade">
+          <span v-if="!collapsed" class="status-text">{{ daemonStore.statusText }}</span>
+        </transition>
       </div>
     </div>
   </aside>
@@ -61,28 +79,34 @@ function toggleCollapse() {
 
 <style scoped>
 .sidebar {
-  width: 200px;
-  background: var(--bg-secondary);
-  border-right: 1px solid var(--border);
+  width: 210px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-right: 1px solid var(--glass-border);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  transition: width 0.2s ease;
+  transition: width var(--duration-slow) var(--ease-out);
+  position: relative;
+  z-index: 10;
 }
 
 .sidebar.collapsed {
-  width: 52px;
+  width: 56px;
 }
 
+/* ── Header ── */
 .sidebar-header {
-  height: 48px;
-  padding: 0 16px;
+  height: 56px;
+  padding: 0 var(--space-4);
   display: flex;
   align-items: center;
-  gap: 8px;
-  border-bottom: 1px solid var(--border);
+  gap: var(--space-3);
+  border-bottom: 1px solid var(--glass-border);
   cursor: pointer;
   user-select: none;
+  transition: background var(--duration-fast) var(--ease-out);
 }
 
 .sidebar.collapsed .sidebar-header {
@@ -94,51 +118,68 @@ function toggleCollapse() {
   background: var(--bg-hover);
 }
 
-.logo-icon {
-  width: 28px;
-  height: 28px;
+.logo-mark {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 
-.logo-text {
-  font-weight: 600;
-  font-size: 16px;
-  white-space: nowrap;
-  overflow: hidden;
+.logo-icon {
+  width: 26px;
+  height: 26px;
 }
 
+.logo-text {
+  font-weight: 700;
+  font-size: var(--text-lg);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  background: linear-gradient(135deg, var(--text-primary) 0%, var(--text-secondary) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Navigation ── */
 .sidebar-nav {
   flex: 1;
-  padding: 8px;
+  padding: var(--space-3) var(--space-2);
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow-y: auto;
 }
 
 .sidebar.collapsed .sidebar-nav {
-  padding: 8px 4px;
+  padding: var(--space-3) var(--space-1);
 }
 
 .nav-item {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   border: none;
   background: none;
   color: var(--text-secondary);
   cursor: pointer;
-  border-radius: 6px;
-  font-size: 13px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 400;
   text-align: left;
   width: 100%;
-  transition: all 0.15s;
+  transition: all var(--duration-base) var(--ease-out);
   white-space: nowrap;
   overflow: hidden;
 }
 
 .sidebar.collapsed .nav-item {
-  padding: 8px 0;
+  padding: var(--space-2) 0;
   justify-content: center;
 }
 
@@ -148,15 +189,31 @@ function toggleCollapse() {
 }
 
 .nav-item.active {
-  background: var(--selection);
+  background: var(--accent-soft);
   color: var(--accent);
+  font-weight: 500;
+}
+
+/* Indicador lateral activo */
+.nav-indicator {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%) scaleY(0);
+  width: 3px;
+  height: 20px;
+  background: var(--accent);
+  border-radius: 0 3px 3px 0;
+  transition: transform var(--duration-base) var(--ease-spring);
+}
+
+.nav-item.active .nav-indicator {
+  transform: translateY(-50%) scaleY(1);
 }
 
 .nav-icon {
-  font-size: 16px;
-  width: 20px;
-  text-align: center;
   flex-shrink: 0;
+  transition: color var(--duration-fast);
 }
 
 .nav-label {
@@ -164,13 +221,14 @@ function toggleCollapse() {
   text-overflow: ellipsis;
 }
 
+/* ── Footer ── */
 .sidebar-footer {
-  padding: 12px;
-  border-top: 1px solid var(--border);
+  padding: var(--space-3);
+  border-top: 1px solid var(--glass-border);
 }
 
 .sidebar.collapsed .sidebar-footer {
-  padding: 12px 4px;
+  padding: var(--space-3) var(--space-1);
   display: flex;
   justify-content: center;
 }
@@ -178,9 +236,9 @@ function toggleCollapse() {
 .daemon-status {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }
 
 .sidebar.collapsed .daemon-status {
@@ -188,24 +246,39 @@ function toggleCollapse() {
 }
 
 .status-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
-  background: var(--text-secondary);
+  background: var(--text-muted);
   flex-shrink: 0;
+  transition: background var(--duration-base), box-shadow var(--duration-base);
 }
 
 .daemon-status.connected .status-dot {
   background: var(--success);
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.4);
 }
 
 .daemon-status.disconnected .status-dot {
   background: var(--error);
+  box-shadow: 0 0 8px rgba(248, 113, 113, 0.3);
 }
 
 .status-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ── Fade transition for labels ── */
+.fade-enter-active {
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+.fade-leave-active {
+  transition: opacity var(--duration-fast);
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

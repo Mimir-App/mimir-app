@@ -42,11 +42,12 @@ export const useMergeRequestsStore = defineStore('merge_requests', () => {
   });
 
   const scoredMRs = computed(() => {
+    const followedKeys = new Set(followedMRs.value.map(f => `${f.project_path}#${f.iid}`));
     const scored = allMRs.value.map(mr => {
       const pref = preferences.value.get(mr.id);
       const manualPriority = pref?.manual_score ?? mr.manual_priority ?? 0;
       const mrWithPref = { ...mr, manual_priority: manualPriority };
-      const isFollowed = followedMRs.value.some(f => f.id === mr.id);
+      const isFollowed = followedKeys.has(`${mr.project_path}#${mr.iid}`);
       return {
         ...mrWithPref,
         score: computeMRScore(mrWithPref),
@@ -149,14 +150,14 @@ export const useMergeRequestsStore = defineStore('merge_requests', () => {
     preferences.value = updated;
   }
 
-  async function followMR(mrId: number) {
-    await updatePreference(mrId, { followed: true });
+  async function followMR(mrId: number, meta?: { source?: string; project_path?: string; iid?: number; title?: string }) {
+    await updatePreference(mrId, { followed: true, ...meta });
     await fetchFollowedMRs();
   }
 
   async function unfollowMR(mrId: number) {
     await updatePreference(mrId, { followed: false });
-    followedMRs.value = followedMRs.value.filter(mr => mr.id !== mrId);
+    await fetchFollowedMRs();
   }
 
   async function fetchMergeRequests() {

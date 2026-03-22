@@ -6,6 +6,7 @@ import { formatHours, formatTime } from '../../composables/useFormatting';
 import SyncStatusBadge from '../shared/SyncStatusBadge.vue';
 import ConfidenceBadge from '../shared/ConfidenceBadge.vue';
 import BlockEditor from './BlockEditor.vue';
+import { Check, RefreshCw, Pencil, X } from 'lucide-vue-next';
 
 const props = defineProps<{ block: ActivityBlock }>();
 const blocksStore = useBlocksStore();
@@ -82,7 +83,7 @@ async function retry() {
         @click="confirm"
         title="Confirmar bloque"
       >
-        &#x2713;
+        <Check :size="13" :stroke-width="2.5" />
       </button>
       <button
         v-if="block.status === 'error'"
@@ -91,7 +92,7 @@ async function retry() {
         :disabled="retrying"
         :title="block.sync_error ? `Reintentar (Error: ${block.sync_error})` : 'Reintentar'"
       >
-        &#x21bb;
+        <RefreshCw :size="13" :stroke-width="2" />
       </button>
       <button
         v-if="canEdit"
@@ -99,7 +100,7 @@ async function retry() {
         @click="editing = !editing"
         :title="editing ? 'Cerrar editor' : 'Editar bloque'"
       >
-        &#x270E;
+        <Pencil :size="13" :stroke-width="2" />
       </button>
       <button
         v-if="canEdit"
@@ -107,7 +108,7 @@ async function retry() {
         @click="remove"
         title="Eliminar bloque"
       >
-        &#x2715;
+        <X :size="13" :stroke-width="2" />
       </button>
     </td>
   </tr>
@@ -120,9 +121,10 @@ async function retry() {
 
 <style scoped>
 .block-row td {
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--border);
+  padding: var(--space-2) var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
   vertical-align: middle;
+  transition: background var(--duration-fast);
 }
 
 .block-row:hover td {
@@ -134,15 +136,15 @@ async function retry() {
 }
 
 .block-row.confirmed td {
-  opacity: 0.85;
+  opacity: 0.9;
 }
 
 .block-row.synced td {
-  opacity: 0.6;
+  opacity: 0.55;
 }
 
 .block-row.has-error td {
-  background: rgba(241, 76, 76, 0.03);
+  background: var(--error-soft);
 }
 
 .col-duration {
@@ -197,54 +199,60 @@ async function retry() {
 }
 
 .btn-sm {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: none;
-  border-radius: 3px;
-  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  padding: 4px;
   cursor: pointer;
-  font-size: 12px;
   margin-right: 2px;
+  transition: all var(--duration-fast) var(--ease-out);
 }
 
 .btn-sm:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .btn-confirm {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.btn-confirm:hover {
   background: var(--success);
   color: white;
 }
 
-.btn-confirm:hover {
-  opacity: 0.85;
-}
-
 .btn-retry {
-  background: var(--warning);
-  color: #1e2029;
+  background: var(--warning-soft);
+  color: var(--warning);
 }
 
 .btn-retry:hover:not(:disabled) {
-  opacity: 0.85;
+  background: var(--warning);
+  color: #1a1d26;
 }
 
 .btn-edit {
-  background: var(--bg-card);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
 }
 
 .btn-edit:hover {
   background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .btn-delete {
   background: transparent;
-  color: var(--error);
+  color: var(--text-muted);
 }
 
 .btn-delete:hover {
-  background: rgba(241, 76, 76, 0.15);
+  background: var(--error-soft);
+  color: var(--error);
 }
 
 .editor-row td {

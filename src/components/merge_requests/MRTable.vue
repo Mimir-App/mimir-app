@@ -7,7 +7,7 @@ import { useColumnWidths } from '../../composables/useColumnWidths';
 import ScoreBadge from '../shared/ScoreBadge.vue';
 import SourceIcon from '../shared/SourceIcon.vue';
 
-const props = defineProps<{ mergeRequests: GitLabMergeRequest[]; followedIds?: Set<number> }>();
+const props = defineProps<{ mergeRequests: GitLabMergeRequest[]; followedKeys?: Set<string> }>();
 const emit = defineEmits<{
   select: [mr: GitLabMergeRequest];
   'update-score': [mrId: number, value: number];
@@ -45,7 +45,7 @@ const { colStyle, startResize } = useColumnWidths();
       <tr v-for="mr in sorted" :key="mr.id" class="data-row clickable-row" @click="emit('select', mr)" @contextmenu.prevent="emit('contextmenu', mr, $event)">
         <td class="icon-cell">
           <SourceIcon :source="mr._source" :size="16" />
-          <button v-if="followedIds?.has(mr.id)" class="followed-dot" title="Dejar de seguir" @click.stop="emit('unfollow', mr.id)"></button>
+          <button v-if="followedKeys?.has(`${mr.project_path}#${mr.iid}`)" class="followed-dot" title="Dejar de seguir" @click.stop="emit('unfollow', mr.id)"></button>
         </td>
         <td class="score-td">
           <ScoreBadge

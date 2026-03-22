@@ -10,6 +10,7 @@ import CollapsibleGroup from '../components/shared/CollapsibleGroup.vue';
 import StatusBanner from '../components/shared/StatusBanner.vue';
 import LoadingState from '../components/shared/LoadingState.vue';
 import CustomDatePicker from '../components/shared/CustomDatePicker.vue';
+import { ChevronLeft, ChevronRight, RefreshCw, CheckCheck, Send } from 'lucide-vue-next';
 
 const blocksStore = useBlocksStore();
 const daemonStore = useDaemonStore();
@@ -132,9 +133,13 @@ const isToday = computed(() =>
   <div class="review-day">
     <div class="review-toolbar">
       <div class="date-nav">
-        <button class="btn btn-ghost" @click="prevDay" title="Dia anterior">&lt;</button>
+        <button class="btn btn-ghost btn-icon" @click="prevDay" title="Día anterior">
+          <ChevronLeft :size="16" :stroke-width="2" />
+        </button>
         <CustomDatePicker v-model="blocksStore.selectedDate" />
-        <button class="btn btn-ghost" @click="nextDay" title="Dia siguiente">&gt;</button>
+        <button class="btn btn-ghost btn-icon" @click="nextDay" title="Día siguiente">
+          <ChevronRight :size="16" :stroke-width="2" />
+        </button>
         <button
           v-if="!isToday"
           class="btn btn-ghost btn-today"
@@ -170,14 +175,15 @@ const isToday = computed(() =>
         </template>
       </div>
       <div class="toolbar-actions">
-        <button class="btn btn-ghost" @click="refresh" title="Refrescar">
-          &#x21bb;
+        <button class="btn btn-ghost btn-icon" @click="refresh" title="Refrescar">
+          <RefreshCw :size="15" :stroke-width="2" />
         </button>
         <button
           class="btn btn-secondary"
           @click="confirmAll"
           :disabled="autoBlocksCount === 0"
         >
+          <CheckCheck :size="15" :stroke-width="2" />
           Confirmar todos
         </button>
         <button
@@ -186,6 +192,7 @@ const isToday = computed(() =>
           :disabled="confirmedCount === 0 || syncing || !odooConnected"
           :title="!odooConnected ? 'Daemon no conectado' : ''"
         >
+          <Send :size="14" :stroke-width="2" />
           {{ syncing ? 'Enviando...' : `Enviar a Odoo (${confirmedCount})` }}
         </button>
       </div>
@@ -270,38 +277,31 @@ const isToday = computed(() =>
 .review-toolbar {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 16px;
-  padding: 12px;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3);
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 
 .date-nav {
   display: flex;
   align-items: center;
-  gap: 4px;
-}
-
-.date-picker {
-  background: var(--bg-card);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 6px 10px;
-  font-size: 13px;
+  gap: var(--space-1);
 }
 
 .btn-today {
-  font-size: 12px;
-  padding: 4px 8px;
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
   color: var(--accent);
+  font-weight: 500;
 }
 
 .toolbar-stats {
   flex: 1;
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--text-secondary);
 }
 
@@ -310,21 +310,10 @@ const isToday = computed(() =>
   color: var(--border);
 }
 
-.pending-count {
-  color: var(--warning);
-}
-
-.confirmed-count {
-  color: #569cd6;
-}
-
-.error-count {
-  color: var(--error);
-}
-
-.synced-count {
-  color: var(--success);
-}
+.pending-count { color: var(--warning); }
+.confirmed-count { color: var(--info); }
+.error-count { color: var(--error); }
+.synced-count { color: var(--success); }
 
 .odoo-count {
   color: var(--accent);
@@ -333,31 +322,37 @@ const isToday = computed(() =>
 
 .toolbar-actions {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .btn {
-  padding: 6px 14px;
-  border-radius: 4px;
-  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
   font-weight: 500;
   cursor: pointer;
   border: 1px solid transparent;
-  transition: all 0.15s;
+  transition: all var(--duration-base) var(--ease-out);
 }
 
 .btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .btn-primary {
   background: var(--accent);
   color: white;
+  box-shadow: 0 2px 8px var(--accent-glow);
 }
 
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);
+  box-shadow: 0 4px 16px var(--accent-glow);
+  transform: translateY(-1px);
 }
 
 .btn-secondary {
@@ -368,13 +363,13 @@ const isToday = computed(() =>
 
 .btn-secondary:hover:not(:disabled) {
   background: var(--bg-hover);
+  border-color: var(--text-muted);
 }
 
 .btn-ghost {
   background: transparent;
   color: var(--text-secondary);
-  font-size: 16px;
-  padding: 4px 8px;
+  padding: var(--space-2);
 }
 
 .btn-ghost:hover {
@@ -382,30 +377,37 @@ const isToday = computed(() =>
   background: var(--bg-hover);
 }
 
+.btn-icon {
+  padding: 6px;
+  border-radius: var(--radius-md);
+}
+
+/* ── Tables ── */
 .odoo-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .odoo-table th {
   text-align: left;
-  padding: 10px 8px;
-  color: var(--text-secondary);
+  padding: var(--space-3) var(--space-2);
+  color: var(--text-muted);
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--text-xs);
   border-bottom: 2px solid var(--border);
   text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.5px;
 }
 
 .odoo-table td {
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--border);
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .odoo-row td {
   opacity: 0.85;
+  transition: background var(--duration-fast);
 }
 
 .odoo-row:hover td {
@@ -414,14 +416,15 @@ const isToday = computed(() =>
 
 .odoo-table .col-project { min-width: 120px; }
 .odoo-table .col-task { min-width: 120px; }
-.odoo-table .col-hours { text-align: right; min-width: 60px; }
+.odoo-table .col-hours { text-align: right; min-width: 60px; font-variant-numeric: tabular-nums; }
 
 /* Signals table */
 .signals-table-wrap { overflow-x: auto; }
-.signals-table { width: 100%; font-size: 12px; border-collapse: collapse; }
-.signals-table th { text-align: left; padding: 4px 8px; color: var(--text-secondary); border-bottom: 1px solid var(--border); font-weight: 500; }
-.signals-table td { padding: 4px 8px; border-bottom: 1px solid var(--border); }
+.signals-table { width: 100%; font-size: var(--text-xs); border-collapse: collapse; }
+.signals-table th { text-align: left; padding: var(--space-1) var(--space-2); color: var(--text-muted); border-bottom: 1px solid var(--border); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; font-size: 10px; }
+.signals-table td { padding: var(--space-1) var(--space-2); border-bottom: 1px solid var(--border-subtle); transition: background var(--duration-fast); }
+.signals-table tr:hover td { background: var(--bg-hover); }
 .signal-title { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.context-badge { font-size: 11px; padding: 2px 6px; border-radius: 4px; background: var(--bg-secondary); color: var(--text-secondary); }
-.signals-empty { padding: 16px; text-align: center; color: var(--text-secondary); font-size: 13px; }
+.context-badge { font-size: 10px; padding: 2px 6px; border-radius: var(--radius-sm); background: var(--bg-card); color: var(--text-secondary); font-family: var(--font-mono); }
+.signals-empty { padding: var(--space-4); text-align: center; color: var(--text-muted); font-size: var(--text-sm); }
 </style>

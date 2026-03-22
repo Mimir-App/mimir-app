@@ -32,6 +32,21 @@ def _project_path_from_repo_url(repository_url: str) -> str:
     return ""
 
 
+def _project_path_from_html_url(html_url: str) -> str:
+    """Extrae 'owner/repo' a partir de html_url (https://github.com/owner/repo/...).
+
+    Fallback cuando repository_url no está disponible (ej: endpoint /pulls/{n}).
+    """
+    try:
+        parts = [p for p in urlparse(html_url).path.split("/") if p]
+        # parts: ["owner", "repo", "pull"|"issues", "number"]
+        if len(parts) >= 2:
+            return f"{parts[0]}/{parts[1]}"
+    except Exception:
+        pass
+    return ""
+
+
 def _normalize_author(user: dict | None) -> dict:
     """Normaliza un objeto de usuario de GitHub al formato compartido."""
     if not user:
@@ -61,7 +76,10 @@ def _normalize_issue(item: dict) -> None:
     item["_source"] = "github"
     item["iid"] = item.get("number")
     item["web_url"] = item.get("html_url", "")
-    item["project_path"] = _project_path_from_repo_url(item.get("repository_url", ""))
+    item["project_path"] = (
+        _project_path_from_repo_url(item.get("repository_url", ""))
+        or _project_path_from_html_url(item.get("html_url", ""))
+    )
     item["author"] = _normalize_author(item.get("user"))
     item["user_notes_count"] = item.get("comments", 0)
     item["due_date"] = None
@@ -93,7 +111,10 @@ def _normalize_pr(item: dict) -> None:
         item.get("pull_request", {}).get("html_url")
         or item.get("html_url", "")
     )
-    item["project_path"] = _project_path_from_repo_url(item.get("repository_url", ""))
+    item["project_path"] = (
+        _project_path_from_repo_url(item.get("repository_url", ""))
+        or _project_path_from_html_url(item.get("html_url", ""))
+    )
     item["author"] = _normalize_author(item.get("user"))
     item["user_notes_count"] = item.get("comments", 0)
     item["has_conflicts"] = False

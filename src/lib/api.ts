@@ -390,6 +390,14 @@ export const api = {
     if (await isTauri()) return tauriInvoke('get_gitlab_user');
     return httpGet('/gitlab/user');
   },
+  async githubOAuthStart(): Promise<{ device_code: string; user_code: string; verification_uri: string; expires_in: number; interval: number; error?: string }> {
+    if (await isTauri()) return tauriInvoke('github_oauth_start');
+    return httpPost('/github/oauth/start', {});
+  },
+  async githubOAuthPoll(deviceCode: string): Promise<{ status: string; access_token?: string; interval?: number; error?: string }> {
+    if (await isTauri()) return tauriInvoke('github_oauth_poll', { body: { device_code: deviceCode } });
+    return httpPost('/github/oauth/poll', { device_code: deviceCode });
+  },
   async getNotifications(unreadOnly: boolean = true): Promise<AppNotification[]> {
     if (await isTauri()) return tauriInvoke('get_notifications', { unreadOnly });
     return httpGet(`/notifications?unread_only=${unreadOnly}`);

@@ -43,11 +43,12 @@ export const useIssuesStore = defineStore('issues', () => {
   });
 
   const scoredIssues = computed(() => {
+    const followedKeys = new Set(followedIssues.value.map(f => `${f.project_path}#${f.iid}`));
     const scored = allIssues.value.map(issue => {
       const pref = preferences.value.get(issue.id);
       const manualPriority = pref?.manual_score ?? issue.manual_priority ?? 0;
       const issueWithPref = { ...issue, manual_priority: manualPriority };
-      const isFollowed = followedIssues.value.some(f => f.id === issue.id);
+      const isFollowed = followedKeys.has(`${issue.project_path}#${issue.iid}`);
       return {
         ...issueWithPref,
         score: computeIssueScore(issueWithPref),
@@ -160,14 +161,14 @@ export const useIssuesStore = defineStore('issues', () => {
     preferences.value = updated;
   }
 
-  async function followIssue(issueId: number) {
-    await updatePreference(issueId, { followed: true });
+  async function followIssue(issueId: number, meta?: { source?: string; project_path?: string; iid?: number; title?: string }) {
+    await updatePreference(issueId, { followed: true, ...meta });
     await fetchFollowedIssues();
   }
 
   async function unfollowIssue(issueId: number) {
     await updatePreference(issueId, { followed: false });
-    followedIssues.value = followedIssues.value.filter(i => i.id !== issueId);
+    await fetchFollowedIssues();
   }
 
   async function fetchIssues() {
