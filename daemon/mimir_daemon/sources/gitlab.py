@@ -10,6 +10,13 @@ from .base import VCSSource
 logger = logging.getLogger(__name__)
 
 
+def _normalize_milestone(item: dict) -> None:
+    """Extrae el titulo del milestone si viene como objeto JSON."""
+    ms = item.get("milestone")
+    if isinstance(ms, dict):
+        item["milestone"] = ms.get("title")
+
+
 class GitLabSource(VCSSource):
     """Fuente de datos de GitLab API v4."""
 
@@ -46,6 +53,7 @@ class GitLabSource(VCSSource):
                 )
                 if isinstance(item["project_path"], list):
                     item["project_path"] = "/".join(item["project_path"])
+                _normalize_milestone(item)
             issues.extend(data)
             page += 1
         logger.info("GitLab: %d issues obtenidas", len(issues))
@@ -78,6 +86,7 @@ class GitLabSource(VCSSource):
                     item["project_path"] = item.get("references", {}).get(
                         "full", ""
                     ).split("!")[0].rstrip()
+                    _normalize_milestone(item)
                 mrs.extend(data)
                 page += 1
 
@@ -103,6 +112,7 @@ class GitLabSource(VCSSource):
             for issue in issues:
                 ref = issue.get("references", {}).get("full", "")
                 issue["project_path"] = ref.rsplit("#", 1)[0] if "#" in ref else ""
+                _normalize_milestone(issue)
             return issues
         except Exception as e:
             logger.error("Error buscando issues en GitLab: %s", e)
