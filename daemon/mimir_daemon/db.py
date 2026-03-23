@@ -175,10 +175,24 @@ async def _m003_item_preferences_extra_cols(db: aiosqlite.Connection) -> None:
             await db.execute(f"ALTER TABLE item_preferences ADD COLUMN {col} {definition}")
 
 
+async def _m004_context_affinity(db: aiosqlite.Connection) -> None:
+    """Anade tabla context_affinity para aprendizaje de fusion de contextos (v0.5.0)."""
+    await db.execute("""
+        CREATE TABLE IF NOT EXISTS context_affinity (
+            context_key_a TEXT NOT NULL,
+            context_key_b TEXT NOT NULL,
+            merge_count INTEGER NOT NULL DEFAULT 1,
+            last_merged TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (context_key_a, context_key_b)
+        )
+    """)
+
+
 MIGRATIONS: list[tuple[int, str, MigrationFn]] = [
     (1, "blocks.window_titles_json", _m001_blocks_window_titles_json),
     (2, "blocks.context_key + backfill", _m002_blocks_context_key),
     (3, "item_preferences extra cols", _m003_item_preferences_extra_cols),
+    (4, "context_affinity table", _m004_context_affinity),
 ]
 
 
@@ -447,6 +461,53 @@ class Database:
                 }
 
         return None
+
+    # --- Context affinity (aprendizaje de fusion) ---
+
+    async def record_context_affinity(self, context_keys: list[str]) -> None:
+        """Registra afinidad entre pares de context_keys tras una fusion manual.
+
+        Recibe la lista de context_keys de los bloques fusionados y crea/incrementa
+        el merge_count para cada par unico.
+        """
+        unique_keys = list(dict.fromkeys(k for k in context_keys if k))
+        if len(unique_keys) < 2:
+            return
+        for i, key_a in enumerate(unique_keys):
+            for key_b in unique_keys[i + 1:]:
+                # Ordenar alfabeticamente para clave consistente
+                a, b = sorted([key_a, key_b])
+                await self.db.execute(
+                    """INSERT INTO context_affinity (context_key_a, context_key_b, merge_count, last_merged)
+                       VALUES (?, ?, 1, datetime('now'))
+                       ON CONFLICT(context_key_a, context_key_b)
+                       DO UPDATE SET merge_count = merge_count + 1, last_merged = datetime('now')""",
+                    (a, b),
+                )
+        await self.db.commit()
+
+    async def get_context_affinity(self, key_a: str, key_b: str) -> dict | None:
+        """Obtiene la afinidad entre dos context_keys."""
+        a, b = sorted([key_a, key_b])
+        async with self.db.execute(
+            "SELECT * FROM context_affinity WHERE context_key_a = ? AND context_key_b = ?",
+            (a, b),
+        ) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def get_affine_keys(self, context_key: str, min_count: int = 3) -> set[str]:
+        """Obtiene todos los context_keys con afinidad suficiente respecto a uno dado."""
+        results: set[str] = set()
+        async with self.db.execute(
+            """SELECT context_key_a, context_key_b FROM context_affinity
+               WHERE (context_key_a = ? OR context_key_b = ?) AND merge_count >= ?""",
+            (context_key, context_key, min_count),
+        ) as cursor:
+            for row in await cursor.fetchall():
+                other = row[1] if row[0] == context_key else row[0]
+                results.add(other)
+        return results
 
     # --- Signals ---
 

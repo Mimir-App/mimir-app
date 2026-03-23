@@ -409,6 +409,10 @@ def create_server_app(
             await db.delete_block(b["id"])
         await db.db.commit()
 
+        # Registrar afinidad de contextos para aprendizaje
+        context_keys = [b.get("context_key", "") for b in blocks]
+        await db.record_context_affinity(context_keys)
+
         return {"merged_block_id": primary["id"]}
 
     @app.post("/blocks/{block_id}/generate-description")
@@ -516,6 +520,18 @@ def create_server_app(
             return await client.get_tasks(project_id)
         except Exception as e:
             logger.error("Error obteniendo tareas de Odoo (proyecto %d): %s", project_id, e)
+            return []
+
+    @app.get("/odoo/tasks/search")
+    async def search_odoo_tasks(query: str = Query(..., min_length=2), limit: int = Query(default=10)) -> list:
+        """Busca tareas en Odoo por nombre. Devuelve id, name, project, effective_hours."""
+        client = _registry.timesheet
+        if not client:
+            return []
+        try:
+            return await client.search_tasks(query, limit)
+        except Exception as e:
+            logger.error("Error buscando tareas en Odoo: %s", e)
             return []
 
     @app.get("/odoo/entries")

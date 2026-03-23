@@ -1,21 +1,83 @@
 <script setup lang="ts">
-import { toRef } from 'vue';
+import { toRef, ref, computed } from 'vue';
 import type { ActivityBlock } from '../../lib/types';
 import { useSortable } from '../../composables/useSortable';
 import { useColumnWidths } from '../../composables/useColumnWidths';
+import { useBlocksStore } from '../../stores/blocks';
 import BlockRow from './BlockRow.vue';
 import EmptyState from '../shared/EmptyState.vue';
+import { GitMerge } from 'lucide-vue-next';
 
 const props = defineProps<{ blocks: ActivityBlock[] }>();
 const { toggleSort, sortIcon, sorted } = useSortable(toRef(props, 'blocks'), 'start_time', 'asc');
 const { colStyle, startResize } = useColumnWidths();
+const blocksStore = useBlocksStore();
+
+const selectedIds = ref<Set<number>>(new Set());
+const merging = ref(false);
+
+const mergeableBlocks = computed(() =>
+  sorted.value.filter(b => b.status !== 'synced')
+);
+
+const selectedCount = computed(() => selectedIds.value.size);
+
+const allSelected = computed(() =>
+  mergeableBlocks.value.length > 0 && mergeableBlocks.value.every(b => selectedIds.value.has(b.id))
+);
+
+function toggleSelect(blockId: number) {
+  const next = new Set(selectedIds.value);
+  if (next.has(blockId)) {
+    next.delete(blockId);
+  } else {
+    next.add(blockId);
+  }
+  selectedIds.value = next;
+}
+
+function toggleAll() {
+  if (allSelected.value) {
+    selectedIds.value = new Set();
+  } else {
+    selectedIds.value = new Set(mergeableBlocks.value.map(b => b.id));
+  }
+}
+
+async function mergeSelected() {
+  if (selectedCount.value < 2) return;
+  merging.value = true;
+  try {
+    await blocksStore.mergeBlocks(Array.from(selectedIds.value));
+    selectedIds.value = new Set();
+  } finally {
+    merging.value = false;
+  }
+}
 </script>
 
 <template>
   <div class="block-table-wrapper">
+    <div v-if="selectedCount >= 2" class="merge-bar">
+      <span>{{ selectedCount }} bloques seleccionados</span>
+      <button class="btn btn-merge" @click="mergeSelected" :disabled="merging">
+        <GitMerge :size="14" :stroke-width="2" />
+        {{ merging ? 'Fusionando...' : 'Fusionar seleccionados' }}
+      </button>
+      <button class="btn btn-ghost-sm" @click="selectedIds = new Set()">Cancelar</button>
+    </div>
     <table class="block-table">
       <thead>
         <tr>
+          <th class="col-select">
+            <input
+              type="checkbox"
+              :checked="allSelected"
+              :indeterminate="selectedCount > 0 && !allSelected"
+              @change="toggleAll"
+              title="Seleccionar todos"
+            />
+          </th>
           <th :style="colStyle('time')" class="sortable resizable" @click="toggleSort('start_time')">
             Inicio{{ sortIcon('start_time') }}
             <span class="resize-handle" @mousedown.stop="startResize('time', $event)"></span>
@@ -49,7 +111,14 @@ const { colStyle, startResize } = useColumnWidths();
         </tr>
       </thead>
       <tbody>
-        <BlockRow v-for="block in sorted" :key="block.id" :block="block" />
+        <BlockRow
+          v-for="block in sorted"
+          :key="block.id"
+          :block="block"
+          :selected="selectedIds.has(block.id)"
+          :selectable="block.status !== 'synced'"
+          @toggle-select="toggleSelect(block.id)"
+        />
       </tbody>
     </table>
 
@@ -97,5 +166,68 @@ const { colStyle, startResize } = useColumnWidths();
 .resize-handle:hover,
 .resize-handle:active {
   background: var(--accent);
+}
+
+.col-select {
+  width: 32px;
+  text-align: center;
+  padding: 10px 4px;
+}
+
+.col-select input[type="checkbox"] {
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.merge-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+  background: rgba(203, 27, 33, 0.08);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+}
+
+.btn-merge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--duration-fast);
+}
+
+.btn-merge:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btn-merge:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-ghost-sm {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.btn-ghost-sm:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
 }
 </style>

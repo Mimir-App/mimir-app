@@ -10,6 +10,32 @@ from .base import VCSSource
 logger = logging.getLogger(__name__)
 
 
+def _normalize_milestone(item: dict) -> None:
+    """Extrae el titulo del milestone si viene como objeto JSON."""
+    ms = item.get("milestone")
+    if isinstance(ms, dict):
+        item["milestone"] = ms.get("title")
+
+
+def _normalize_mr_pipeline(item: dict) -> None:
+    """Extrae pipeline status, approved_by y has_conflicts de un MR de GitLab."""
+    # Pipeline
+    pipeline = item.get("head_pipeline")
+    if isinstance(pipeline, dict):
+        item["pipeline_status"] = pipeline.get("status")
+        item["pipeline_web_url"] = pipeline.get("web_url")
+    else:
+        item["pipeline_status"] = None
+        item["pipeline_web_url"] = None
+    # Aprobaciones
+    approved = item.get("approved_by", [])
+    item["approved_by"] = [
+        a.get("user", {}).get("username", "") if isinstance(a, dict) else ""
+        for a in (approved if isinstance(approved, list) else [])
+    ]
+    # has_conflicts ya viene directo de la API de GitLab
+
+
 class GitLabSource(VCSSource):
     """Fuente de datos de GitLab API v4."""
 
@@ -41,11 +67,15 @@ class GitLabSource(VCSSource):
                 break
             for item in data:
                 item["_type"] = "issue"
-                item["project_path"] = item.get("references", {}).get(
+                item["_source"] = "gitlab"
+                ref = item.get("references", {}).get(
                     "full", item.get("web_url", "").split("/-/")[0].split("/")[-2:]
                 )
-                if isinstance(item["project_path"], list):
-                    item["project_path"] = "/".join(item["project_path"])
+                if isinstance(ref, list):
+                    ref = "/".join(ref)
+                # Strip #iid del final (references.full = "group/project#123")
+                item["project_path"] = ref.rsplit("#", 1)[0] if "#" in ref else ref
+                _normalize_milestone(item)
             issues.extend(data)
             page += 1
         logger.info("GitLab: %d issues obtenidas", len(issues))
@@ -75,9 +105,12 @@ class GitLabSource(VCSSource):
                     break
                 for item in data:
                     item["_type"] = "merge_request"
+                    item["_source"] = "gitlab"
                     item["project_path"] = item.get("references", {}).get(
                         "full", ""
                     ).split("!")[0].rstrip()
+                    _normalize_milestone(item)
+                    _normalize_mr_pipeline(item)
                 mrs.extend(data)
                 page += 1
 
@@ -101,8 +134,10 @@ class GitLabSource(VCSSource):
             resp.raise_for_status()
             issues = resp.json()
             for issue in issues:
+                issue["_source"] = "gitlab"
                 ref = issue.get("references", {}).get("full", "")
                 issue["project_path"] = ref.rsplit("#", 1)[0] if "#" in ref else ""
+                _normalize_milestone(issue)
             return issues
         except Exception as e:
             logger.error("Error buscando issues en GitLab: %s", e)
@@ -134,8 +169,10 @@ class GitLabSource(VCSSource):
                 resp = await self._client.get(f"/issues/{gid}")
                 if resp.status_code == 200:
                     issue = resp.json()
+                    issue["_source"] = "gitlab"
                     ref = issue.get("references", {}).get("full", "")
                     issue["project_path"] = ref.rsplit("#", 1)[0] if "#" in ref else ""
+                    _normalize_milestone(issue)
                     results.append(issue)
             except Exception:
                 continue
@@ -151,8 +188,11 @@ class GitLabSource(VCSSource):
             resp.raise_for_status()
             mrs = resp.json()
             for mr in mrs:
+                mr["_source"] = "gitlab"
                 ref = mr.get("references", {}).get("full", "")
                 mr["project_path"] = ref.split("!")[0].rstrip() if "!" in ref else ""
+                _normalize_milestone(mr)
+                _normalize_mr_pipeline(mr)
             return mrs
         except Exception as e:
             logger.error("Error buscando merge requests en GitLab: %s", e)

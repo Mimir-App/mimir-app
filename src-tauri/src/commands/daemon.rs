@@ -109,6 +109,17 @@ pub async fn get_odoo_tasks(project_id: i64) -> Result<Vec<OdooTask>, String> {
 }
 
 #[tauri::command]
+pub async fn search_odoo_tasks(query: String, limit: i64) -> Result<Vec<OdooTask>, String> {
+    get_client()
+        .get(&format!(
+            "/odoo/tasks/search?query={}&limit={}",
+            urlencoding::encode(&query),
+            limit
+        ))
+        .await
+}
+
+#[tauri::command]
 pub async fn get_timesheet_entries(
     date_from: String,
     date_to: String,

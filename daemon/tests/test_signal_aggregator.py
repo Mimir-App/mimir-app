@@ -65,6 +65,8 @@ def mock_db():
     db.get_open_blocks = AsyncMock(return_value=[])
     db.get_block_by_id = AsyncMock(return_value=None)
     db.get_signals_by_block = AsyncMock(return_value=[])
+    db.get_affine_keys = AsyncMock(return_value=set())
+    db.get_context_affinity = AsyncMock(return_value=None)
     return db
 
 
@@ -214,3 +216,82 @@ async def test_recover_open_blocks_stale(mock_db):
 
     assert agg._current_block_id is None
     mock_db.update_block.assert_called_with(5, status="closed")
+
+
+# --- Tests de afinidad adaptativa ---
+
+@pytest.mark.asyncio
+async def test_affinity_prevents_block_close(mock_db):
+    """Contextos con afinidad aprendida no cierran el bloque."""
+    mock_db.get_affine_keys.return_value = {"web:Gmail"}
+    mock_db.create_block.return_value = 1
+
+    agg = SignalAggregator(db=mock_db, affinity_threshold=3)
+    await agg.process_signal(_signal(1, "2026-03-16T10:00:00Z", context="web:GitHub"))
+    await agg.process_signal(_signal(2, "2026-03-16T10:00:30Z", context="web:Gmail"))
+
+    # Solo se crea 1 bloque porque hay afinidad
+    assert mock_db.create_block.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_no_affinity_closes_block(mock_db):
+    """Sin afinidad aprendida, el bloque se cierra normalmente."""
+    mock_db.get_affine_keys.return_value = set()
+    mock_db.create_block.side_effect = [1, 2]
+
+    agg = SignalAggregator(db=mock_db, affinity_threshold=3)
+    await agg.process_signal(_signal(1, "2026-03-16T10:00:00Z", context="web:GitHub"))
+    await agg.process_signal(_signal(2, "2026-03-16T10:00:30Z", context="web:Gmail"))
+
+    assert mock_db.create_block.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_affinity_disabled_with_zero_threshold(mock_db):
+    """Con threshold=0, la afinidad esta deshabilitada."""
+    mock_db.create_block.side_effect = [1, 2]
+
+    agg = SignalAggregator(db=mock_db, affinity_threshold=0)
+    await agg.process_signal(_signal(1, "2026-03-16T10:00:00Z", context="web:GitHub"))
+    await agg.process_signal(_signal(2, "2026-03-16T10:00:30Z", context="web:Gmail"))
+
+    assert mock_db.create_block.call_count == 2
+    mock_db.get_affine_keys.assert_not_called()
+
+
+# --- Tests de auto-reopen ---
+
+@pytest.mark.asyncio
+async def test_auto_reopen_same_context(mock_db):
+    """Si vuelves al mismo contexto tras un cambio breve, reabre el bloque anterior."""
+    mock_db.create_block.side_effect = [1, 2]
+
+    agg = SignalAggregator(db=mock_db, affinity_threshold=0)
+
+    # Bloque 1: GitHub
+    await agg.process_signal(_signal(1, "2026-03-16T10:00:00Z", context="web:GitHub"))
+    # Bloque 2: Slack (cierra bloque 1, crea bloque 2)
+    await agg.process_signal(_signal(2, "2026-03-16T10:00:30Z", context="app:slack"))
+    # Vuelve a GitHub: debe reabrir bloque 1 (cierra bloque 2)
+    await agg.process_signal(_signal(3, "2026-03-16T10:01:00Z", context="web:GitHub"))
+
+    # Solo se crean 2 bloques (no 3), porque el tercero reabre el 1
+    assert mock_db.create_block.call_count == 2
+    assert agg._current_block_id == 1
+
+
+@pytest.mark.asyncio
+async def test_no_reopen_after_long_gap(mock_db):
+    """No reabre si el gap es mayor al umbral de inactividad."""
+    mock_db.create_block.side_effect = [1, 2, 3]
+
+    agg = SignalAggregator(db=mock_db, inactivity_threshold=300, affinity_threshold=0)
+
+    await agg.process_signal(_signal(1, "2026-03-16T10:00:00Z", context="web:GitHub"))
+    await agg.process_signal(_signal(2, "2026-03-16T10:00:30Z", context="app:slack"))
+    # Vuelve a GitHub pero tras 10 minutos
+    await agg.process_signal(_signal(3, "2026-03-16T10:10:30Z", context="web:GitHub"))
+
+    # Se crean 3 bloques (gap > inactivity_threshold)
+    assert mock_db.create_block.call_count == 3

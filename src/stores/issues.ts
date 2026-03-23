@@ -20,6 +20,8 @@ export const useIssuesStore = defineStore('issues', () => {
   const activeFilter = ref<'all' | 'assigned' | 'followed'>('all');
   const sourceFilter = ref<'all' | 'gitlab' | 'github'>('all');
   const projectFilter = ref<string[]>([]);
+  const hiddenKeys = ref<Set<string>>(new Set());
+  const showHidden = ref(false);
 
   /** Merge assigned + followed, deduplicando por project_path + iid */
   const allIssues = computed(() => {
@@ -87,6 +89,11 @@ export const useIssuesStore = defineStore('issues', () => {
           i.project_path.toLowerCase().includes(q) ||
           i.labels.some(l => l.toLowerCase().includes(q))
       );
+    }
+
+    // Filtro de ocultas
+    if (!showHidden.value && hiddenKeys.value.size > 0) {
+      result = result.filter(i => !hiddenKeys.value.has(`${i.project_path}#${i.iid}`));
     }
 
     return result;
@@ -171,6 +178,20 @@ export const useIssuesStore = defineStore('issues', () => {
     await fetchFollowedIssues();
   }
 
+  function hideIssue(projectPath: string, iid: number) {
+    const next = new Set(hiddenKeys.value);
+    next.add(`${projectPath}#${iid}`);
+    hiddenKeys.value = next;
+  }
+
+  function unhideIssue(projectPath: string, iid: number) {
+    const next = new Set(hiddenKeys.value);
+    next.delete(`${projectPath}#${iid}`);
+    hiddenKeys.value = next;
+  }
+
+  const hiddenCount = computed(() => hiddenKeys.value.size);
+
   async function fetchIssues() {
     loading.value = true;
     error.value = null;
@@ -216,5 +237,10 @@ export const useIssuesStore = defineStore('issues', () => {
     updatePreference,
     followIssue,
     unfollowIssue,
+    hideIssue,
+    unhideIssue,
+    hiddenKeys,
+    hiddenCount,
+    showHidden,
   };
 });

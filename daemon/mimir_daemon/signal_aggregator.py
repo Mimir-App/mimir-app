@@ -90,16 +90,23 @@ class SignalAggregator:
         inactivity_threshold: int = 300,
         browser_apps: set[str] | frozenset[str] | None = None,
         transient_apps: set[str] | frozenset[str] | None = None,
+        affinity_threshold: int = 3,
     ) -> None:
         self._db = db
         self._inactivity_threshold = inactivity_threshold
         self._browser_apps = frozenset(browser_apps) if browser_apps else DEFAULT_BROWSER_APPS
         self._transient_apps = frozenset(transient_apps) if transient_apps else DEFAULT_TRANSIENT_APPS
+        self._affinity_threshold = affinity_threshold
         self._current_block_id: int | None = None
         self._current_context_key: str | None = None
         self._current_start_time: datetime | None = None
         self._last_signal_time: datetime | None = None
         self._window_titles: list[str] = []
+        self._affine_keys_cache: set[str] = set()
+        self._affine_cache_key: str | None = None
+        # Bloques cerrados recientemente: context_key -> info
+        # Para auto-reopen cuando el usuario vuelve al mismo contexto
+        self._recent_closed: dict[str, dict] = {}
 
     async def recover_open_blocks(self) -> None:
         """Recupera bloques auto abiertos tras un reinicio."""
@@ -157,7 +164,14 @@ class SignalAggregator:
         should_close = False
         if self._current_block_id is not None:
             if context_key != self._current_context_key:
-                should_close = True
+                # Comprobar afinidad aprendida antes de cerrar
+                if await self._has_affinity(self._current_context_key or "", context_key):
+                    logger.debug(
+                        "Afinidad detectada: %s <-> %s, manteniendo bloque #%d",
+                        self._current_context_key, context_key, self._current_block_id,
+                    )
+                else:
+                    should_close = True
             elif self._last_signal_time:
                 gap = (signal_time - self._last_signal_time).total_seconds()
                 if gap > self._inactivity_threshold:
@@ -168,34 +182,54 @@ class SignalAggregator:
 
         # Crear bloque nuevo si no hay uno activo
         if self._current_block_id is None:
-            # Auto-asignar proyecto Odoo desde context_mappings
-            mapping = await self._db.get_context_mapping(context_key)
-            extra = {}
-            if mapping and mapping.get("odoo_project_id"):
-                extra["odoo_project_id"] = mapping["odoo_project_id"]
-                extra["odoo_project_name"] = mapping.get("odoo_project_name")
-                extra["odoo_task_id"] = mapping.get("odoo_task_id")
-                extra["odoo_task_name"] = mapping.get("odoo_task_name")
-                logger.info("Auto-asignado: %s -> %s", context_key, mapping.get("odoo_project_name"))
+            # Auto-reopen: buscar bloque reciente con mismo context_key
+            # para evitar fragmentacion (ej: GitHub -> Slack -> GitHub = 1 bloque)
+            reopened = False
+            prev = self._recent_closed.get(context_key)
+            if prev and prev["close_time"]:
+                gap = (signal_time - prev["close_time"]).total_seconds()
+                if gap < self._inactivity_threshold:
+                    await self._db.update_block(prev["block_id"], status="auto")
+                    self._current_block_id = prev["block_id"]
+                    self._current_context_key = context_key
+                    self._current_start_time = prev["start_time"]
+                    self._window_titles = prev["window_titles"]
+                    reopened = True
+                    logger.info(
+                        "Bloque #%d reabierto (mismo contexto, gap=%.0fs)",
+                        prev["block_id"], gap,
+                    )
+                    del self._recent_closed[context_key]
 
-            block_id = await self._db.create_block(
-                start_time=timestamp_str,
-                end_time=timestamp_str,
-                duration_minutes=0.0,
-                app_name=app_name or "unknown",
-                window_title=signal.get("window_title", ""),
-                project_path=signal.get("project_path"),
-                git_branch=signal.get("git_branch"),
-                git_remote=signal.get("git_remote"),
-                context_key=context_key,
-                status="auto",
-                **extra,
-            )
-            self._current_block_id = block_id
-            self._current_context_key = context_key
-            self._current_start_time = signal_time
-            self._window_titles = []
-            logger.info("Nuevo bloque #%d: %s", block_id, context_key)
+            if not reopened:
+                # Auto-asignar proyecto Odoo desde context_mappings
+                mapping = await self._db.get_context_mapping(context_key)
+                extra = {}
+                if mapping and mapping.get("odoo_project_id"):
+                    extra["odoo_project_id"] = mapping["odoo_project_id"]
+                    extra["odoo_project_name"] = mapping.get("odoo_project_name")
+                    extra["odoo_task_id"] = mapping.get("odoo_task_id")
+                    extra["odoo_task_name"] = mapping.get("odoo_task_name")
+                    logger.info("Auto-asignado: %s -> %s", context_key, mapping.get("odoo_project_name"))
+
+                block_id = await self._db.create_block(
+                    start_time=timestamp_str,
+                    end_time=timestamp_str,
+                    duration_minutes=0.0,
+                    app_name=app_name or "unknown",
+                    window_title=signal.get("window_title", ""),
+                    project_path=signal.get("project_path"),
+                    git_branch=signal.get("git_branch"),
+                    git_remote=signal.get("git_remote"),
+                    context_key=context_key,
+                    status="auto",
+                    **extra,
+                )
+                self._current_block_id = block_id
+                self._current_context_key = context_key
+                self._current_start_time = signal_time
+                self._window_titles = []
+                logger.info("Nuevo bloque #%d: %s", block_id, context_key)
         else:
             # Actualizar bloque existente
             duration = 0.0
@@ -226,6 +260,7 @@ class SignalAggregator:
         """Cierra el bloque actual al bloquear pantalla."""
         if self._current_block_id:
             await self._close_current_block()
+            self._recent_closed.clear()  # No reabrir tras lock
             logger.info("Bloque cerrado por lock")
 
     async def handle_unlock(self) -> None:
@@ -261,7 +296,33 @@ class SignalAggregator:
         )
         logger.info("Bloque #%d cerrado (%.1f min)", self._current_block_id, duration)
 
+        # Guardar info del bloque cerrado para posible auto-reopen
+        if self._current_context_key:
+            self._recent_closed[self._current_context_key] = {
+                "block_id": self._current_block_id,
+                "start_time": self._current_start_time,
+                "close_time": self._last_signal_time,
+                "window_titles": self._window_titles.copy(),
+            }
+
         self._current_block_id = None
         self._current_context_key = None
         self._current_start_time = None
         self._window_titles = []
+        self._affine_keys_cache = set()
+        self._affine_cache_key = None
+
+    async def _has_affinity(self, current_key: str, new_key: str) -> bool:
+        """Comprueba si dos context_keys tienen afinidad aprendida.
+
+        Usa una cache por bloque para evitar queries repetidas a la BD.
+        """
+        if self._affinity_threshold <= 0:
+            return False
+        # Refrescar cache si cambio el contexto base del bloque
+        if self._affine_cache_key != current_key:
+            self._affine_keys_cache = await self._db.get_affine_keys(
+                current_key, self._affinity_threshold,
+            )
+            self._affine_cache_key = current_key
+        return new_key in self._affine_keys_cache

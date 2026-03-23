@@ -1,5 +1,6 @@
 """Fuente de datos GitHub."""
 
+import asyncio
 import logging
 from typing import Any
 from urllib.parse import urlparse
@@ -119,9 +120,12 @@ def _normalize_pr(item: dict) -> None:
     item["user_notes_count"] = item.get("comments", 0)
     item["has_conflicts"] = False
     item["pipeline_status"] = None
-    item["source_branch"] = ""
-    item["target_branch"] = ""
-    item["reviewers"] = []
+    item["source_branch"] = item.get("head", {}).get("ref", "") if isinstance(item.get("head"), dict) else ""
+    item["target_branch"] = item.get("base", {}).get("ref", "") if isinstance(item.get("base"), dict) else ""
+    item["reviewers"] = [
+        {"username": r.get("login", ""), "name": r.get("login", ""), "avatar_url": r.get("avatar_url", "")}
+        for r in item.get("requested_reviewers", [])
+    ]
     item["manual_priority"] = None
     item["description"] = item.get("body") or ""
     # Milestone
@@ -250,8 +254,59 @@ class GitHubSource(VCSSource):
                 seen.add(pr_id)
                 unique.append(pr)
 
+        # Enriquecer con branches y reviewers (la API de busqueda no los incluye)
+        await self._enrich_prs(unique)
+
         logger.info("GitHub: %d pull requests obtenidas", len(unique))
         return unique
+
+    async def _enrich_prs(self, prs: list[dict[str, Any]]) -> None:
+        """Enriquece PRs con source/target branch y reviewers desde la API de pulls."""
+
+        async def _enrich_one(pr: dict) -> None:
+            project_path = pr.get("project_path", "")
+            number = pr.get("iid") or pr.get("number")
+            if not project_path or not number:
+                return
+            try:
+                resp = await self._client.get(f"/repos/{project_path}/pulls/{number}")
+                if resp.status_code == 200:
+                    data = resp.json()
+                    pr["source_branch"] = data.get("head", {}).get("ref", "")
+                    pr["target_branch"] = data.get("base", {}).get("ref", "")
+                    pr["reviewers"] = [
+                        {"username": r.get("login", ""), "name": r.get("login", ""), "avatar_url": r.get("avatar_url", "")}
+                        for r in data.get("requested_reviewers", [])
+                    ]
+                    pr["has_conflicts"] = data.get("mergeable_state") == "dirty"
+                    # Map GitHub merge status to pipeline-like status
+                    head_sha = data.get("head", {}).get("sha", "")
+                    if head_sha:
+                        pr["pipeline_status"] = await self._get_check_status(project_path, head_sha)
+            except Exception as e:
+                logger.debug("Error enriqueciendo PR %s#%s: %s", project_path, number, e)
+
+        # Ejecutar en paralelo (max 10 concurrentes)
+        semaphore = asyncio.Semaphore(10)
+
+        async def _limited(pr: dict) -> None:
+            async with semaphore:
+                await _enrich_one(pr)
+
+        await asyncio.gather(*[_limited(pr) for pr in prs])
+
+    async def _get_check_status(self, project_path: str, sha: str) -> str | None:
+        """Obtiene el estado combinado de checks para un commit de GitHub."""
+        try:
+            resp = await self._client.get(f"/repos/{project_path}/commits/{sha}/status")
+            if resp.status_code == 200:
+                state = resp.json().get("state", "")
+                # GitHub states: success, pending, failure, error
+                # Map to GitLab-compatible: success, running, failed
+                return {"success": "success", "pending": "running", "failure": "failed", "error": "failed"}.get(state)
+        except Exception:
+            pass
+        return None
 
     # ------------------------------------------------------------------
     # Métodos adicionales

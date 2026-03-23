@@ -105,16 +105,40 @@ class OdooV11Client(TimesheetClient):
             result = await self._execute(
                 "project.task", "search_read",
                 [[("project_id", "=", project_id)]],
-                {"fields": ["id", "name", "project_id"], "limit": 500},
+                {"fields": ["id", "name", "project_id", "effective_hours"], "limit": 500},
             )
             tasks = [
-                {"id": r["id"], "name": r["name"], "project_id": project_id}
+                {
+                    "id": r["id"], "name": r["name"], "project_id": project_id,
+                    "effective_hours": r.get("effective_hours", 0.0),
+                }
                 for r in result
             ]
             logger.info("Odoo v11: %d tareas para proyecto %d", len(tasks), project_id)
             return tasks
         except Exception as e:
             logger.error("Error obteniendo tareas de Odoo v11 (proyecto %d): %s", project_id, e)
+            return []
+
+    async def search_tasks(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
+        """Busca tareas por nombre en Odoo v11."""
+        try:
+            result = await self._execute(
+                "project.task", "search_read",
+                [[("name", "ilike", query)]],
+                {"fields": ["id", "name", "project_id", "effective_hours"], "limit": limit},
+            )
+            return [
+                {
+                    "id": r["id"], "name": r["name"],
+                    "project_id": r["project_id"][0] if isinstance(r.get("project_id"), list) else r.get("project_id"),
+                    "project_name": r["project_id"][1] if isinstance(r.get("project_id"), list) else None,
+                    "effective_hours": r.get("effective_hours", 0.0),
+                }
+                for r in result
+            ]
+        except Exception as e:
+            logger.error("Error buscando tareas en Odoo v11: %s", e)
             return []
 
     async def create_entry(self, entry: TimesheetEntryData) -> int:

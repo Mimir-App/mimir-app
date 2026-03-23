@@ -34,6 +34,7 @@ pub fn run() {
             daemon::retry_sync_block,
             daemon::get_odoo_projects,
             daemon::get_odoo_tasks,
+            daemon::search_odoo_tasks,
             daemon::get_timesheet_entries,
             daemon::get_issues,
             daemon::get_merge_requests,
