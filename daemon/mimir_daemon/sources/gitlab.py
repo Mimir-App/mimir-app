@@ -49,11 +49,13 @@ class GitLabSource(VCSSource):
             for item in data:
                 item["_type"] = "issue"
                 item["_source"] = "gitlab"
-                item["project_path"] = item.get("references", {}).get(
+                ref = item.get("references", {}).get(
                     "full", item.get("web_url", "").split("/-/")[0].split("/")[-2:]
                 )
-                if isinstance(item["project_path"], list):
-                    item["project_path"] = "/".join(item["project_path"])
+                if isinstance(ref, list):
+                    ref = "/".join(ref)
+                # Strip #iid del final (references.full = "group/project#123")
+                item["project_path"] = ref.rsplit("#", 1)[0] if "#" in ref else ref
                 _normalize_milestone(item)
             issues.extend(data)
             page += 1
