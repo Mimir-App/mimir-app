@@ -29,7 +29,7 @@ for arg in "$@"; do
         --help|-h)
             echo "Uso: $0 [--app | --full] [--dry-run]"
             echo ""
-            echo "  --app      Solo desinstalar la app (mantiene datos, capture y config)"
+            echo "  --app      Desinstalar la app (mantiene base de datos y config)"
             echo "  --full     Desinstalación completa (todo)"
             echo "  --dry-run  Simular sin ejecutar nada"
             echo "  (sin args) Modo interactivo"
@@ -108,7 +108,7 @@ if [ -z "$MODE" ]; then
     echo ""
     echo -e "${BOLD}¿Qué deseas hacer?${NC}"
     echo ""
-    echo "  1) Desinstalar solo la app (mantiene base de datos, config y capture)"
+    echo "  1) Desinstalar la app (mantiene base de datos y config)"
     echo "  2) Desinstalación completa (elimina todo)"
     echo "  3) Cancelar"
     echo ""
@@ -140,17 +140,15 @@ if pgrep -x "mimir" &>/dev/null; then
     run "Parar app mimir" "pkill -x 'mimir' || true"
 fi
 
-if [ "$MODE" = "full" ]; then
-    # Parar y deshabilitar capture
-    if systemctl --user is-active mimir-capture &>/dev/null 2>&1; then
-        run "Parar servicio mimir-capture" "systemctl --user stop mimir-capture"
-    fi
-    if systemctl --user is-enabled mimir-capture &>/dev/null 2>&1; then
-        run "Deshabilitar servicio mimir-capture" "systemctl --user disable mimir-capture"
-    fi
-    if pgrep -f "mimir-capture" &>/dev/null; then
-        run "Parar proceso mimir-capture" "pkill -f 'mimir-capture' || true"
-    fi
+# Parar y deshabilitar capture (siempre, porque mimir-capture depende de mimir)
+if systemctl --user is-active mimir-capture &>/dev/null 2>&1; then
+    run "Parar servicio mimir-capture" "systemctl --user stop mimir-capture"
+fi
+if systemctl --user is-enabled mimir-capture &>/dev/null 2>&1; then
+    run "Deshabilitar servicio mimir-capture" "systemctl --user disable mimir-capture"
+fi
+if pgrep -f "mimir-capture" &>/dev/null; then
+    run "Parar proceso mimir-capture" "pkill -f 'mimir-capture' || true"
 fi
 
 # =============================================================================
@@ -159,16 +157,17 @@ fi
 echo ""
 echo -e "${BOLD}── Paso 2: Paquetes .deb ──${NC}"
 
+# Desinstalar capture ANTES que app (mimir-capture depende de mimir)
+if $HAS_DEB_CAPTURE; then
+    run "Desinstalar paquete mimir-capture" "sudo dpkg --purge mimir-capture"
+else
+    skip "Paquete mimir-capture"
+fi
+
 if $HAS_DEB_APP; then
     run "Desinstalar paquete mimir" "sudo dpkg --purge mimir"
 else
     skip "Paquete mimir"
-fi
-
-if [ "$MODE" = "full" ] && $HAS_DEB_CAPTURE; then
-    run "Desinstalar paquete mimir-capture" "sudo dpkg --purge mimir-capture"
-elif $HAS_DEB_CAPTURE; then
-    info "Paquete mimir-capture conservado (modo app)"
 fi
 
 # =============================================================================
@@ -183,34 +182,32 @@ else
     skip "mimir-server local"
 fi
 
-if [ "$MODE" = "full" ] && $HAS_LOCAL_CAPTURE; then
+if $HAS_LOCAL_CAPTURE; then
     run "Eliminar ~/.local/bin/mimir-capture" "rm -f '$HOME/.local/bin/mimir-capture'"
-elif $HAS_LOCAL_CAPTURE; then
-    info "mimir-capture local conservado (modo app)"
+else
+    skip "mimir-capture local"
 fi
 
 # =============================================================================
 # PASO 4: Servicio systemd y extensión GNOME (solo full)
 # =============================================================================
-if [ "$MODE" = "full" ]; then
-    echo ""
-    echo -e "${BOLD}── Paso 4: Servicios del sistema ──${NC}"
+echo ""
+echo -e "${BOLD}── Paso 4: Servicios del sistema ──${NC}"
 
-    if $HAS_SYSTEMD; then
-        run "Eliminar servicio systemd" "rm -f '$HOME/.config/systemd/user/mimir-capture.service' && systemctl --user daemon-reload"
-    else
-        skip "Servicio systemd"
-    fi
+if $HAS_SYSTEMD; then
+    run "Eliminar servicio systemd" "rm -f '$HOME/.config/systemd/user/mimir-capture.service' && systemctl --user daemon-reload"
+else
+    skip "Servicio systemd"
+fi
 
-    if $HAS_GNOME_EXT; then
-        # Deshabilitar antes de eliminar
-        if gnome-extensions list 2>/dev/null | grep -q "mimir-window-tracker@mimir.app"; then
-            run "Deshabilitar extensión GNOME" "gnome-extensions disable mimir-window-tracker@mimir.app 2>/dev/null || true"
-        fi
-        run "Eliminar extensión GNOME" "sudo rm -rf /usr/share/gnome-shell/extensions/mimir-window-tracker@mimir.app"
-    else
-        skip "Extensión GNOME"
+if $HAS_GNOME_EXT; then
+    # Deshabilitar antes de eliminar
+    if gnome-extensions list 2>/dev/null | grep -q "mimir-window-tracker@mimir.app"; then
+        run "Deshabilitar extensión GNOME" "gnome-extensions disable mimir-window-tracker@mimir.app 2>/dev/null || true"
     fi
+    run "Eliminar extensión GNOME" "sudo rm -rf /usr/share/gnome-shell/extensions/mimir-window-tracker@mimir.app"
+else
+    skip "Extensión GNOME"
 fi
 
 # =============================================================================
@@ -264,7 +261,7 @@ echo -e "${BOLD}═════════════════════�
 if [ "$MODE" = "full" ]; then
     success "Desinstalación completa finalizada."
 else
-    success "App desinstalada. Datos y capture conservados."
+    success "App desinstalada. Datos de usuario conservados en ~/.config/mimir/"
     echo ""
     info "Para desinstalación completa en el futuro:"
     echo "  $0 --full"
