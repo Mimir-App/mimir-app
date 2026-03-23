@@ -1,5 +1,6 @@
 """Fuente de datos GitLab."""
 
+import asyncio
 import logging
 from typing import Any
 
@@ -46,6 +47,7 @@ class GitLabSource(VCSSource):
             headers={"PRIVATE-TOKEN": token},
             timeout=15.0,
         )
+        self._username: str | None = None
 
     async def get_issues(self) -> list[dict[str, Any]]:
         """Obtiene issues asignadas al usuario."""
@@ -81,8 +83,16 @@ class GitLabSource(VCSSource):
         logger.info("GitLab: %d issues obtenidas", len(issues))
         return issues
 
+    async def _get_username(self) -> str:
+        """Obtiene y cachea el username del usuario autenticado."""
+        if not self._username:
+            user = await self.get_current_user()
+            self._username = user.get("username", "")
+        return self._username
+
     async def get_merge_requests(self) -> list[dict[str, Any]]:
         """Obtiene MRs asignadas y para revisar."""
+        username = await self._get_username()
         mrs = []
         for scope in ("assigned_to_me", "reviewer"):
             page = 1
@@ -95,7 +105,9 @@ class GitLabSource(VCSSource):
                 if scope == "assigned_to_me":
                     params["scope"] = "assigned_to_me"
                 else:
-                    params["reviewer_username"] = "me"
+                    if not username:
+                        break
+                    params["reviewer_username"] = username
                     params["scope"] = "all"
 
                 resp = await self._client.get("/merge_requests", params=params)
@@ -110,7 +122,6 @@ class GitLabSource(VCSSource):
                         "full", ""
                     ).split("!")[0].rstrip()
                     _normalize_milestone(item)
-                    _normalize_mr_pipeline(item)
                 mrs.extend(data)
                 page += 1
 
@@ -121,8 +132,38 @@ class GitLabSource(VCSSource):
             if mr["id"] not in seen:
                 seen.add(mr["id"])
                 unique.append(mr)
+
+        # Enriquecer con pipeline, aprobaciones y conflictos
+        await self._enrich_mrs(unique)
+
         logger.info("GitLab: %d MRs obtenidas", len(unique))
         return unique
+
+    async def _enrich_mrs(self, mrs: list[dict[str, Any]]) -> None:
+        """Enriquece MRs con head_pipeline, approved_by y has_conflicts."""
+
+        async def _enrich_one(mr: dict) -> None:
+            gid = mr.get("id")
+            if not gid:
+                return
+            try:
+                resp = await self._client.get(f"/merge_requests/{gid}")
+                if resp.status_code == 200:
+                    full = resp.json()
+                    mr["head_pipeline"] = full.get("head_pipeline")
+                    mr["approved_by"] = full.get("approved_by", [])
+                    mr["has_conflicts"] = full.get("has_conflicts", False)
+            except Exception as e:
+                logger.debug("Error enriqueciendo MR %s: %s", gid, e)
+            _normalize_mr_pipeline(mr)
+
+        semaphore = asyncio.Semaphore(10)
+
+        async def _limited(mr: dict) -> None:
+            async with semaphore:
+                await _enrich_one(mr)
+
+        await asyncio.gather(*[_limited(mr) for mr in mrs])
 
     async def search_issues(self, query: str, per_page: int = 20) -> list[dict]:
         """Busca issues en todos los proyectos accesibles."""
@@ -169,12 +210,16 @@ class GitLabSource(VCSSource):
                 resp = await self._client.get(f"/issues/{gid}")
                 if resp.status_code == 200:
                     issue = resp.json()
+                    issue["_type"] = "issue"
                     issue["_source"] = "gitlab"
                     ref = issue.get("references", {}).get("full", "")
                     issue["project_path"] = ref.rsplit("#", 1)[0] if "#" in ref else ""
                     _normalize_milestone(issue)
                     results.append(issue)
-            except Exception:
+                else:
+                    logger.debug("GitLab issue %d: status %d", gid, resp.status_code)
+            except Exception as e:
+                logger.debug("Error obteniendo issue %d: %s", gid, e)
                 continue
         return results
 
@@ -246,8 +291,12 @@ class GitLabSource(VCSSource):
                 resp = await self._client.get(f"/merge_requests/{gid}")
                 if resp.status_code == 200:
                     mr = resp.json()
+                    mr["_type"] = "merge_request"
+                    mr["_source"] = "gitlab"
                     ref = mr.get("references", {}).get("full", "")
                     mr["project_path"] = ref.split("!")[0].rstrip() if "!" in ref else ""
+                    _normalize_milestone(mr)
+                    _normalize_mr_pipeline(mr)
                     results.append(mr)
             except Exception:
                 continue

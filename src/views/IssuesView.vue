@@ -2,7 +2,6 @@
 import { ref, computed } from 'vue';
 import type { GitLabIssue } from '../lib/types';
 import { useIssuesStore } from '../stores/issues';
-import { useConfigStore } from '../stores/config';
 import { usePolling } from '../composables/usePolling';
 import { provideCollapseAll } from '../composables/useCollapseAll';
 import ViewToolbar from '../components/shared/ViewToolbar.vue';
@@ -17,7 +16,6 @@ import ContextMenu from '../components/shared/ContextMenu.vue';
 import type { MenuEntry } from '../components/shared/ContextMenu.vue';
 
 const issuesStore = useIssuesStore();
-const configStore = useConfigStore();
 const refreshing = ref(false);
 const { allExpanded, toggle: toggleCollapseAll } = provideCollapseAll();
 usePolling(() => issuesStore.fetchIssues());
@@ -38,16 +36,23 @@ const filterTabs: { value: 'all' | 'assigned' | 'followed'; label: string }[] = 
   { value: 'followed', label: 'Seguidas' },
 ];
 
-const hasGitlab = computed(() => Boolean(configStore.config.gitlab_url && configStore.config.gitlab_token_stored));
-const hasGithub = computed(() => Boolean(configStore.config.github_token_stored));
+const activeSources = computed(() => {
+  const sources = new Set<string>();
+  for (const issue of issuesStore.allIssues) {
+    if ((issue as any)._source) sources.add((issue as any)._source);
+  }
+  return sources;
+});
 
 const sourceTabs = computed(() => {
   const tabs: { value: 'all' | 'gitlab' | 'github'; label: string }[] = [];
-  if (hasGitlab.value && hasGithub.value) {
+  const hasGitlab = activeSources.value.has('gitlab');
+  const hasGithub = activeSources.value.has('github');
+  if (hasGitlab && hasGithub) {
     tabs.push({ value: 'all', label: 'Todas' });
   }
-  if (hasGitlab.value) tabs.push({ value: 'gitlab', label: 'GitLab' });
-  if (hasGithub.value) tabs.push({ value: 'github', label: 'GitHub' });
+  if (hasGitlab) tabs.push({ value: 'gitlab', label: 'GitLab' });
+  if (hasGithub) tabs.push({ value: 'github', label: 'GitHub' });
   return tabs;
 });
 

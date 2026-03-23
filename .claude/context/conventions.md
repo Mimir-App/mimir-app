@@ -10,6 +10,7 @@
 - `logging` module a nivel INFO; loggear cada refresh, error y cambio de config
 - Patron adaptador en todo: IA, integracion, notificaciones, fuentes externas
 - VCS sources: GitLabSource y GitHubSource normalizan datos al mismo formato
+- GitLab list endpoints (`/merge_requests`, `/issues`) devuelven datos incompletos (sin `head_pipeline`, `approved_by`). Siempre enriquecer con llamadas individuales post-fetch (`_enrich_mrs`/`_enrich_prs`) usando `asyncio.Semaphore(10)` + `gather`
 - Tokens OAuth NUNCA salen del ordenador local
 - SQLite local: nunca queries sobre campos dentro de JSON blobs
 - Todo codigo OS-specific va en `platform/`. Si aparece fuera, es un bug de arquitectura

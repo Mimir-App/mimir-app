@@ -9,6 +9,7 @@ export type IssueGroupBy = 'project' | 'priority' | 'none';
 
 export const useIssuesStore = defineStore('issues', () => {
   const issues = ref<GitLabIssue[]>([]);
+  const labelColorMap = ref<Record<string, string>>({});
   const loading = ref(false);
   const error = ref<string | null>(null);
   const filterText = ref('');
@@ -192,6 +193,31 @@ export const useIssuesStore = defineStore('issues', () => {
 
   const hiddenCount = computed(() => hiddenKeys.value.size);
 
+  async function fetchLabelColors() {
+    try {
+      const labels = await api.getGitlabLabels();
+      const map: Record<string, string> = {};
+      for (const l of labels) {
+        map[l.name] = l.color;
+      }
+      labelColorMap.value = map;
+    } catch {
+      // Labels sin color si falla
+    }
+  }
+
+  function enrichLabelObjects(issueList: GitLabIssue[]) {
+    if (Object.keys(labelColorMap.value).length === 0) return;
+    for (const issue of issueList) {
+      if (!issue.label_objects?.length && issue.labels?.length) {
+        (issue as any).label_objects = issue.labels.map(name => ({
+          name,
+          color: labelColorMap.value[name] || '',
+        }));
+      }
+    }
+  }
+
   async function fetchIssues() {
     loading.value = true;
     error.value = null;
@@ -202,7 +228,12 @@ export const useIssuesStore = defineStore('issues', () => {
         setPriorityLabels(configStore.config.gitlab_priority_labels);
       }
 
-      issues.value = await api.getIssues() as GitLabIssue[];
+      const [fetchedIssues] = await Promise.all([
+        api.getIssues() as Promise<GitLabIssue[]>,
+        fetchLabelColors(),
+      ]);
+      enrichLabelObjects(fetchedIssues);
+      issues.value = fetchedIssues;
       await fetchPreferences();
       await fetchFollowedIssues();
     } catch (e) {
