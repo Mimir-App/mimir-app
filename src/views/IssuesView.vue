@@ -152,6 +152,8 @@ function onContextMenu(issue: GitLabIssue, e: MouseEvent) {
     { label: 'Copiar enlace', icon: '\u{1F517}', action: () => navigator.clipboard.writeText(issue.web_url) },
     { label: 'Copiar referencia', icon: '#', action: () => navigator.clipboard.writeText(`${issue.project_path}#${issue.iid}`) },
     { separator: true },
+    { label: 'Ocultar', icon: '\u{1F6AB}', action: () => issuesStore.hideIssue(issue.project_path, issue.iid) },
+    { separator: true },
     { label: 'Recargar issues', icon: '\u21BB', action: () => refresh() },
   ];
 
@@ -244,6 +246,15 @@ function openIssueDetail(issue: GitLabIssue) {
         { value: 'priority', label: 'Por prioridad' },
         { value: 'none', label: 'Sin agrupar' },
       ]" />
+      <button
+        v-if="issuesStore.hiddenCount > 0"
+        class="btn-hidden-toggle"
+        :class="{ active: issuesStore.showHidden }"
+        @click="issuesStore.showHidden = !issuesStore.showHidden"
+        :title="issuesStore.showHidden ? 'Ocultar las tareas ocultas' : `Mostrar ${issuesStore.hiddenCount} tarea(s) oculta(s)`"
+      >
+        {{ issuesStore.showHidden ? 'Ocultar' : `${issuesStore.hiddenCount} oculta(s)` }}
+      </button>
     </ViewToolbar>
 
     <StatusBanner v-if="issuesStore.error" type="error">{{ issuesStore.error }}</StatusBanner>
@@ -421,5 +432,27 @@ function openIssueDetail(issue: GitLabIssue) {
   background: var(--accent);
   color: #fff;
   border-color: var(--accent);
+}
+
+.btn-hidden-toggle {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-hidden-toggle:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.btn-hidden-toggle.active {
+  background: var(--warning);
+  color: #1a1d26;
+  border-color: var(--warning);
 }
 </style>

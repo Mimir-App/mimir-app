@@ -17,6 +17,25 @@ def _normalize_milestone(item: dict) -> None:
         item["milestone"] = ms.get("title")
 
 
+def _normalize_mr_pipeline(item: dict) -> None:
+    """Extrae pipeline status, approved_by y has_conflicts de un MR de GitLab."""
+    # Pipeline
+    pipeline = item.get("head_pipeline")
+    if isinstance(pipeline, dict):
+        item["pipeline_status"] = pipeline.get("status")
+        item["pipeline_web_url"] = pipeline.get("web_url")
+    else:
+        item["pipeline_status"] = None
+        item["pipeline_web_url"] = None
+    # Aprobaciones
+    approved = item.get("approved_by", [])
+    item["approved_by"] = [
+        a.get("user", {}).get("username", "") if isinstance(a, dict) else ""
+        for a in (approved if isinstance(approved, list) else [])
+    ]
+    # has_conflicts ya viene directo de la API de GitLab
+
+
 class GitLabSource(VCSSource):
     """Fuente de datos de GitLab API v4."""
 
@@ -91,6 +110,7 @@ class GitLabSource(VCSSource):
                         "full", ""
                     ).split("!")[0].rstrip()
                     _normalize_milestone(item)
+                    _normalize_mr_pipeline(item)
                 mrs.extend(data)
                 page += 1
 
@@ -172,6 +192,7 @@ class GitLabSource(VCSSource):
                 ref = mr.get("references", {}).get("full", "")
                 mr["project_path"] = ref.split("!")[0].rstrip() if "!" in ref else ""
                 _normalize_milestone(mr)
+                _normalize_mr_pipeline(mr)
             return mrs
         except Exception as e:
             logger.error("Error buscando merge requests en GitLab: %s", e)

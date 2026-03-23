@@ -104,6 +104,8 @@ export interface GitLabMergeRequest {
   target_branch: string;
   has_conflicts: boolean;
   pipeline_status: string | null;
+  pipeline_web_url?: string | null;
+  approved_by?: string[];
   created_at: string;
   updated_at: string;
   user_notes_count: number;

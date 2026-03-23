@@ -157,10 +157,26 @@ watch(
       <!-- Pipeline section -->
       <div class="pipeline-section">
         <span class="meta-label">Pipeline</span>
-        <span v-if="mr.pipeline_status" class="pipeline-badge" :class="pipelineClass(mr.pipeline_status)">
+        <a
+          v-if="mr.pipeline_status && mr.pipeline_web_url"
+          :href="mr.pipeline_web_url"
+          target="_blank"
+          class="pipeline-badge pipeline-link"
+          :class="pipelineClass(mr.pipeline_status)"
+          @click.stop
+        >
+          {{ mr.pipeline_status }}
+        </a>
+        <span v-else-if="mr.pipeline_status" class="pipeline-badge" :class="pipelineClass(mr.pipeline_status)">
           {{ mr.pipeline_status }}
         </span>
         <span v-else class="meta-value muted">&mdash;</span>
+      </div>
+
+      <!-- Approved by -->
+      <div v-if="mr.approved_by?.length" class="approved-section">
+        <span class="approved-icon">&#10003;</span>
+        <span class="approved-text">Aprobado por {{ mr.approved_by.join(', ') }}</span>
       </div>
 
       <!-- Conflicts section -->
@@ -349,6 +365,38 @@ watch(
   background: rgba(162, 176, 180, 0.15);
   color: var(--text-secondary);
   border: 1px solid var(--text-secondary);
+}
+
+.pipeline-link {
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.pipeline-link:hover {
+  filter: brightness(1.2);
+}
+
+/* Approved */
+.approved-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(78, 201, 176, 0.08);
+  border: 1px solid var(--success);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.approved-icon {
+  color: var(--success);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.approved-text {
+  color: var(--success);
+  font-weight: 500;
 }
 
 /* Conflicts */

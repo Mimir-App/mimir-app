@@ -278,6 +278,11 @@ class GitHubSource(VCSSource):
                         {"username": r.get("login", ""), "name": r.get("login", ""), "avatar_url": r.get("avatar_url", "")}
                         for r in data.get("requested_reviewers", [])
                     ]
+                    pr["has_conflicts"] = data.get("mergeable_state") == "dirty"
+                    # Map GitHub merge status to pipeline-like status
+                    head_sha = data.get("head", {}).get("sha", "")
+                    if head_sha:
+                        pr["pipeline_status"] = await self._get_check_status(project_path, head_sha)
             except Exception as e:
                 logger.debug("Error enriqueciendo PR %s#%s: %s", project_path, number, e)
 
@@ -289,6 +294,19 @@ class GitHubSource(VCSSource):
                 await _enrich_one(pr)
 
         await asyncio.gather(*[_limited(pr) for pr in prs])
+
+    async def _get_check_status(self, project_path: str, sha: str) -> str | None:
+        """Obtiene el estado combinado de checks para un commit de GitHub."""
+        try:
+            resp = await self._client.get(f"/repos/{project_path}/commits/{sha}/status")
+            if resp.status_code == 200:
+                state = resp.json().get("state", "")
+                # GitHub states: success, pending, failure, error
+                # Map to GitLab-compatible: success, running, failed
+                return {"success": "success", "pending": "running", "failure": "failed", "error": "failed"}.get(state)
+        except Exception:
+            pass
+        return None
 
     # ------------------------------------------------------------------
     # Métodos adicionales
