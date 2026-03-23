@@ -93,14 +93,14 @@ async def test_get_tasks(client):
     """Obtiene tareas de un proyecto."""
     mock_response = _resp(200, json={
         "result": [
-            {"id": 101, "name": "Tarea 1", "project_id": [1, "Proyecto A"]},
-            {"id": 102, "name": "Tarea 2", "project_id": [1, "Proyecto A"]},
+            {"id": 101, "name": "Tarea 1", "project_id": [1, "Proyecto A"], "effective_hours": 4.0},
+            {"id": 102, "name": "Tarea 2", "project_id": [1, "Proyecto A"], "effective_hours": 0.0},
         ]
     })
     with patch.object(client._client, "post", return_value=mock_response):
         tasks = await client.get_tasks(1)
     assert len(tasks) == 2
-    assert tasks[0] == {"id": 101, "name": "Tarea 1", "project_id": 1}
+    assert tasks[0] == {"id": 101, "name": "Tarea 1", "project_id": 1, "effective_hours": 4.0}
 
 
 @pytest.mark.asyncio
