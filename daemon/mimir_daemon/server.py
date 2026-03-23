@@ -861,6 +861,7 @@ def create_server_app(
             if not followed:
                 return []
             results = []
+            fetched_ids: set[int] = set()
             # GitLab items
             gitlab_ids = [f["item_id"] for f in followed if f.get("source") != "github"]
             if gitlab_ids:
@@ -868,7 +869,9 @@ def create_server_app(
                 if gitlab:
                     from .sources.gitlab import GitLabSource
                     if isinstance(gitlab, GitLabSource):
-                        results.extend(await gitlab.get_issues_by_ids(gitlab_ids))
+                        fresh = await gitlab.get_issues_by_ids(gitlab_ids)
+                        results.extend(fresh)
+                        fetched_ids.update(i.get("id", 0) for i in fresh)
             # GitHub items — buscar individualmente por owner/repo/number
             github = _source_registry._vcs_sources.get("github")
             if github:
@@ -882,15 +885,33 @@ def create_server_app(
                         if pp and iid and "/" in pp:
                             owner, repo_name = pp.split("/", 1)
                             try:
-                                # Buscar la issue via API individual
                                 resp = await github._client.get(f"/repos/{owner}/{repo_name}/issues/{iid}")
                                 if resp.status_code == 200:
                                     item = resp.json()
                                     from .sources.github import _normalize_issue
                                     _normalize_issue(item)
                                     results.append(item)
+                                    fetched_ids.add(item.get("id", 0))
                             except Exception:
                                 continue
+            # Fallback: si no se pudo obtener datos frescos, usar metadatos de la DB
+            for f in followed:
+                if f["item_id"] not in fetched_ids:
+                    results.append({
+                        "id": f["item_id"],
+                        "iid": f.get("iid", 0),
+                        "title": f.get("title", ""),
+                        "project_path": f.get("project_path", ""),
+                        "_source": f.get("source", "gitlab"),
+                        "_type": "issue",
+                        "state": "opened",
+                        "web_url": "",
+                        "labels": [],
+                        "assignees": [],
+                        "user_notes_count": 0,
+                        "created_at": "",
+                        "updated_at": f.get("updated_at", ""),
+                    })
             return results
         except Exception as e:
             logger.error("Error obteniendo issues seguidas: %s", e)

@@ -52,7 +52,7 @@ async def test_get_issues_returns_parsed_data():
 
 @pytest.mark.asyncio
 async def test_get_merge_requests_deduplicates():
-    """get_merge_requests deduplica MRs que aparecen en ambos scopes."""
+    """get_merge_requests deduplica MRs y enriquece con pipeline."""
     source = GitLabSource(url="https://gitlab.test", token="test-token")
 
     mr = {
@@ -61,22 +61,34 @@ async def test_get_merge_requests_deduplicates():
         "references": {"full": "group/project!7"},
         "labels": [], "assignees": [], "reviewers": [],
         "source_branch": "feat/auth", "target_branch": "main",
-        "has_conflicts": False, "pipeline_status": "success",
+        "has_conflicts": False,
         "created_at": "2026-03-10T10:00:00Z",
         "updated_at": "2026-03-13T12:00:00Z",
         "user_notes_count": 1,
     }
 
+    enriched_mr = {
+        **mr,
+        "head_pipeline": {"status": "success", "web_url": "https://gitlab.test/pipelines/99"},
+        "approved_by": [{"user": {"username": "reviewer1"}}],
+        "has_conflicts": False,
+    }
+
     source._client = MagicMock()
     source._client.get = AsyncMock(side_effect=[
-        _mock_response([mr]),    # assigned_to_me page 1
-        _mock_response([]),      # assigned_to_me page 2
-        _mock_response([mr]),    # reviewer page 1 (same MR)
-        _mock_response([]),      # reviewer page 2
+        _mock_response({"username": "testuser"}),  # GET /user
+        _mock_response([mr]),          # assigned_to_me page 1
+        _mock_response([]),            # assigned_to_me page 2
+        _mock_response([mr]),          # reviewer page 1 (same MR)
+        _mock_response([]),            # reviewer page 2
+        _mock_response(enriched_mr),   # enrich MR id=10
     ])
 
     mrs = await source.get_merge_requests()
     assert len(mrs) == 1  # Deduplicado
+    assert mrs[0]["pipeline_status"] == "success"
+    assert mrs[0]["pipeline_web_url"] == "https://gitlab.test/pipelines/99"
+    assert mrs[0]["approved_by"] == ["reviewer1"]
 
 
 @pytest.mark.asyncio
