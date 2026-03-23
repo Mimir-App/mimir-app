@@ -57,7 +57,7 @@ const { colStyle, startResize } = useColumnWidths();
         </td>
         <td :style="colStyle('iid')" class="muted">{{ mr.iid }}</td>
         <td class="col-expand">
-          <a :href="mr.web_url" target="_blank" class="link" @click.stop>{{ mr.title }}</a>
+          <span class="link">{{ mr.title }}</span>
         </td>
         <td :style="colStyle('branch')" class="muted truncate">{{ mr.source_branch }}</td>
         <td :style="colStyle('pipeline')">
