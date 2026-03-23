@@ -48,6 +48,7 @@ class GitLabSource(VCSSource):
                 break
             for item in data:
                 item["_type"] = "issue"
+                item["_source"] = "gitlab"
                 item["project_path"] = item.get("references", {}).get(
                     "full", item.get("web_url", "").split("/-/")[0].split("/")[-2:]
                 )
@@ -83,6 +84,7 @@ class GitLabSource(VCSSource):
                     break
                 for item in data:
                     item["_type"] = "merge_request"
+                    item["_source"] = "gitlab"
                     item["project_path"] = item.get("references", {}).get(
                         "full", ""
                     ).split("!")[0].rstrip()
@@ -110,6 +112,7 @@ class GitLabSource(VCSSource):
             resp.raise_for_status()
             issues = resp.json()
             for issue in issues:
+                issue["_source"] = "gitlab"
                 ref = issue.get("references", {}).get("full", "")
                 issue["project_path"] = ref.rsplit("#", 1)[0] if "#" in ref else ""
                 _normalize_milestone(issue)
@@ -144,8 +147,10 @@ class GitLabSource(VCSSource):
                 resp = await self._client.get(f"/issues/{gid}")
                 if resp.status_code == 200:
                     issue = resp.json()
+                    issue["_source"] = "gitlab"
                     ref = issue.get("references", {}).get("full", "")
                     issue["project_path"] = ref.rsplit("#", 1)[0] if "#" in ref else ""
+                    _normalize_milestone(issue)
                     results.append(issue)
             except Exception:
                 continue
@@ -161,8 +166,10 @@ class GitLabSource(VCSSource):
             resp.raise_for_status()
             mrs = resp.json()
             for mr in mrs:
+                mr["_source"] = "gitlab"
                 ref = mr.get("references", {}).get("full", "")
                 mr["project_path"] = ref.split("!")[0].rstrip() if "!" in ref else ""
+                _normalize_milestone(mr)
             return mrs
         except Exception as e:
             logger.error("Error buscando merge requests en GitLab: %s", e)
