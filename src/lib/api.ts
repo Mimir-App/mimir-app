@@ -199,6 +199,11 @@ export const api = {
     return httpGet(`/odoo/tasks/${projectId}`);
   },
 
+  async searchOdooTasks(query: string, limit: number = 10) {
+    if (await isTauri()) return tauriInvoke('search_odoo_tasks', { query, limit });
+    return httpGet(`/odoo/tasks/search?query=${encodeURIComponent(query)}&limit=${limit}`);
+  },
+
   async getTimesheetEntries(dateFrom: string, dateTo: string) {
     if (await isTauri()) return tauriInvoke('get_timesheet_entries', { dateFrom, dateTo });
     return httpGet(`/odoo/entries?from=${dateFrom}&to=${dateTo}`);

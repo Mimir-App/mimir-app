@@ -34,6 +34,10 @@ class TimesheetClient(ABC):
         """Obtiene tareas de un proyecto."""
         ...
 
+    async def search_tasks(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
+        """Busca tareas por nombre. Devuelve id, name, project_id, effective_hours."""
+        return []
+
     @abstractmethod
     async def create_entry(self, entry: TimesheetEntryData) -> int:
         """Crea una entrada de timesheet. Retorna ID remoto."""

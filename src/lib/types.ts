@@ -185,6 +185,8 @@ export interface OdooTask {
   id: number;
   name: string;
   project_id: number;
+  effective_hours?: number;
+  project_name?: string;
 }
 
 export interface TimesheetEntry {

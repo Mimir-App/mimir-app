@@ -24,4 +24,7 @@ pub struct OdooTask {
     pub id: i64,
     pub name: String,
     pub project_id: i64,
+    #[serde(default)]
+    pub effective_hours: Option<f64>,
+    pub project_name: Option<String>,
 }

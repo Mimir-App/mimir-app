@@ -8,7 +8,15 @@ import ConfidenceBadge from '../shared/ConfidenceBadge.vue';
 import BlockEditor from './BlockEditor.vue';
 import { Check, RefreshCw, Pencil, X } from 'lucide-vue-next';
 
-const props = defineProps<{ block: ActivityBlock }>();
+const props = withDefaults(defineProps<{
+  block: ActivityBlock;
+  selected?: boolean;
+  selectable?: boolean;
+}>(), {
+  selected: false,
+  selectable: true,
+});
+const emit = defineEmits<{ 'toggle-select': [] }>();
 const blocksStore = useBlocksStore();
 const editing = ref(false);
 const retrying = ref(false);
@@ -50,7 +58,15 @@ async function retry() {
 </script>
 
 <template>
-  <tr class="block-row" :class="{ pending: block.status === 'auto' || block.status === 'closed', confirmed: block.status === 'confirmed', synced: block.status === 'synced', 'has-error': block.status === 'error' }">
+  <tr class="block-row" :class="{ pending: block.status === 'auto' || block.status === 'closed', confirmed: block.status === 'confirmed', synced: block.status === 'synced', 'has-error': block.status === 'error', 'is-selected': selected }">
+    <td class="col-select">
+      <input
+        v-if="selectable"
+        type="checkbox"
+        :checked="selected"
+        @change="emit('toggle-select')"
+      />
+    </td>
     <td>{{ startTime }}</td>
     <td>{{ endTime }}</td>
     <td class="col-duration">{{ duration }}</td>
@@ -113,7 +129,7 @@ async function retry() {
     </td>
   </tr>
   <tr v-if="editing" class="editor-row">
-    <td colspan="9">
+    <td colspan="10">
       <BlockEditor :block="block" @close="editing = false" />
     </td>
   </tr>
@@ -258,5 +274,20 @@ async function retry() {
 .editor-row td {
   padding: 0 8px 8px;
   border-bottom: 1px solid var(--border);
+}
+
+.col-select {
+  width: 32px;
+  text-align: center;
+  padding: var(--space-2) 4px;
+}
+
+.col-select input[type="checkbox"] {
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.block-row.is-selected td {
+  background: rgba(203, 27, 33, 0.06);
 }
 </style>

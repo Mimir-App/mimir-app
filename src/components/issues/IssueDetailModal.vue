@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
-import type { GitLabIssue, GitLabNote, GitLabLabel, TimesheetEntry } from '../../lib/types';
+import type { GitLabIssue, GitLabNote, GitLabLabel, OdooTask } from '../../lib/types';
 import { api } from '../../lib/api';
 import { useConfigStore } from '../../stores/config';
 import { formatDate, formatHours } from '../../composables/useFormatting';
@@ -71,29 +71,24 @@ async function loadNotes(issue: GitLabIssue) {
   }
 }
 
-/** Carga horas imputadas en Odoo para la tarea vinculada */
+/** Carga horas imputadas en Odoo buscando effective_hours de project.task */
 async function loadTimeSpent(issue: GitLabIssue) {
-  // Solo buscar si es GitLab (puede tener vinculo con Odoo)
   if (issue._source === 'github') {
-    timeSpentHours.value = -1; // -1 = no vinculado
+    timeSpentHours.value = -1;
     return;
   }
   loadingTime.value = true;
   try {
-    const now = new Date();
-    const yearAgo = new Date(now);
-    yearAgo.setFullYear(yearAgo.getFullYear() - 1);
-    const dateFrom = yearAgo.toISOString().slice(0, 10);
-    const dateTo = now.toISOString().slice(0, 10);
-
-    const entries = await api.getTimesheetEntries(dateFrom, dateTo) as TimesheetEntry[];
-
-    const pattern = `#${issue.iid}`;
-    const matching = entries.filter(e =>
-      e.description?.includes(pattern) ||
-      e.description?.includes(issue.title)
-    );
-    timeSpentHours.value = matching.reduce((sum, e) => sum + e.hours, 0);
+    // Buscar tarea en Odoo por IID o titulo
+    const query = `#${issue.iid}`;
+    const tasks = await api.searchOdooTasks(query, 5) as OdooTask[];
+    if (tasks.length > 0) {
+      timeSpentHours.value = tasks[0].effective_hours ?? 0;
+    } else {
+      // Fallback: buscar por titulo
+      const byTitle = await api.searchOdooTasks(issue.title.slice(0, 50), 5) as OdooTask[];
+      timeSpentHours.value = byTitle.length > 0 ? (byTitle[0].effective_hours ?? 0) : 0;
+    }
   } catch {
     timeSpentHours.value = 0;
   } finally {
