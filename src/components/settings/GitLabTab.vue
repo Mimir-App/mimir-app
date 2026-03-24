@@ -8,6 +8,7 @@ import ModalDialog from '../shared/ModalDialog.vue';
 import SourceIcon from '../shared/SourceIcon.vue';
 import SettingGroup from './SettingGroup.vue';
 import SettingRow from './SettingRow.vue';
+import { X } from 'lucide-vue-next';
 
 const props = defineProps<{
   integrationStatus: Record<string, unknown>;
@@ -353,8 +354,8 @@ async function testGithubConnection() {
             <td><input type="text" v-model="rule.label" placeholder="Ej: priority::1" /></td>
             <td><input type="number" v-model.number="rule.weight" min="0" max="100" /></td>
             <td class="action-cell">
-              <button type="button" class="btn btn-danger btn-sm" @click="configStore.config.gitlab_priority_labels.splice(idx, 1)">
-                &times;
+              <button type="button" class="btn btn-danger btn-sm" @click="configStore.config.gitlab_priority_labels.splice(idx, 1)" aria-label="Eliminar regla">
+                <X :size="12" :stroke-width="2" />
               </button>
             </td>
           </tr>
@@ -478,7 +479,7 @@ async function testGithubConnection() {
 .btn-secondary { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); }
 .btn-secondary:hover:not(:disabled) { background: var(--bg-hover); }
 .btn-danger { background: transparent; color: var(--error); border: 1px solid var(--error); }
-.btn-danger:hover:not(:disabled) { background: rgba(241, 76, 76, 0.1); }
+.btn-danger:hover:not(:disabled) { background: var(--error-soft); }
 .btn:disabled { opacity: 0.5; }
 
 /* GitHub OAuth tabs */

@@ -8,6 +8,7 @@ import { useConfigStore } from '../../stores/config';
 import { formatDate } from '../../composables/useFormatting';
 import ModalDialog from '../shared/ModalDialog.vue';
 import ScoreBadge from '../shared/ScoreBadge.vue';
+import { CheckCircle2, AlertTriangle } from 'lucide-vue-next';
 
 const props = defineProps<{
   mr: GitLabMergeRequest | null;
@@ -175,14 +176,14 @@ watch(
 
       <!-- Approved by -->
       <div v-if="mr.approved_by?.length" class="approved-section">
-        <span class="approved-icon">&#10003;</span>
+        <CheckCircle2 class="approved-icon" :size="16" :stroke-width="2" aria-hidden="true" />
         <span class="approved-text">Aprobado por {{ mr.approved_by.join(', ') }}</span>
       </div>
 
       <!-- Conflicts section -->
-      <div v-if="mr.has_conflicts" class="conflicts-section">
+      <div v-if="mr.has_conflicts" class="conflicts-section" role="alert">
         <div class="conflicts-header">
-          <span class="conflicts-icon">&#9888;</span>
+          <AlertTriangle class="conflicts-icon" :size="16" :stroke-width="2" aria-hidden="true" />
           <span class="conflicts-title">Conflictos detectados</span>
         </div>
         <div v-if="loadingConflicts" class="loading-text">Cargando conflictos...</div>
@@ -308,13 +309,13 @@ watch(
 }
 
 .state-opened {
-  background: rgba(78, 201, 176, 0.15);
+  background: var(--success-soft);
   color: var(--success);
   border: 1px solid var(--success);
 }
 
 .state-merged {
-  background: rgba(203, 27, 33, 0.15);
+  background: var(--accent-glow);
   color: var(--accent);
   border: 1px solid var(--accent);
 }
@@ -344,19 +345,19 @@ watch(
 }
 
 .pipeline-success {
-  background: rgba(78, 201, 176, 0.15);
+  background: var(--success-soft);
   color: var(--success);
   border: 1px solid var(--success);
 }
 
 .pipeline-failed {
-  background: rgba(241, 76, 76, 0.15);
+  background: var(--error-soft);
   color: var(--error);
   border: 1px solid var(--error);
 }
 
 .pipeline-running {
-  background: rgba(220, 220, 170, 0.15);
+  background: var(--warning-soft);
   color: var(--warning);
   border: 1px solid var(--warning);
 }
@@ -382,7 +383,7 @@ watch(
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  background: rgba(78, 201, 176, 0.08);
+  background: var(--success-soft);
   border: 1px solid var(--success);
   border-radius: 8px;
   font-size: 13px;
@@ -390,8 +391,7 @@ watch(
 
 .approved-icon {
   color: var(--success);
-  font-size: 16px;
-  font-weight: 700;
+  flex-shrink: 0;
 }
 
 .approved-text {
@@ -404,7 +404,7 @@ watch(
   border: 1px solid var(--error);
   border-radius: 8px;
   padding: 12px;
-  background: rgba(241, 76, 76, 0.08);
+  background: var(--error-soft);
 }
 
 .conflicts-header {
@@ -416,7 +416,7 @@ watch(
 
 .conflicts-icon {
   color: var(--error);
-  font-size: 16px;
+  flex-shrink: 0;
 }
 
 .conflicts-title {
@@ -439,7 +439,7 @@ watch(
   font-family: monospace;
   color: var(--text-primary);
   padding: 2px 6px;
-  background: rgba(241, 76, 76, 0.05);
+  background: var(--error-soft);
   border-radius: 4px;
 }
 

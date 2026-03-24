@@ -3,7 +3,7 @@
 ## Descripcion
 Mimir es un asistente inteligente de imputacion de horas. Captura automaticamente la actividad del empleado mediante senales (cada 30s), construye bloques con un algoritmo determinista, sugiere descripciones con IA, y permite imputar horas a Odoo.
 
-**Version actual: v0.5.1**
+**Version actual: v0.6.0**
 
 ## Stack
 - **Frontend**: Tauri 2 + Vue 3 + TypeScript + Vite

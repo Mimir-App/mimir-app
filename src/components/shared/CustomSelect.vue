@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ChevronDown } from 'lucide-vue-next';
 
 const props = withDefaults(defineProps<{
   modelValue: string | number | null;
@@ -20,6 +21,7 @@ const emit = defineEmits<{
 const open = ref(false);
 const search = ref('');
 const el = ref<HTMLElement | null>(null);
+const highlightIndex = ref(-1);
 
 const selectedLabel = computed(() => {
   const opt = props.options.find(o => o.value === props.modelValue);
@@ -39,12 +41,57 @@ const filteredOptions = computed(() => {
 function toggle() {
   if (props.disabled) return;
   open.value = !open.value;
-  if (open.value) search.value = '';
+  if (open.value) {
+    search.value = '';
+    highlightIndex.value = filteredOptions.value.findIndex(o => o.value === props.modelValue);
+  }
 }
 
 function select(value: string | number | null) {
   emit('update:modelValue', value);
   open.value = false;
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  if (!open.value) {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      open.value = true;
+      search.value = '';
+      highlightIndex.value = filteredOptions.value.findIndex(o => o.value === props.modelValue);
+      return;
+    }
+    return;
+  }
+
+  switch (e.key) {
+    case 'ArrowDown':
+      e.preventDefault();
+      highlightIndex.value = Math.min(highlightIndex.value + 1, filteredOptions.value.length - 1);
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      highlightIndex.value = Math.max(highlightIndex.value - 1, 0);
+      break;
+    case 'Enter':
+      e.preventDefault();
+      if (highlightIndex.value >= 0 && highlightIndex.value < filteredOptions.value.length) {
+        select(filteredOptions.value[highlightIndex.value].value);
+      }
+      break;
+    case 'Escape':
+      e.preventDefault();
+      open.value = false;
+      break;
+    case 'Home':
+      e.preventDefault();
+      highlightIndex.value = 0;
+      break;
+    case 'End':
+      e.preventDefault();
+      highlightIndex.value = filteredOptions.value.length - 1;
+      break;
+  }
 }
 
 function handleClickOutside(e: MouseEvent) {
@@ -58,10 +105,18 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside));
 </script>
 
 <template>
-  <div class="custom-select" ref="el" :class="{ open, disabled }">
-    <button type="button" class="select-trigger" @click="toggle">
+  <div class="custom-select" ref="el" :class="{ open, disabled }" @keydown="handleKeydown">
+    <button
+      type="button"
+      class="select-trigger"
+      @click="toggle"
+      role="combobox"
+      :aria-expanded="open"
+      aria-haspopup="listbox"
+      :aria-label="selectedLabel"
+    >
       <span class="select-label" :class="{ placeholder: isPlaceholder }">{{ selectedLabel }}</span>
-      <span class="select-arrow">{{ open ? '&#x25B2;' : '&#x25BC;' }}</span>
+      <ChevronDown class="select-arrow" :class="{ flipped: open }" :size="14" :stroke-width="2" />
     </button>
     <Transition name="dropdown">
       <div v-if="open" class="select-dropdown">
@@ -71,20 +126,25 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside));
           v-model="search"
           class="select-search"
           placeholder="Buscar..."
+          aria-label="Buscar opciones"
           @click.stop
+          @input="highlightIndex = 0"
         />
-        <div class="select-options">
+        <div class="select-options" role="listbox">
           <button
-            v-for="opt in filteredOptions"
+            v-for="(opt, idx) in filteredOptions"
             :key="String(opt.value)"
             type="button"
             class="select-option"
-            :class="{ active: opt.value === modelValue }"
+            :class="{ active: opt.value === modelValue, highlighted: idx === highlightIndex }"
+            role="option"
+            :aria-selected="opt.value === modelValue"
             @click="select(opt.value)"
+            @mouseenter="highlightIndex = idx"
           >
             <span class="option-label">{{ opt.label }}</span>
             <span v-if="opt.hint" class="option-hint">{{ opt.hint }}</span>
-            <span v-if="opt.value === modelValue" class="option-check">&#x2713;</span>
+            <span v-if="opt.value === modelValue" class="option-check" aria-hidden="true">&#x2713;</span>
           </button>
           <div v-if="filteredOptions.length === 0" class="select-empty">Sin resultados</div>
         </div>
@@ -113,11 +173,11 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside));
   background: var(--bg-card);
   color: var(--text-primary);
   border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 13px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
   font-family: inherit;
   cursor: pointer;
-  transition: border-color 0.15s;
+  transition: border-color var(--duration-fast) var(--ease-out);
 }
 
 .select-trigger:hover {
@@ -126,7 +186,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside));
 
 .custom-select.open .select-trigger {
   border-color: var(--accent);
-  border-radius: 4px 4px 0 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
 
 .select-label {
@@ -140,10 +200,14 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside));
 }
 
 .select-arrow {
-  font-size: 8px;
   color: var(--text-secondary);
-  margin-left: 8px;
+  margin-left: var(--space-2);
   flex-shrink: 0;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.select-arrow.flipped {
+  transform: rotate(180deg);
 }
 
 .select-dropdown {
@@ -151,12 +215,12 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside));
   top: 100%;
   left: 0;
   right: 0;
-  z-index: 100;
+  z-index: var(--z-dropdown);
   background: var(--bg-card);
   border: 1px solid var(--accent);
   border-top: none;
-  border-radius: 0 0 4px 4px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  box-shadow: var(--shadow-md);
 }
 
 .select-search {
@@ -166,7 +230,7 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside));
   border-bottom: 1px solid var(--border);
   background: var(--bg-secondary);
   color: var(--text-primary);
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-family: inherit;
   outline: none;
 }
@@ -180,19 +244,20 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside));
   display: flex;
   align-items: center;
   width: 100%;
-  padding: 8px 10px;
+  padding: var(--space-2) var(--space-3);
   background: none;
   border: none;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--text-sm);
   font-family: inherit;
   cursor: pointer;
   text-align: left;
-  transition: background 0.1s;
-  gap: 8px;
+  transition: background var(--duration-fast);
+  gap: var(--space-2);
 }
 
-.select-option:hover {
+.select-option:hover,
+.select-option.highlighted {
   background: var(--bg-hover);
 }
 
@@ -205,26 +270,26 @@ onUnmounted(() => document.removeEventListener('click', handleClickOutside));
 }
 
 .option-hint {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-secondary);
 }
 
 .option-check {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--accent);
   flex-shrink: 0;
 }
 
 .select-empty {
-  padding: 10px;
+  padding: var(--space-3);
   text-align: center;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 
 .dropdown-enter-active,
 .dropdown-leave-active {
-  transition: opacity 0.12s, transform 0.12s;
+  transition: opacity var(--duration-fast), transform var(--duration-fast);
 }
 
 .dropdown-enter-from,

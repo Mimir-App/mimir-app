@@ -219,7 +219,7 @@ function handleClickOutside(e: MouseEvent) {
   position: absolute;
   top: 100%;
   left: 0;
-  z-index: 100;
+  z-index: var(--z-dropdown);
   width: 260px;
   background: var(--bg-card);
   border: 1px solid var(--accent);

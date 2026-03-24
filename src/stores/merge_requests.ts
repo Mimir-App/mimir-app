@@ -62,7 +62,9 @@ export const useMergeRequestsStore = defineStore('merge_requests', () => {
 
     // Aplicar filtro activo
     if (activeFilter.value === 'assigned') {
-      result = result.filter(mr => !mr._followed || mergeRequests.value.some(a => a.id === mr.id));
+      result = result.filter(mr =>
+        mr.assignees?.some(a => a.username === currentUsername.value)
+      );
     } else if (activeFilter.value === 'reviewer') {
       result = result.filter(mr => mr.reviewers.some(r => r.username === currentUsername.value));
     } else if (activeFilter.value === 'followed') {

@@ -120,7 +120,7 @@ onUnmounted(() => {
 <style scoped>
 .context-menu {
   position: fixed;
-  z-index: 9999;
+  z-index: var(--z-modal);
   min-width: 220px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -159,7 +159,7 @@ onUnmounted(() => {
 }
 
 .menu-item.danger:hover:not(.disabled) {
-  background: rgba(241, 76, 76, 0.1);
+  background: var(--error-soft);
 }
 
 .menu-icon {
@@ -215,7 +215,7 @@ onUnmounted(() => {
 
 .select-chip:hover {
   border-color: var(--success);
-  background: rgba(78, 201, 176, 0.15);
+  background: var(--success-soft);
 }
 
 .select-chip.negative {
@@ -224,6 +224,6 @@ onUnmounted(() => {
 
 .select-chip.negative:hover {
   border-color: var(--error);
-  background: rgba(241, 76, 76, 0.1);
+  background: var(--error-soft);
 }
 </style>

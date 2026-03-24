@@ -14,6 +14,7 @@ import IssueTable from '../components/issues/IssueTable.vue';
 import IssueDetailModal from '../components/issues/IssueDetailModal.vue';
 import ContextMenu from '../components/shared/ContextMenu.vue';
 import type { MenuEntry } from '../components/shared/ContextMenu.vue';
+import { X } from 'lucide-vue-next';
 
 const issuesStore = useIssuesStore();
 const refreshing = ref(false);
@@ -199,7 +200,7 @@ function openIssueDetail(issue: GitLabIssue) {
         <div class="project-filter-group">
           <div v-for="p in issuesStore.projectFilter" :key="p" class="project-chip">
             <span>{{ p.split('/').pop() }}</span>
-            <button class="chip-clear" @click="removeProject(p)" :title="p">&times;</button>
+            <button class="chip-clear" @click="removeProject(p)" :title="p" aria-label="Quitar filtro"><X :size="12" :stroke-width="2" /></button>
           </div>
           <div class="project-filter">
             <input
@@ -220,7 +221,7 @@ function openIssueDetail(issue: GitLabIssue) {
               >{{ project }}</div>
             </div>
           </div>
-          <button v-if="issuesStore.projectFilter.length" class="chip-clear-all" @click="clearProjectFilter" title="Limpiar filtros">&times;</button>
+          <button v-if="issuesStore.projectFilter.length" class="chip-clear-all" @click="clearProjectFilter" title="Limpiar filtros" aria-label="Limpiar todos los filtros"><X :size="12" :stroke-width="2" /></button>
         </div>
 
         <!-- Source tabs -->
@@ -351,7 +352,7 @@ function openIssueDetail(issue: GitLabIssue) {
   top: 100%;
   left: 0;
   right: 0;
-  z-index: 200;
+  z-index: var(--z-dropdown);
   background: var(--bg-secondary, #2d2d33);
   border: 1px solid var(--accent);
   border-top: none;

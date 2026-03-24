@@ -31,17 +31,17 @@ const level = computed(() => {
 }
 
 .confidence-badge.high {
-  background: rgba(78, 201, 176, 0.15);
+  background: var(--success-soft);
   color: var(--success);
 }
 
 .confidence-badge.medium {
-  background: rgba(220, 220, 170, 0.15);
+  background: var(--warning-soft);
   color: var(--warning);
 }
 
 .confidence-badge.low {
-  background: rgba(241, 76, 76, 0.1);
+  background: var(--error-soft);
   color: var(--error);
 }
 </style>

@@ -33,17 +33,17 @@ const daemonStore = useDaemonStore();
 }
 
 .mode-badge.active {
-  background: rgba(78, 201, 176, 0.15);
+  background: var(--success-soft);
   color: var(--success);
 }
 
 .mode-badge.silent {
-  background: rgba(220, 220, 170, 0.15);
+  background: var(--warning-soft);
   color: var(--warning);
 }
 
 .mode-badge.paused {
-  background: rgba(241, 76, 76, 0.15);
+  background: var(--error-soft);
   color: var(--error);
 }
 </style>

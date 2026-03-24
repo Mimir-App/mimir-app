@@ -4,9 +4,11 @@ import AppSidebar from './components/layout/AppSidebar.vue';
 import AppHeader from './components/layout/AppHeader.vue';
 import { useDaemonStore } from './stores/daemon';
 import { useConfigStore } from './stores/config';
+import { useOdooStore } from './stores/odoo';
 
 const daemonStore = useDaemonStore();
 const configStore = useConfigStore();
+const odooStore = useOdooStore();
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -54,6 +56,9 @@ onMounted(async () => {
   }
   if (ok) {
     await configStore.pushToDaemon();
+    // Iniciar cache de proyectos Odoo con refresh periodico
+    odooStore.startPolling();
+    odooStore.watchConfig();
   }
 
   pollTimer = setInterval(() => {
@@ -64,6 +69,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer);
+  odooStore.stopPolling();
   window.removeEventListener('keydown', handleZoom);
 });
 
@@ -81,7 +87,7 @@ watch(() => configStore.config.font_size, (size) => {
     <AppSidebar />
     <div class="app-main">
       <AppHeader />
-      <div v-if="daemonStore.versionMismatch" class="version-mismatch-banner">
+      <div v-if="daemonStore.versionMismatch" class="version-mismatch-banner" role="alert">
         Capture (v{{ daemonStore.captureVersion }}) y Server (v{{ daemonStore.serverVersion }}) tienen versiones distintas.
         Actualiza mimir-capture: <code>sudo dpkg -i mimir-capture_{{ daemonStore.serverVersion }}_amd64.deb</code>
       </div>
@@ -112,7 +118,7 @@ watch(() => configStore.config.font_size, (size) => {
   --bg-elevated: #2a2b36;
   --text-primary: #eaedf0;
   --text-secondary: #8b919e;
-  --text-muted: #5c6170;
+  --text-muted: #7a7f8e;
   --accent: #cb1b21;
   --accent-hover: #e02028;
   --accent-soft: rgba(203, 27, 33, 0.12);
@@ -166,12 +172,25 @@ watch(() => configStore.config.font_size, (size) => {
   --radius-lg: 12px;
   --radius-xl: 16px;
 
+  /* ── Z-index scale ── */
+  --z-base: 0;
+  --z-header: 10;
+  --z-sidebar: 20;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-overlay: 900;
+  --z-modal: 1000;
+  --z-toast: 1100;
+
   /* ── Transitions ── */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --duration-fast: 120ms;
   --duration-base: 200ms;
   --duration-slow: 350ms;
+
+  /* ── Focus ring ── */
+  --focus-ring: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent);
 }
 
 [data-theme="light"] {
@@ -183,7 +202,7 @@ watch(() => configStore.config.font_size, (size) => {
   --bg-elevated: #ffffff;
   --text-primary: #1a1d26;
   --text-secondary: #6b7280;
-  --text-muted: #9ca3af;
+  --text-muted: #8b919e;
   --accent: #cb1b21;
   --accent-hover: #b31820;
   --accent-soft: rgba(203, 27, 33, 0.08);
@@ -205,6 +224,7 @@ watch(() => configStore.config.font_size, (size) => {
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
   --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.12);
   --shadow-glow: 0 0 20px rgba(203, 27, 33, 0.1);
+  --focus-ring: 0 0 0 2px var(--bg-primary), 0 0 0 4px var(--accent);
 }
 
 /* ── Reset ── */
@@ -381,5 +401,45 @@ th.sortable:hover {
 ::selection {
   background: var(--accent-soft);
   color: var(--text-primary);
+}
+
+/* ── Global focus-visible ── */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* ── Global active/pressed state ── */
+button:active:not(:disabled),
+[role="button"]:active:not(:disabled) {
+  transform: scale(0.97);
+  transition-duration: 50ms;
+}
+
+/* ── Reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .page-enter-active,
+  .page-leave-active {
+    transition: none;
+  }
+
+  .page-enter-from {
+    transform: none;
+  }
 }
 </style>

@@ -112,7 +112,7 @@ const dcLabel = computed(() => props.disconnectLabel || 'Desconectar');
 }
 
 .card-icon.connected {
-  background: rgba(78, 201, 176, 0.15);
+  background: var(--success-soft);
 }
 
 .icon-text {
@@ -184,6 +184,6 @@ const dcLabel = computed(() => props.disconnectLabel || 'Desconectar');
 .btn-secondary { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); }
 .btn-secondary:hover:not(:disabled) { background: var(--bg-hover); border-color: var(--text-secondary); }
 .btn-danger { background: transparent; color: var(--error); border: 1px solid var(--error); }
-.btn-danger:hover:not(:disabled) { background: rgba(241, 76, 76, 0.1); }
+.btn-danger:hover:not(:disabled) { background: var(--error-soft); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

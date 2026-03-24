@@ -195,8 +195,8 @@ function handleDisconnectGoogle() {
   margin-bottom: 12px;
 }
 
-.push-banner.success { background: rgba(78, 201, 176, 0.1); border: 1px solid var(--success); color: var(--success); }
-.push-banner.error { background: rgba(241, 76, 76, 0.1); border: 1px solid var(--error); color: var(--error); }
+.push-banner.success { background: var(--success-soft); border: 1px solid var(--success); color: var(--success); }
+.push-banner.error { background: var(--error-soft); border: 1px solid var(--error); color: var(--error); }
 
 .form-actions {
   display: flex;

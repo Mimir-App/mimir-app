@@ -128,6 +128,18 @@ async function testOdooConnection() {
         <SettingRow label="Base de datos">
           <span>{{ configStore.config.odoo_db }}</span>
         </SettingRow>
+        <SettingRow label="Actualizar proyectos">
+          <CustomSelect
+            :modelValue="configStore.config.odoo_refresh_interval_minutes"
+            @update:modelValue="(v: string | number | null) => configStore.save({ odoo_refresh_interval_minutes: Number(v) })"
+            :options="[
+              { value: 30, label: 'Cada 30 minutos' },
+              { value: 60, label: 'Cada 1 hora' },
+              { value: 120, label: 'Cada 2 horas' },
+              { value: 240, label: 'Cada 4 horas' },
+            ]"
+          />
+        </SettingRow>
       </template>
     </IntegrationCard>
 

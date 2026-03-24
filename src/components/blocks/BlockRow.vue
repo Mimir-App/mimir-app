@@ -6,7 +6,7 @@ import { formatHours, formatTime } from '../../composables/useFormatting';
 import SyncStatusBadge from '../shared/SyncStatusBadge.vue';
 import ConfidenceBadge from '../shared/ConfidenceBadge.vue';
 import BlockEditor from './BlockEditor.vue';
-import { Check, RefreshCw, Pencil, X } from 'lucide-vue-next';
+import { Check, RefreshCw, Pencil, Trash2 } from 'lucide-vue-next';
 
 const props = withDefaults(defineProps<{
   block: ActivityBlock;
@@ -20,6 +20,8 @@ const emit = defineEmits<{ 'toggle-select': [] }>();
 const blocksStore = useBlocksStore();
 const editing = ref(false);
 const retrying = ref(false);
+const justConfirmed = ref(false);
+const confirmingDelete = ref(false);
 
 const startTime = computed(() => formatTime(props.block.start_time));
 const endTime = computed(() => formatTime(props.block.end_time));
@@ -37,11 +39,19 @@ const canConfirm = computed(() =>
   props.block.status === 'auto' || props.block.status === 'closed'
 );
 
-function confirm() {
-  blocksStore.confirmBlock(props.block.id);
+async function confirm() {
+  await blocksStore.confirmBlock(props.block.id);
+  justConfirmed.value = true;
+  setTimeout(() => { justConfirmed.value = false; }, 1200);
 }
 
-function remove() {
+function requestDelete() {
+  confirmingDelete.value = true;
+  setTimeout(() => { confirmingDelete.value = false; }, 3000);
+}
+
+function confirmDelete() {
+  confirmingDelete.value = false;
   blocksStore.deleteBlock(props.block.id);
 }
 
@@ -65,6 +75,7 @@ async function retry() {
         type="checkbox"
         :checked="selected"
         @change="emit('toggle-select')"
+        :aria-label="`Seleccionar bloque ${startTime} - ${endTime}`"
       />
     </td>
     <td>{{ startTime }}</td>
@@ -95,36 +106,52 @@ async function retry() {
     <td class="col-actions">
       <button
         v-if="canConfirm"
-        class="btn-sm btn-confirm"
+        class="btn-action btn-confirm"
+        :class="{ 'just-confirmed': justConfirmed }"
         @click="confirm"
-        title="Confirmar bloque"
+        :title="justConfirmed ? 'Confirmado' : 'Confirmar bloque'"
+        :aria-label="justConfirmed ? 'Bloque confirmado' : 'Confirmar bloque'"
       >
         <Check :size="13" :stroke-width="2.5" />
       </button>
       <button
         v-if="block.status === 'error'"
-        class="btn-sm btn-retry"
+        class="btn-action btn-retry"
         @click="retry"
         :disabled="retrying"
+        :class="{ spinning: retrying }"
         :title="block.sync_error ? `Reintentar (Error: ${block.sync_error})` : 'Reintentar'"
+        aria-label="Reintentar sincronizacion"
       >
         <RefreshCw :size="13" :stroke-width="2" />
       </button>
       <button
         v-if="canEdit"
-        class="btn-sm btn-edit"
+        class="btn-action btn-edit"
         @click="editing = !editing"
         :title="editing ? 'Cerrar editor' : 'Editar bloque'"
+        :aria-label="editing ? 'Cerrar editor' : 'Editar bloque'"
       >
         <Pencil :size="13" :stroke-width="2" />
       </button>
       <button
-        v-if="canEdit"
-        class="btn-sm btn-delete"
-        @click="remove"
+        v-if="canEdit && !confirmingDelete"
+        class="btn-action btn-delete"
+        @click="requestDelete"
         title="Eliminar bloque"
+        aria-label="Eliminar bloque"
       >
-        <X :size="13" :stroke-width="2" />
+        <Trash2 :size="13" :stroke-width="2" />
+      </button>
+      <button
+        v-if="confirmingDelete"
+        class="btn-action btn-delete-confirm"
+        @click="confirmDelete"
+        title="Confirmar eliminacion"
+        aria-label="Confirmar eliminacion del bloque"
+      >
+        <Trash2 :size="13" :stroke-width="2" />
+        <span class="confirm-text">Eliminar</span>
       </button>
     </td>
   </tr>
@@ -189,7 +216,7 @@ async function retry() {
 .no-desc {
   color: var(--text-secondary);
   font-style: italic;
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 
 .project-name {
@@ -203,7 +230,7 @@ async function retry() {
 .no-project {
   color: var(--text-secondary);
   font-style: italic;
-  font-size: 12px;
+  font-size: var(--text-xs);
 }
 
 .no-task {
@@ -214,19 +241,20 @@ async function retry() {
   white-space: nowrap;
 }
 
-.btn-sm {
+.btn-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: none;
   border-radius: var(--radius-sm);
-  padding: 4px;
+  padding: var(--space-1);
   cursor: pointer;
   margin-right: 2px;
   transition: all var(--duration-fast) var(--ease-out);
+  gap: var(--space-1);
 }
 
-.btn-sm:disabled {
+.btn-action:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
@@ -241,6 +269,18 @@ async function retry() {
   color: white;
 }
 
+.btn-confirm.just-confirmed {
+  background: var(--success);
+  color: white;
+  animation: pulse-confirm 0.4s var(--ease-spring);
+}
+
+@keyframes pulse-confirm {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
 .btn-retry {
   background: var(--warning-soft);
   color: var(--warning);
@@ -249,6 +289,15 @@ async function retry() {
 .btn-retry:hover:not(:disabled) {
   background: var(--warning);
   color: #1a1d26;
+}
+
+.btn-retry.spinning :deep(svg) {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .btn-edit {
@@ -271,15 +320,38 @@ async function retry() {
   color: var(--error);
 }
 
+.btn-delete-confirm {
+  background: var(--error);
+  color: white;
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  animation: shake 0.3s var(--ease-out);
+}
+
+.btn-delete-confirm:hover {
+  background: #dc2626;
+}
+
+.confirm-text {
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+}
+
 .editor-row td {
-  padding: 0 8px 8px;
+  padding: 0 var(--space-2) var(--space-2);
   border-bottom: 1px solid var(--border);
 }
 
 .col-select {
   width: 32px;
   text-align: center;
-  padding: var(--space-2) 4px;
+  padding: var(--space-2) var(--space-1);
 }
 
 .col-select input[type="checkbox"] {
@@ -288,6 +360,6 @@ async function retry() {
 }
 
 .block-row.is-selected td {
-  background: rgba(203, 27, 33, 0.06);
+  background: var(--accent-soft);
 }
 </style>
