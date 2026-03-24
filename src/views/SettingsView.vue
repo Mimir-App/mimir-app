@@ -122,6 +122,7 @@ function handleDisconnectGoogle() {
       <GoogleTab
         ref="googleTabRef"
         v-show="activeTab === 'google'"
+        @message="handleMessage"
       />
       <ServicesTab
         v-show="activeTab === 'services'"
@@ -149,6 +150,8 @@ function handleDisconnectGoogle() {
 </template>
 
 <style scoped>
+@import '../assets/settings-shared.css';
+
 .settings-view {
   display: flex;
   justify-content: center;

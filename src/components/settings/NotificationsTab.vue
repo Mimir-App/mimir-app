@@ -118,45 +118,4 @@ const configStore = useConfigStore();
 .tab-content {
   margin-bottom: 20px;
 }
-
-.inline-field {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.inline-field input {
-  width: 80px;
-  background: var(--bg-card);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 6px 10px;
-  font-size: 13px;
-  font-family: inherit;
-}
-
-.suffix {
-  font-size: 11px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-
-.toggle input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--accent);
-}
-
-.toggle-label {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
 </style>

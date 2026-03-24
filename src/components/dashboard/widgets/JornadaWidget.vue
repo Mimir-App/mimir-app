@@ -13,6 +13,7 @@ interface Attendance { id: number | null; checkIn: string | null; checkOut: stri
 
 const attendance = ref<Attendance>({ id: null, checkIn: null, checkOut: null });
 const attendanceLoading = ref(false);
+const error = ref(false);
 const isCheckedIn = computed(() => attendance.value.checkIn !== null && attendance.value.checkOut === null);
 const isCheckedOut = computed(() => attendance.value.checkIn !== null && attendance.value.checkOut !== null);
 
@@ -36,7 +37,7 @@ async function fetchAttendance() {
     } else {
       attendance.value = { id: null, checkIn: null, checkOut: null };
     }
-  } catch { attendance.value = { id: null, checkIn: null, checkOut: null }; }
+  } catch { attendance.value = { id: null, checkIn: null, checkOut: null }; error.value = true; }
 }
 
 async function checkIn() {
@@ -44,7 +45,7 @@ async function checkIn() {
   try {
     const result = await api.attendanceCheckIn() as { id: number };
     attendance.value = { id: result.id, checkIn: new Date().toISOString(), checkOut: null };
-  } catch { /* ignore */ }
+  } catch { error.value = true; }
   finally { attendanceLoading.value = false; }
 }
 
@@ -54,7 +55,7 @@ async function checkOut() {
   try {
     await api.attendanceCheckOut(attendance.value.id);
     attendance.value.checkOut = new Date().toISOString();
-  } catch { /* ignore */ }
+  } catch { error.value = true; }
   finally { attendanceLoading.value = false; }
 }
 
@@ -64,6 +65,7 @@ onMounted(() => fetchAttendance());
 <template>
   <div class="widget-jornada">
     <h3 class="widget-title">Jornada</h3>
+    <p v-if="error" class="widget-error">Error al cargar</p>
 
     <div v-if="!attendance.checkIn" class="attendance-empty">
       <button class="btn-attendance checkin" @click="checkIn" :disabled="attendanceLoading || !daemonStore.connected">
@@ -214,4 +216,6 @@ onMounted(() => fetchAttendance());
   font-size: var(--text-xs);
   color: var(--text-muted);
 }
+
+.widget-error { font-size: 11px; color: var(--text-secondary); font-style: italic; text-align: center; margin: 8px 0; }
 </style>

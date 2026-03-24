@@ -2,7 +2,7 @@
 
 Asistente inteligente de imputacion de horas.
 Ultima actualizacion: 2026-03-22
-Version actual: v0.3.1
+Version actual: v0.5.1
 
 ---
 
@@ -10,10 +10,10 @@ Version actual: v0.3.1
 
 | Componente | Tecnologia | Estado |
 |---|---|---|
-| Frontend desktop | Tauri 2 + Vue 3 + TypeScript + Vite | v0.3.1 |
-| Backend desktop | Rust (Tauri commands) | v0.3.1 |
-| Capture daemon | Python 3.10+ (asyncio + poller + signals) | v0.3.1 |
-| Server daemon | Python 3.10+ (FastAPI + uvicorn) | v0.3.1 |
+| Frontend desktop | Tauri 2 + Vue 3 + TypeScript + Vite | v0.5.1 |
+| Backend desktop | Rust (Tauri commands) | v0.5.1 |
+| Capture daemon | Python 3.10+ (asyncio + poller + signals) | v0.5.1 |
+| Server daemon | Python 3.10+ (FastAPI + uvicorn) | v0.5.1 |
 | Base de datos local | SQLite (aiosqlite), compartida capture/server | Operativa |
 | CI/CD | GitHub Actions (release en tag) | Operativo |
 
@@ -22,13 +22,13 @@ Version actual: v0.3.1
 ## v0.3.1 — GitHub + Multi-Source + Descubrir + Auto-asignacion
 
 **Fecha:** 2026-03-21/22
-**Tests: 147 pasando, 0 errores TS, 0 errores Rust**
+**Tests: 156 pasando, 0 errores TS, 0 errores Rust**
 
 ### Auto-asignacion y recomendaciones
 
 | Tarea | Estado |
 |---|---|
-| Migration registry versionado (schema_version + 3 migraciones) | Completado |
+| Migration registry versionado (schema_version + 4 migraciones) | Completado |
 | blocks.context_key + backfill desde senales | Completado |
 | suggest_mapping: exacto -> parcial -> historial | Completado |
 | SignalAggregator auto-asigna proyecto Odoo desde context_mappings | Completado |

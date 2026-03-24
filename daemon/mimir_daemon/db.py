@@ -509,6 +509,25 @@ class Database:
                 results.add(other)
         return results
 
+    # --- Signal reassignment ---
+
+    async def move_signals_to_block(self, signal_ids: list[int], to_block_id: int) -> None:
+        """Reasigna señales individuales a un bloque destino."""
+        for sid in signal_ids:
+            await self.db.execute(
+                "UPDATE block_signals SET block_id = ? WHERE signal_id = ?",
+                [to_block_id, sid],
+            )
+        await self.db.commit()
+
+    async def move_block_signals(self, from_block_id: int, to_block_id: int) -> None:
+        """Mueve todas las señales de un bloque a otro."""
+        await self.db.execute(
+            "UPDATE block_signals SET block_id = ? WHERE block_id = ?",
+            [to_block_id, from_block_id],
+        )
+        await self.db.commit()
+
     # --- Signals ---
 
     async def create_signal(self, **kwargs: object) -> int:

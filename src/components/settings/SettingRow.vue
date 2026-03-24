@@ -4,6 +4,7 @@ import HelpTooltip from '../shared/HelpTooltip.vue';
 defineProps<{
   label: string;
   help?: string;
+  fullWidth?: boolean;
 }>();
 </script>
 
@@ -13,7 +14,7 @@ defineProps<{
       {{ label }}
       <HelpTooltip v-if="help" :text="help" />
     </label>
-    <div class="setting-row-control">
+    <div class="setting-row-control" :class="{ 'full-width': fullWidth }">
       <slot />
     </div>
   </div>
@@ -41,5 +42,9 @@ defineProps<{
 .setting-row-control {
   flex: 1;
   max-width: 400px;
+}
+
+.setting-row-control.full-width {
+  max-width: none;
 }
 </style>

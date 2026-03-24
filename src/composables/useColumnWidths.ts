@@ -24,6 +24,7 @@ export const DEFAULT_COLUMN_WIDTHS: Record<string, number> = {
   pipeline: 80,
   conflicts: 70,
   hours: 70,
+  'discover-repo': 200,
 };
 
 const resizing = ref<string | null>(null);

@@ -3,10 +3,11 @@ import { ref, computed, onUnmounted } from 'vue';
 import { useConfigStore } from '../../stores/config';
 import { useDaemonStore } from '../../stores/daemon';
 import { api } from '../../lib/api';
-import HelpTooltip from '../shared/HelpTooltip.vue';
 import IntegrationCard from '../shared/IntegrationCard.vue';
 import ModalDialog from '../shared/ModalDialog.vue';
 import SourceIcon from '../shared/SourceIcon.vue';
+import SettingGroup from './SettingGroup.vue';
+import SettingRow from './SettingRow.vue';
 
 const props = defineProps<{
   integrationStatus: Record<string, unknown>;
@@ -242,16 +243,8 @@ async function testGithubConnection() {
         <p class="session-detail">{{ configStore.config.gitlab_url.replace(/^https?:\/\//, '') }}</p>
       </template>
       <template #details>
-        <table class="settings-table">
-          <tbody>
-            <tr>
-              <td class="label-cell">Servidor</td>
-              <td>{{ configStore.config.gitlab_url }}</td>
-              <td class="label-cell">Auth</td>
-              <td>Personal Access Token</td>
-            </tr>
-          </tbody>
-        </table>
+        <SettingRow label="Servidor"><span>{{ configStore.config.gitlab_url }}</span></SettingRow>
+        <SettingRow label="Auth"><span>Personal Access Token</span></SettingRow>
       </template>
     </IntegrationCard>
 
@@ -274,37 +267,21 @@ async function testGithubConnection() {
         <p class="session-detail">github.com</p>
       </template>
       <template #details>
-        <table class="settings-table">
-          <tbody>
-            <tr>
-              <td class="label-cell">Servidor</td>
-              <td>github.com</td>
-              <td class="label-cell">Auth</td>
-              <td>{{ githubConfigured ? 'Token configurado' : 'No configurado' }}</td>
-            </tr>
-          </tbody>
-        </table>
+        <SettingRow label="Servidor"><span>github.com</span></SettingRow>
+        <SettingRow label="Auth"><span>{{ githubConfigured ? 'Token configurado' : 'No configurado' }}</span></SettingRow>
       </template>
     </IntegrationCard>
 
     <!-- Modal GitLab -->
     <ModalDialog title="Configurar GitLab" :open="showGitlabModal" showFooter @close="showGitlabModal = false" @confirm="confirmGitlabModal">
-      <table class="settings-table">
-        <tbody>
-          <tr>
-            <td class="label-cell">URL</td>
-            <td><input type="url" v-model="gitlabUrl" placeholder="https://gitlab.example.com" /></td>
-          </tr>
-          <tr>
-            <td class="label-cell">Token</td>
-            <td>
-              <div class="token-field">
-                <input type="password" v-model="gitlabToken" :placeholder="configStore.config.gitlab_token_stored ? '***** (guardado)' : 'Personal Access Token'" />
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <SettingRow label="URL" fullWidth>
+        <input type="url" v-model="gitlabUrl" placeholder="https://gitlab.example.com" />
+      </SettingRow>
+      <SettingRow label="Token" fullWidth>
+        <div class="token-field">
+          <input type="password" v-model="gitlabToken" :placeholder="configStore.config.gitlab_token_stored ? '***** (guardado)' : 'Personal Access Token'" />
+        </div>
+      </SettingRow>
     </ModalDialog>
 
     <!-- Modal GitHub -->
@@ -345,47 +322,25 @@ async function testGithubConnection() {
 
       <!-- PAT Tab -->
       <div v-if="githubAuthTab === 'pat'">
-        <table class="settings-table">
-          <tbody>
-            <tr>
-              <td class="label-cell">Token</td>
-              <td>
-                <div class="token-field">
-                  <input type="password" v-model="githubToken" :placeholder="configStore.config.github_token_stored ? '***** (guardado)' : 'Personal Access Token (classic o fine-grained)'" />
-                </div>
-              </td>
-            </tr>
-            <tr>
-              <td></td>
-              <td>
-                <p class="token-hint">Permisos necesarios: <code>repo</code>, <code>read:org</code>, <code>notifications</code></p>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <SettingRow label="Token" fullWidth>
+          <div class="token-field">
+            <input type="password" v-model="githubToken" :placeholder="configStore.config.github_token_stored ? '***** (guardado)' : 'Personal Access Token (classic o fine-grained)'" />
+          </div>
+        </SettingRow>
+        <p class="token-hint">Permisos necesarios: <code>repo</code>, <code>read:org</code>, <code>notifications</code></p>
       </div>
     </ModalDialog>
 
     <!-- Scoring: prioridad de labels + notas -->
-    <div class="setting-group">
-      <h3 class="setting-group-title">Scoring de issues</h3>
-      <table class="settings-table">
-        <tbody>
-          <tr>
-            <td class="label-cell">Comentarios en detalle de issue <HelpTooltip text="Numero de comentarios recientes a mostrar al abrir el detalle de una issue." /></td>
-            <td>
-              <div class="inline-field">
-                <input type="number" v-model.number="configStore.config.issue_notes_count" min="1" max="20" />
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <SettingGroup title="Scoring de issues">
+      <SettingRow label="Comentarios en detalle de issue" help="Numero de comentarios recientes a mostrar al abrir el detalle de una issue.">
+        <input type="number" v-model.number="configStore.config.issue_notes_count" min="1" max="20" />
+      </SettingRow>
 
       <p class="section-hint" style="margin-top: 16px;">
         Mapeo de prioridad de labels: asigna un peso (0-100) a cada label para influir en el scoring de issues.
       </p>
-      <table class="settings-table priority-labels-table">
+      <table class="priority-labels-table">
         <thead>
           <tr>
             <th>Label</th>
@@ -413,56 +368,13 @@ async function testGithubConnection() {
           Anadir regla
         </button>
       </div>
-    </div>
+    </SettingGroup>
   </div>
 </template>
 
 <style scoped>
 .tab-content {
   margin-bottom: 20px;
-}
-
-.settings-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.settings-table td {
-  padding: 8px 10px;
-  vertical-align: middle;
-  font-size: 13px;
-}
-
-.label-cell {
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-  width: 120px;
-  text-align: right;
-  padding-right: 14px !important;
-}
-
-.settings-table input,
-.settings-table select {
-  width: 100%;
-  background: var(--bg-card);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 6px 10px;
-  font-size: 13px;
-  font-family: inherit;
-}
-
-.inline-field {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.inline-field input {
-  flex: 1;
 }
 
 .token-field {
@@ -501,20 +413,9 @@ async function testGithubConnection() {
 
 .section-hint { font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
 
-.setting-group {
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-
-.setting-group-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0 0 12px;
-}
-
 .priority-labels-table {
+  width: 100%;
+  border-collapse: collapse;
   border: 1px solid var(--border);
   border-radius: 4px;
 }
@@ -532,11 +433,25 @@ async function testGithubConnection() {
 }
 
 .priority-labels-table td {
+  padding: 8px 10px;
+  vertical-align: middle;
+  font-size: 13px;
   border-bottom: 1px solid var(--border);
 }
 
 .priority-labels-table tr:last-child td {
   border-bottom: none;
+}
+
+.priority-labels-table input {
+  width: 100%;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
 }
 
 .empty-hint {

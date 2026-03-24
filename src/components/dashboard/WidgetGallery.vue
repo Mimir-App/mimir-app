@@ -24,10 +24,18 @@ const widgetDefs = getAllWidgetDefs();
       >
         <span class="widget-icon">{{ def.icon }}</span>
         <div class="widget-info">
-          <span class="widget-name">{{ def.name }}</span>
+          <span class="widget-name">
+            {{ def.name }}
+            <span v-if="def.comingSoon" class="badge-coming-soon">Proximamente</span>
+          </span>
           <span class="widget-desc">{{ def.description }}</span>
         </div>
-        <button class="btn-add" @click="emit('add', def.type)">Anadir</button>
+        <button
+          class="btn-add"
+          :class="{ 'btn-add--disabled': def.comingSoon }"
+          :disabled="def.comingSoon"
+          @click="!def.comingSoon && emit('add', def.type)"
+        >Anadir</button>
       </div>
     </div>
   </ModalDialog>
@@ -93,7 +101,27 @@ const widgetDefs = getAllWidgetDefs();
   transition: background 0.15s;
 }
 
-.btn-add:hover {
+.btn-add:hover:not(:disabled) {
   background: var(--accent-hover);
+}
+
+.btn-add--disabled {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.badge-coming-soon {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-left: 6px;
+  vertical-align: middle;
 }
 </style>

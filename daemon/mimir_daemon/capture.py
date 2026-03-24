@@ -13,7 +13,7 @@ import sys
 import uvicorn
 from fastapi import FastAPI
 
-from .config import DaemonConfig
+from .config import DaemonConfig, setup_logging
 from .db import Database
 from .platform import get_platform_provider
 from .signal_aggregator import SignalAggregator
@@ -68,11 +68,7 @@ async def run_capture(args: argparse.Namespace) -> None:
     config = DaemonConfig.load()
     config.save()
 
-    logging.basicConfig(
-        level=getattr(logging, config.log_level),
-        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    setup_logging(config)
     logger.info("Iniciando Mimir Capture v%s", VERSION)
 
     db = Database(config.db_path)

@@ -18,7 +18,7 @@ class DaemonConfig:
     port: int = 9477
     host: str = "127.0.0.1"
     polling_interval: int = 30  # segundos
-    inherit_threshold: int = 900  # legacy, no usado en signal_aggregator
+    inherit_threshold: int = 900  # umbral de herencia (segundos), usado por BlockManager
     inactivity_threshold: int = 300  # 5 minutos en segundos
     checkpoint_interval: int = 5  # cada N polls
     db_path: str = str(DEFAULT_DB_PATH)
@@ -58,3 +58,12 @@ class DaemonConfig:
             json.dumps(asdict(self), indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+
+
+def setup_logging(config: "DaemonConfig") -> None:
+    """Configura logging compartido para capture y server."""
+    logging.basicConfig(
+        level=getattr(logging, config.log_level.upper(), logging.INFO),
+        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )

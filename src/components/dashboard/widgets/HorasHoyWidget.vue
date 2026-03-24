@@ -14,6 +14,7 @@ const daemonStore = useDaemonStore();
 const today = new Date().toISOString().slice(0, 10);
 
 const odooEntriesToday = ref<TimesheetEntry[]>([]);
+const error = ref(false);
 
 const selectedDate = computed(() => blocksStore.selectedDate);
 const selectedIsToday = computed(() => selectedDate.value === today);
@@ -36,7 +37,7 @@ async function fetchOdooData() {
   if (!daemonStore.connected) return;
   try {
     odooEntriesToday.value = await api.getTimesheetEntries(today, today) as TimesheetEntry[];
-  } catch { /* ignore */ }
+  } catch { error.value = true; }
 }
 
 onMounted(() => fetchOdooData());
@@ -45,6 +46,7 @@ onMounted(() => fetchOdooData());
 <template>
   <div class="widget-hours">
     <h3 class="widget-title">{{ selectedDateTitle }}</h3>
+    <p v-if="error" class="widget-error">Error al cargar</p>
     <div class="hours-hero">
       <span class="hours-current">{{ formatHours(selectedTotalHours) }}</span>
       <span class="hours-divider">/</span>
@@ -176,4 +178,6 @@ onMounted(() => fetchOdooData());
 .breakdown-dot.capture {
   background: var(--info);
 }
+
+.widget-error { font-size: 11px; color: var(--text-secondary); font-style: italic; text-align: center; margin: 8px 0; }
 </style>
