@@ -10,6 +10,7 @@ export interface WidgetDef {
   icon: string;
   defaultSpan: [number, number]; // [rows, cols]
   configurable: boolean;
+  comingSoon?: boolean;
 }
 
 export interface DashboardWidget {
@@ -118,4 +119,34 @@ registerWidget({
   icon: '\u{2705}',
   defaultSpan: [1, 2],
   configurable: true,
+});
+
+registerWidget({
+  type: 'calendario',
+  name: 'Calendario',
+  description: 'Eventos de Google Calendar',
+  icon: '\u{1F4C5}',
+  defaultSpan: [1, 2],
+  configurable: false,
+  comingSoon: true,
+});
+
+registerWidget({
+  type: 'horas_semana',
+  name: 'Horas Semana',
+  description: 'Resumen de horas de la semana',
+  icon: '\u{1F4C8}',
+  defaultSpan: [1, 2],
+  configurable: false,
+  comingSoon: true,
+});
+
+registerWidget({
+  type: 'issues_proyecto',
+  name: 'Issues por Proyecto',
+  description: 'Issues agrupadas por repositorio',
+  icon: '\u{1F4CC}',
+  defaultSpan: [1, 2],
+  configurable: true,
+  comingSoon: true,
 });

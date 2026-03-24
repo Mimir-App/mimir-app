@@ -21,11 +21,11 @@
 - TypeScript strict mode
 - Vue 3 con Composition API (`<script setup>`). No usar Options API
 - **Componentizacion agresiva**: toda UI repetida o reutilizable debe ser un componente en `components/shared/` o `components/settings/`. Nunca duplicar markup entre vistas.
-- Componentes shared: CustomSelect, CustomDatePicker, CollapsibleGroup, ViewToolbar, DashboardGrid, StatusBanner, LoadingState, EmptyState, HelpTooltip, FilterBar, ScoreBadge, IntegrationCard, ModalDialog, NotificationBell, ContextMenu, SourceIcon
+- Componentes shared: CustomSelect, CustomDatePicker, CollapsibleGroup, ViewToolbar, DashboardGrid, StatusBanner, LoadingState, EmptyState, HelpTooltip, FilterBar, ScoreBadge, IntegrationCard, ModalDialog, NotificationBell, ContextMenu, SourceIcon, ConfidenceBadge, SyncStatusBadge
 - Componentes settings: SettingGroup, SettingRow, CredentialField + tabs individuales (GeneralTab, CaptureTab, OdooTab, GitLabTab, AITab, GoogleTab, ServicesTab, NotificationsTab)
-- Componentes dashboard/widgets: JornadaWidget, ServiciosWidget, HorasHoyWidget, ProgresoWidget, TopIssuesWidget, MRsPendientesWidget, TodosWidget + WidgetGallery, WidgetConfigModal
-- Componentes issues: IssueTable, IssueDetailModal
-- Componentes merge_requests: MRTable, MRDetailModal
+- Componentes dashboard/widgets: JornadaWidget, ServiciosWidget, HorasHoyWidget, ProgresoWidget, TopIssuesWidget, MRsPendientesWidget, TodosWidget, CalendarioWidget, HorasSemanaWidget, IssuesProyectoWidget + WidgetGallery, WidgetConfigModal
+- Componentes issues: IssueTable, IssueDetail, IssueDetailModal
+- Componentes merge_requests: MRTable, MRDetail, MRDetailModal
 - Componentes discover: DiscoverTable
 - Composables en `composables/` para logica reutilizable:
   - `useFormatting` — formatos de horas, fechas y timestamps (obligatorio, nunca `.toFixed()` o `.toLocaleDateString()` directo)
@@ -62,7 +62,7 @@
 - urlencoding crate para encode de parametros en URLs
 
 ### General
-- Tests: para cada adaptador, al menos un test con mock del servicio externo (~147 tests en daemon)
+- Tests: para cada adaptador, al menos un test con mock del servicio externo (~156 tests en daemon)
 - Distribucion: scripts/build.sh con targets individuales (capture, server, daemon, app, deb, all)
 - CI: GitHub Actions con release automatica al push de tag v*. Version bump bot obligatorio.
 - Textos de la interfaz en espanol (con tildes: "señales", no "senales")

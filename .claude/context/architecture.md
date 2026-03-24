@@ -1,6 +1,6 @@
 ## Arquitectura
 
-Version actual: v0.3.1. Multi-source (GitHub + GitLab) + Descubrir + auto-asignacion.
+Version actual: v0.5.1. Multi-source (GitHub + GitLab) + Descubrir + auto-asignacion + context affinity.
 
 ### Procesos
 
@@ -25,8 +25,8 @@ Version actual: v0.3.1. Multi-source (GitHub + GitLab) + Descubrir + auto-asigna
 **SQLite compartida**
 - Ambos procesos acceden a la misma base de datos
 - WAL mode para concurrencia segura entre capture y server
-- Migration registry versionado (schema_version table, 3 migraciones)
-- Tablas: blocks, signals, block_signals, ai_cache, source_tokens, preferences_cache, item_preferences, notifications, context_mappings
+- Migration registry versionado (schema_version table, 4 migraciones)
+- Tablas: blocks, signals, block_signals, ai_cache, source_tokens, preferences_cache, item_preferences, notifications, context_mappings, context_affinity
 
 ### Integraciones
 
@@ -51,7 +51,7 @@ Version actual: v0.3.1. Multi-source (GitHub + GitLab) + Descubrir + auto-asigna
 ### Dashboard
 
 Sistema de widgets configurable:
-- Widget registry (`src/lib/widget-registry.ts`) con 10 tipos
+- Widget registry (`src/lib/widget-registry.ts`) con 7 tipos registrados
 - Cada widget es un componente independiente en `src/components/dashboard/widgets/`
 - DashboardGrid soporta drag & drop, resize, add/remove
 - Config persistente por widget en `dashboard_widgets` de AppConfig
@@ -59,11 +59,11 @@ Sistema de widgets configurable:
 
 ### Notificaciones
 
-- NotificationService: background task async en el server (FastAPI lifespan)
+- NotificationService: definido como background task async (FastAPI lifespan), actualmente stub sin instanciar en produccion
 - Tabla `notifications` en SQLite con TTL configurable
 - NotificationBell en header con polling 30s + dropdown
 - Configurable por tipo de evento en Settings > Notificaciones
-- Pendiente: desktop notifications (tauri-plugin-notification), deteccion real de cambios
+- Pendiente: instanciar NotificationService, desktop notifications (tauri-plugin-notification), deteccion real de cambios
 
 ### Empaquetado
 

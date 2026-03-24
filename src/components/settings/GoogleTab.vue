@@ -5,6 +5,11 @@ import { useDaemonStore } from '../../stores/daemon';
 import { api } from '../../lib/api';
 import IntegrationCard from '../shared/IntegrationCard.vue';
 import ModalDialog from '../shared/ModalDialog.vue';
+import SettingRow from './SettingRow.vue';
+
+const emit = defineEmits<{
+  'message': [text: string, type: 'success' | 'error'];
+}>();
 
 const configStore = useConfigStore();
 const daemonStore = useDaemonStore();
@@ -16,7 +21,10 @@ async function checkGoogleCalendarStatus() {
   try {
     const result = await api.getGoogleCalendarStatus() as { configured: boolean; connected: boolean };
     googleCalendarConnected.value = result.connected;
-  } catch { googleCalendarConnected.value = false; }
+  } catch {
+    googleCalendarConnected.value = false;
+    emit('message', 'Error comprobando estado de Google Calendar', 'error');
+  }
 }
 
 async function authorizeGoogle() {
@@ -32,10 +40,14 @@ async function authorizeGoogle() {
       if (googleCalendarConnected.value || attempts > 40) {
         clearInterval(interval);
         authorizingGoogle.value = false;
+        if (googleCalendarConnected.value) {
+          emit('message', 'Google Calendar conectado', 'success');
+        }
       }
     }, 3000);
-  } catch {
+  } catch (e) {
     authorizingGoogle.value = false;
+    emit('message', `Error autorizando Google: ${e}`, 'error');
   }
 }
 
@@ -43,7 +55,10 @@ async function disconnectGoogle() {
   try {
     await api.disconnectGoogleCalendar();
     googleCalendarConnected.value = false;
-  } catch { /* ignore */ }
+    emit('message', 'Google Calendar desconectado', 'success');
+  } catch (e) {
+    emit('message', `Error desconectando Google: ${e}`, 'error');
+  }
 }
 
 onMounted(async () => {
@@ -76,16 +91,8 @@ defineExpose({ googleCalendarConnected, authorizingGoogle, authorizeGoogle, disc
         <p class="session-detail">Cuenta autorizada con acceso a los servicios configurados</p>
       </template>
       <template #details>
-        <table class="settings-table">
-          <tbody>
-            <tr>
-              <td class="label-cell">Autorizaciones</td>
-              <td>Google Calendar (lectura)</td>
-              <td class="label-cell">Servicios</td>
-              <td><span class="service-chip active">Calendar — Deteccion de reuniones</span></td>
-            </tr>
-          </tbody>
-        </table>
+        <SettingRow label="Autorizaciones"><span>Google Calendar (lectura)</span></SettingRow>
+        <SettingRow label="Servicios"><span class="service-chip active">Calendar — Deteccion de reuniones</span></SettingRow>
         <div style="margin-top: 12px;">
           <button type="button" class="btn btn-secondary btn-sm" @click="showGoogleSetupModal = true">Editar credenciales</button>
         </div>
@@ -93,18 +100,12 @@ defineExpose({ googleCalendarConnected, authorizingGoogle, authorizeGoogle, disc
     </IntegrationCard>
 
     <ModalDialog title="Credenciales Google OAuth2" :open="showGoogleSetupModal" @close="showGoogleSetupModal = false">
-      <table class="settings-table">
-        <tbody>
-          <tr>
-            <td class="label-cell">Client ID</td>
-            <td><input type="text" v-model="configStore.config.google_client_id" placeholder="123456789.apps.googleusercontent.com" /></td>
-          </tr>
-          <tr>
-            <td class="label-cell">Client Secret</td>
-            <td><input type="password" v-model="configStore.config.google_client_secret" placeholder="GOCSPX-..." /></td>
-          </tr>
-        </tbody>
-      </table>
+      <SettingRow label="Client ID">
+        <input type="text" v-model="configStore.config.google_client_id" placeholder="123456789.apps.googleusercontent.com" />
+      </SettingRow>
+      <SettingRow label="Client Secret">
+        <input type="password" v-model="configStore.config.google_client_secret" placeholder="GOCSPX-..." />
+      </SettingRow>
       <div class="google-help">
         <p>Como obtener las credenciales:</p>
         <ol>
@@ -124,38 +125,6 @@ defineExpose({ googleCalendarConnected, authorizingGoogle, authorizeGoogle, disc
   margin-bottom: 20px;
 }
 
-.settings-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.settings-table td {
-  padding: 8px 10px;
-  vertical-align: middle;
-  font-size: 13px;
-}
-
-.label-cell {
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-  white-space: nowrap;
-  width: 120px;
-  text-align: right;
-  padding-right: 14px !important;
-}
-
-.settings-table input {
-  width: 100%;
-  background: var(--bg-card);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 6px 10px;
-  font-size: 13px;
-  font-family: inherit;
-}
-
 .session-detail { color: var(--text-secondary); font-size: 13px; margin: 4px 0 0; }
 
 .service-chip { font-size: 12px; padding: 4px 10px; border-radius: 4px; background: var(--bg-card); border: 1px solid var(--border); }
@@ -165,21 +134,4 @@ defineExpose({ googleCalendarConnected, authorizingGoogle, authorizeGoogle, disc
 .google-help ol { margin: 8px 0 0 20px; }
 .google-help li { margin-bottom: 4px; }
 .google-help code { background: var(--bg-card); padding: 2px 4px; border-radius: 3px; font-size: 12px; }
-
-.btn {
-  padding: 8px 20px;
-  border-radius: 4px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  border: none;
-  transition: all 0.15s;
-}
-
-.btn-sm { padding: 4px 10px; font-size: 11px; }
-.btn-secondary { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); }
-.btn-secondary:hover:not(:disabled) { background: var(--bg-hover); }
-.btn-danger { background: transparent; color: var(--error); border: 1px solid var(--error); }
-.btn-danger:hover:not(:disabled) { background: rgba(241, 76, 76, 0.1); }
-.btn:disabled { opacity: 0.5; }
 </style>

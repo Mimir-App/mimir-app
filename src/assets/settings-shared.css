@@ -1,0 +1,106 @@
+/* CSS compartido para tabs de Settings */
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.toggle-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.inline-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inline-field input {
+  width: 80px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.suffix {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.token-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.token-field input {
+  flex: 1;
+}
+
+.session-detail {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin: 4px 0 0;
+}
+
+.section-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+/* Inputs genericos dentro de settings */
+.settings-input,
+.setting-row-control input[type="text"],
+.setting-row-control input[type="url"],
+.setting-row-control input[type="password"],
+.setting-row-control input[type="number"],
+.setting-row-control select,
+.setting-row-control textarea {
+  width: 100%;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.setting-row-control textarea {
+  resize: vertical;
+}
+
+/* Botones compartidos */
+.btn {
+  padding: 8px 20px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s;
+}
+
+.btn-sm { padding: 4px 10px; font-size: 11px; }
+.btn-secondary { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); }
+.btn-secondary:hover:not(:disabled) { background: var(--bg-hover); }
+.btn-danger { background: transparent; color: var(--error); border: 1px solid var(--error); }
+.btn-danger:hover:not(:disabled) { background: rgba(241, 76, 76, 0.1); }
+.btn-success { background: var(--success); color: white; }
+.btn-success:hover:not(:disabled) { opacity: 0.85; }
+.btn:disabled { opacity: 0.5; }

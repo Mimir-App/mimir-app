@@ -28,7 +28,8 @@ class NotificationService:
             await asyncio.sleep(self._interval)
 
     async def _check_for_changes(self) -> None:
-        """Compara estado actual con snapshot anterior."""
+        """Comprueba cambios en fuentes externas. TODO: implementar detección real."""
+        logger.debug("NotificationService._check_for_changes: stub, pendiente de implementar")
         if not self._gitlab:
             return
         # Check issues comments

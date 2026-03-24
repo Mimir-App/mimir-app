@@ -1,13 +1,16 @@
 <script setup lang="ts">
+import { toRef } from 'vue';
 import type { GitLabIssue, GitLabMergeRequest } from '../../lib/types';
 import { formatDate } from '../../composables/useFormatting';
+import { useSortable } from '../../composables/useSortable';
+import { useColumnWidths } from '../../composables/useColumnWidths';
 import SourceIcon from '../shared/SourceIcon.vue';
 
 type DiscoverItem = (GitLabIssue | GitLabMergeRequest) & { _type?: string; _source?: string };
 
-defineProps<{
+const props = defineProps<{
   items: DiscoverItem[];
-  followedKeys: Set<string>;
+  followedKeys?: Set<string>;
 }>();
 
 const emit = defineEmits<{
@@ -16,6 +19,9 @@ const emit = defineEmits<{
   unfollow: [itemId: number];
   contextmenu: [item: DiscoverItem, event: MouseEvent];
 }>();
+
+const { toggleSort, sortIcon, sorted } = useSortable(toRef(props, 'items'), 'updated_at', 'desc');
+const { colStyle, startResize } = useColumnWidths();
 
 function typeLabel(item: DiscoverItem): string {
   return item._type === 'merge_request' ? 'PR' : 'Issue';
@@ -43,18 +49,30 @@ function labelStyle(label: { name: string; color: string }) {
       <tr>
         <th class="col-icon"></th>
         <th class="col-type">Tipo</th>
-        <th class="col-iid">#</th>
-        <th class="col-title">Titulo</th>
-        <th class="col-repo">Repositorio</th>
-        <th class="col-labels">Labels</th>
-        <th class="col-author">Autor</th>
-        <th class="col-date">Fecha</th>
+        <th :style="colStyle('iid')" class="sortable" @click="toggleSort('iid')">#{{ sortIcon('iid') }}</th>
+        <th class="sortable col-title" @click="toggleSort('title')">Titulo{{ sortIcon('title') }}</th>
+        <th :style="colStyle('discover-repo')" class="resizable">
+          Repositorio
+          <span class="resize-handle" @mousedown.stop="startResize('discover-repo', $event)"></span>
+        </th>
+        <th :style="colStyle('labels')" class="resizable">
+          Labels
+          <span class="resize-handle" @mousedown.stop="startResize('labels', $event)"></span>
+        </th>
+        <th :style="colStyle('assignee')" class="resizable">
+          Autor
+          <span class="resize-handle" @mousedown.stop="startResize('assignee', $event)"></span>
+        </th>
+        <th :style="colStyle('date')" class="sortable resizable" @click="toggleSort('updated_at')">
+          Fecha{{ sortIcon('updated_at') }}
+          <span class="resize-handle" @mousedown.stop="startResize('date', $event)"></span>
+        </th>
         <th class="col-action"></th>
       </tr>
     </thead>
     <tbody>
       <tr
-        v-for="item in items"
+        v-for="item in sorted"
         :key="item.id"
         class="data-row clickable-row"
         @click="emit('select', item)"
@@ -68,12 +86,12 @@ function labelStyle(label: { name: string; color: string }) {
             {{ typeLabel(item) }}
           </span>
         </td>
-        <td class="col-iid muted">{{ item.iid }}</td>
+        <td :style="colStyle('iid')" class="muted">{{ item.iid }}</td>
         <td class="col-title">
           <span class="title-link">{{ item.title }}</span>
         </td>
-        <td class="col-repo muted" :title="item.project_path">{{ item.project_path }}</td>
-        <td class="col-labels">
+        <td :style="colStyle('discover-repo')" class="muted" :title="item.project_path">{{ item.project_path }}</td>
+        <td :style="colStyle('labels')">
           <span
             v-for="label in getLabels(item)"
             :key="label.name"
@@ -81,11 +99,11 @@ function labelStyle(label: { name: string; color: string }) {
             :style="labelStyle(label)"
           >{{ label.name }}</span>
         </td>
-        <td class="col-author muted">{{ item.assignees?.[0]?.username ?? '' }}</td>
-        <td class="col-date muted">{{ formatDate(item.updated_at) }}</td>
+        <td :style="colStyle('assignee')" class="muted">{{ item.assignees?.[0]?.username ?? '' }}</td>
+        <td :style="colStyle('date')" class="muted">{{ formatDate(item.updated_at) }}</td>
         <td class="col-action">
           <button
-            v-if="followedKeys.has(`${item.project_path}#${item.iid}`)"
+            v-if="(followedKeys ?? new Set()).has(`${item.project_path}#${item.iid}`)"
             class="btn-following"
             @click.stop="emit('unfollow', item.id)"
           >Siguiendo</button>
@@ -105,17 +123,21 @@ function labelStyle(label: { name: string; color: string }) {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  table-layout: fixed;
 }
 
 .data-table th {
   text-align: left;
-  padding: 8px;
+  padding: 10px 8px;
   color: var(--text-secondary);
   font-weight: 600;
-  font-size: 11px;
+  font-size: var(--text-xs);
   border-bottom: 2px solid var(--border);
   text-transform: uppercase;
   letter-spacing: 0.3px;
+  position: relative;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -134,13 +156,15 @@ function labelStyle(label: { name: string; color: string }) {
 /* Column widths */
 .col-icon { width: 28px; text-align: center; }
 .col-type { width: 50px; }
-.col-iid { width: 45px; }
-.col-title { }
-.col-repo { width: 200px; font-size: 12px; }
-.col-labels { width: 200px; }
-.col-author { width: 100px; }
-.col-date { width: 90px; }
+.col-title { width: auto; }
 .col-action { width: 80px; text-align: center; }
+
+/* Resizable columns */
+.resizable { position: relative; }
+.resize-handle {
+  position: absolute; right: 0; top: 0; bottom: 0; width: 4px; cursor: col-resize; background: transparent;
+}
+.resize-handle:hover, .resize-handle:active { background: var(--accent); }
 
 /* Type badge */
 .type-badge {

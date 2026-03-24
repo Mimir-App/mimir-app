@@ -18,6 +18,7 @@ const now = new Date();
 const odooEntriesToday = ref<TimesheetEntry[]>([]);
 const odooEntriesWeek = ref<TimesheetEntry[]>([]);
 const odooEntriesMonth = ref<TimesheetEntry[]>([]);
+const error = ref(false);
 
 const weekDates = getWeekDates(today);
 const weekStart = weekDates[0];
@@ -56,7 +57,7 @@ async function fetchOdooData() {
     odooEntriesToday.value = dayEntries;
     odooEntriesWeek.value = weekEntries;
     odooEntriesMonth.value = monthEntries;
-  } catch { /* ignore */ }
+  } catch { error.value = true; }
 }
 
 onMounted(() => fetchOdooData());
@@ -64,6 +65,7 @@ onMounted(() => fetchOdooData());
 
 <template>
   <h3 class="card-title">progreso</h3>
+  <p v-if="error" class="widget-error">Error al cargar</p>
   <div v-if="showHoy" class="progress-row">
     <span class="progress-label">Hoy</span>
     <div class="progress-bar-wrap">
@@ -160,4 +162,6 @@ onMounted(() => fetchOdooData());
   margin-top: calc(-1 * var(--space-1));
   padding-left: 68px;
 }
+
+.widget-error { font-size: 11px; color: var(--text-secondary); font-style: italic; text-align: center; margin: 8px 0; }
 </style>

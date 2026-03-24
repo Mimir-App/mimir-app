@@ -12,7 +12,7 @@ import sys
 
 import uvicorn
 
-from .config import DaemonConfig
+from .config import DaemonConfig, setup_logging
 from .db import Database
 from .integrations.registry import IntegrationRegistry
 from .sources.registry import SourceRegistry
@@ -44,11 +44,7 @@ async def run_server(args: argparse.Namespace) -> None:
     """Arranca el servidor API."""
     config = DaemonConfig.load()
 
-    logging.basicConfig(
-        level=getattr(logging, config.log_level),
-        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
+    setup_logging(config)
     logger.info("Iniciando Mimir Server v%s", VERSION)
 
     db = Database(config.db_path)

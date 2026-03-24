@@ -25,7 +25,7 @@ onMounted(() => mrStore.fetchMergeRequests());
 </script>
 
 <template>
-  <h3 class="card-title">MRs Pendientes</h3>
+  <h3 class="widget-title">MRs Pendientes</h3>
   <div class="mrs-list">
     <div v-for="mr in filteredMRs" :key="mr.id" class="mr-row">
       <span class="mr-score">{{ mr.score }}</span>
@@ -39,7 +39,7 @@ onMounted(() => mrStore.fetchMergeRequests());
 </template>
 
 <style scoped>
-.card-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+.widget-title { font-size: var(--text-xs); font-weight: 600; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
 .mrs-list { display: flex; flex-direction: column; gap: 6px; }
 .mr-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; font-size: 13px; }
 .mr-row:hover { background: var(--bg-hover); }

@@ -75,7 +75,7 @@ async function toggleServer() {
 
 <template>
   <div class="tab-content">
-    <table class="status-table">
+    <table class="service-status-table">
       <thead>
         <tr>
           <th>Servicio</th>
@@ -227,13 +227,13 @@ async function toggleServer() {
 }
 
 /* Status table (services) */
-.status-table {
+.service-status-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
 }
 
-.status-table th {
+.service-status-table th {
   text-align: left;
   padding: 10px 10px;
   color: var(--text-secondary);
@@ -244,13 +244,13 @@ async function toggleServer() {
   letter-spacing: 0.3px;
 }
 
-.status-table td {
+.service-status-table td {
   padding: 10px 10px;
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
 }
 
-.status-table tr:hover td {
+.service-status-table tr:hover td {
   background: var(--bg-hover);
 }
 

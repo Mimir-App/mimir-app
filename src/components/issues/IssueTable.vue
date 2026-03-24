@@ -113,7 +113,7 @@ function getLabels(issue: GitLabIssue) {
   padding: 10px 8px;
   color: var(--text-secondary);
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--text-xs);
   border-bottom: 2px solid var(--border);
   text-transform: uppercase;
   letter-spacing: 0.3px;

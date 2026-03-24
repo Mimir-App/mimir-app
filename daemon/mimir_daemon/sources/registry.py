@@ -24,6 +24,22 @@ class SourceRegistry:
             del self._vcs_sources[name]
             logger.info("Fuente VCS desregistrada: %s", name)
 
+    def get_gitlab(self) -> "GitLabSource | None":
+        """Obtiene la fuente GitLab registrada (o None)."""
+        from .gitlab import GitLabSource
+        source = self._vcs_sources.get("gitlab")
+        return source if isinstance(source, GitLabSource) else None
+
+    def get_github(self) -> "GitHubSource | None":
+        """Obtiene la fuente GitHub registrada (o None)."""
+        from .github import GitHubSource
+        source = self._vcs_sources.get("github")
+        return source if isinstance(source, GitHubSource) else None
+
+    def has_source(self, name: str) -> bool:
+        """Comprueba si una fuente VCS está registrada."""
+        return name in self._vcs_sources
+
     async def get_all_issues(self) -> list[dict[str, Any]]:
         results = []
         for name, source in self._vcs_sources.items():

@@ -18,6 +18,20 @@ class AIService:
         self.user_role: str = "technical"
         self.user_context: str = ""
 
+    @staticmethod
+    def create_provider(provider_name: str, api_key: str) -> DescriptionProvider | None:
+        """Crea un provider de descripciones por nombre."""
+        if provider_name == "gemini":
+            from .gemini import GeminiProvider
+            return GeminiProvider(api_key=api_key)
+        elif provider_name == "claude":
+            from .claude_provider import ClaudeProvider
+            return ClaudeProvider(api_key=api_key)
+        elif provider_name == "openai":
+            from .openai_provider import OpenAIProvider
+            return OpenAIProvider(api_key=api_key)
+        return None
+
     @property
     def provider(self) -> DescriptionProvider | None:
         return self._provider
