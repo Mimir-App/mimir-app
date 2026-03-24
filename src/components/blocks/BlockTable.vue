@@ -185,7 +185,7 @@ async function mergeSelected() {
   gap: var(--space-3);
   padding: var(--space-2) var(--space-3);
   margin-bottom: var(--space-2);
-  background: rgba(203, 27, 33, 0.08);
+  background: var(--accent-soft);
   border: 1px solid var(--accent);
   border-radius: var(--radius-md);
   font-size: var(--text-sm);

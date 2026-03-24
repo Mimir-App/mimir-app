@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
-import type { ActivityBlock, OdooProject, OdooTask, ContextMapping } from '../../lib/types';
+import type { ActivityBlock, OdooTask, ContextMapping } from '../../lib/types';
 import { useBlocksStore } from '../../stores/blocks';
+import { useOdooStore } from '../../stores/odoo';
 import { api } from '../../lib/api';
 import CustomSelect from '../shared/CustomSelect.vue';
 
@@ -9,21 +10,21 @@ const props = defineProps<{ block: ActivityBlock }>();
 const emit = defineEmits<{ close: [] }>();
 
 const blocksStore = useBlocksStore();
+const odooStore = useOdooStore();
 const description = ref(props.block.user_description ?? props.block.ai_description ?? '');
 const selectedProject = ref<number | null>(props.block.odoo_project_id);
 const selectedTask = ref<number | null>(props.block.odoo_task_id);
-const projects = ref<OdooProject[]>([]);
 const tasks = ref<OdooTask[]>([]);
-const loadingProjects = ref(false);
 const loadingTasks = ref(false);
 const saving = ref(false);
 const generating = ref(false);
 const saveError = ref<string | null>(null);
 const suggestion = ref<ContextMapping | null>(null);
 
+const projects = computed(() => odooStore.projects);
 
 const projectOptions = computed(() => [
-  { value: null as number | null, label: loadingProjects.value ? 'Cargando...' : '-- Seleccionar proyecto --' },
+  { value: null as number | null, label: odooStore.loading ? 'Cargando...' : '-- Seleccionar proyecto --' },
   ...projects.value.map(p => ({ value: p.id as number | null, label: p.name })),
 ]);
 
@@ -33,19 +34,13 @@ const taskOptions = computed(() => [
 ]);
 
 onMounted(async () => {
-  loadingProjects.value = true;
-  try {
-    projects.value = await api.getOdooProjects() as OdooProject[];
-  } catch {
-    // Silently handle -- projects will be empty
-  } finally {
-    loadingProjects.value = false;
+  if (odooStore.projects.length === 0) {
+    await odooStore.fetchProjects();
   }
 
   if (selectedProject.value) {
     await loadTasks(selectedProject.value);
   } else if (props.block.context_key) {
-    // Sin proyecto asignado: buscar sugerencia
     const s = await api.suggestMapping(props.block.context_key);
     if (s?.odoo_project_id) {
       suggestion.value = s;
@@ -65,7 +60,7 @@ async function loadTasks(projectId: number) {
   loadingTasks.value = true;
   tasks.value = [];
   try {
-    tasks.value = await api.getOdooTasks(projectId) as OdooTask[];
+    tasks.value = await odooStore.fetchTasks(projectId);
   } catch {
     // Silently handle
   } finally {
@@ -169,7 +164,7 @@ async function saveAndConfirm() {
             :modelValue="selectedProject"
             @update:modelValue="onProjectChange"
             :options="projectOptions"
-            :disabled="loadingProjects"
+            :disabled="odooStore.loading"
             :searchable="projects.length > 10"
             placeholder="-- Seleccionar proyecto --"
           />
@@ -400,7 +395,7 @@ async function saveAndConfirm() {
 
 .btn-suggestion {
   align-self: flex-start;
-  background: rgba(78, 201, 176, 0.15);
+  background: var(--success-soft);
   color: var(--success);
   border: 1px solid var(--success);
   border-radius: 4px;

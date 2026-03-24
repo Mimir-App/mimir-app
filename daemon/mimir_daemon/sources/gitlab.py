@@ -143,18 +143,39 @@ class GitLabSource(VCSSource):
         """Enriquece MRs con head_pipeline, approved_by y has_conflicts."""
 
         async def _enrich_one(mr: dict) -> None:
-            gid = mr.get("id")
-            if not gid:
+            project_id = mr.get("project_id")
+            iid = mr.get("iid")
+            if not project_id or not iid:
+                _normalize_mr_pipeline(mr)
                 return
             try:
-                resp = await self._client.get(f"/merge_requests/{gid}")
+                # Endpoint de proyecto (más fiable que el global /merge_requests/:id)
+                resp = await self._client.get(
+                    f"/projects/{project_id}/merge_requests/{iid}"
+                )
                 if resp.status_code == 200:
                     full = resp.json()
                     mr["head_pipeline"] = full.get("head_pipeline")
                     mr["approved_by"] = full.get("approved_by", [])
                     mr["has_conflicts"] = full.get("has_conflicts", False)
+                else:
+                    logger.debug(
+                        "MR %s!%s: detalle devolvió %d, probando approvals",
+                        project_id, iid, resp.status_code,
+                    )
             except Exception as e:
-                logger.debug("Error enriqueciendo MR %s: %s", gid, e)
+                logger.debug("Error enriqueciendo MR %s!%s: %s", project_id, iid, e)
+            # Si approved_by sigue vacío, intentar endpoint de approvals
+            if not mr.get("approved_by"):
+                try:
+                    resp = await self._client.get(
+                        f"/projects/{project_id}/merge_requests/{iid}/approvals"
+                    )
+                    if resp.status_code == 200:
+                        approvals = resp.json()
+                        mr["approved_by"] = approvals.get("approved_by", [])
+                except Exception as e:
+                    logger.debug("Error obteniendo approvals MR %s!%s: %s", project_id, iid, e)
             _normalize_mr_pipeline(mr)
 
         semaphore = asyncio.Semaphore(10)

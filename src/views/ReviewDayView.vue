@@ -10,7 +10,7 @@ import CollapsibleGroup from '../components/shared/CollapsibleGroup.vue';
 import StatusBanner from '../components/shared/StatusBanner.vue';
 import LoadingState from '../components/shared/LoadingState.vue';
 import CustomDatePicker from '../components/shared/CustomDatePicker.vue';
-import { ChevronLeft, ChevronRight, RefreshCw, CheckCheck, Send } from 'lucide-vue-next';
+import { ChevronLeft, ChevronRight, RefreshCw, CheckCheck, Send, Clock, CheckCircle2, AlertTriangle, Upload } from 'lucide-vue-next';
 
 const blocksStore = useBlocksStore();
 const daemonStore = useDaemonStore();
@@ -150,28 +150,28 @@ const isToday = computed(() =>
         </button>
       </div>
       <div class="toolbar-stats">
-        <span>{{ blocksStore.blocks.length }} bloques</span>
+        <span class="stat-item">{{ blocksStore.blocks.length }} bloques</span>
         <span class="separator">|</span>
-        <span>{{ formatHours(blocksStore.totalHoursToday) }} total</span>
+        <span class="stat-item">{{ formatHours(blocksStore.totalHoursToday) }} total</span>
         <template v-if="autoBlocksCount > 0">
           <span class="separator">|</span>
-          <span class="pending-count">{{ autoBlocksCount }} pendientes</span>
+          <span class="stat-item pending-count"><Clock :size="12" :stroke-width="2" /> {{ autoBlocksCount }} pendientes</span>
         </template>
         <template v-if="confirmedCount > 0">
           <span class="separator">|</span>
-          <span class="confirmed-count">{{ confirmedCount }} confirmados</span>
+          <span class="stat-item confirmed-count"><CheckCircle2 :size="12" :stroke-width="2" /> {{ confirmedCount }} confirmados</span>
         </template>
         <template v-if="errorCount > 0">
           <span class="separator">|</span>
-          <span class="error-count">{{ errorCount }} con error</span>
+          <span class="stat-item error-count"><AlertTriangle :size="12" :stroke-width="2" /> {{ errorCount }} con error</span>
         </template>
         <template v-if="syncedCount > 0">
           <span class="separator">|</span>
-          <span class="synced-count">{{ syncedCount }} enviados</span>
+          <span class="stat-item synced-count"><Upload :size="12" :stroke-width="2" /> {{ syncedCount }} enviados</span>
         </template>
         <template v-if="odooEntries.length > 0">
           <span class="separator">|</span>
-          <span class="odoo-count">Odoo: {{ formatHours(odooTotalHours) }}</span>
+          <span class="stat-item odoo-count">Odoo: {{ formatHours(odooTotalHours) }}</span>
         </template>
       </div>
       <div class="toolbar-actions">
@@ -308,6 +308,12 @@ const isToday = computed(() =>
 .separator {
   margin: 0 6px;
   color: var(--border);
+}
+
+.stat-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .pending-count { color: var(--warning); }

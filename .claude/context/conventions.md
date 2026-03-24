@@ -51,6 +51,27 @@
 - Deduplicacion de items por `project_path#iid` (no por id)
 - Reactividad de Map: siempre crear `new Map()` al actualizar (Vue no detecta `Map.set()`)
 
+### Accesibilidad y UX (frontend)
+- **Iconos SVG solamente**: usar Lucide (`lucide-vue-next`) para todos los iconos. Nunca emojis, nunca HTML entities (`&times;`, `&#10003;`), nunca caracteres Unicode como iconos
+- **ARIA obligatorio** en todos los elementos interactivos:
+  - Botones de icono: `aria-label` descriptivo
+  - Modales: `role="dialog"` + `aria-modal="true"` + `aria-label`
+  - Alertas/errores: `role="alert"` o `aria-live="polite"`
+  - Navegacion: `role="navigation"` + `aria-label`, items activos con `aria-current="page"`
+  - Dropdowns: `aria-expanded` + `aria-haspopup`, listboxes con `role="listbox"` / `role="option"`
+  - Formularios: inputs con `aria-label` cuando no tienen label visible
+- **Focus management**: ModalDialog incluye focus trap + cierre con Escape + restauracion de foco. CustomSelect responde a Arrow Up/Down, Enter, Escape, Home, End
+- **`prefers-reduced-motion`**: media query global en App.vue desactiva todas las animaciones. No anadir animaciones que no respeten esto
+- **Focus visible**: token `--focus-ring` global, `:focus-visible` en todos los botones via regla global en App.vue
+- **Z-index scale**: usar tokens `--z-base(0)`, `--z-header(10)`, `--z-sidebar(20)`, `--z-dropdown(100)`, `--z-sticky(200)`, `--z-overlay(900)`, `--z-modal(1000)`, `--z-toast(1100)`. Nunca z-index hardcoded
+- **Colores semanticos**: usar tokens (`--error-soft`, `--success-soft`, etc.) nunca rgba raw fuera de las definiciones en App.vue. Los colores nunca deben ser el unico indicador — siempre acompanar con icono o texto
+- **Acciones destructivas**: patron 2-step (click muestra "Confirmar" con timeout 3s, segundo click ejecuta). Nunca borrar sin confirmacion
+- **LoadingState**: spinner animado (Lucide Loader2), nunca solo texto
+- **EmptyState**: icono contextual + texto + subtitulo + slot de accion
+- **StatusBanner**: incluye icono SVG por tipo (CheckCircle2, XCircle, AlertTriangle, Info)
+- **Transiciones de modal**: fade+scale en entrada (spring easing), fade rapido en salida. Backdrop con blur(4px)
+- **Active/pressed state**: `scale(0.97)` global en botones via regla en App.vue
+
 ### Rust (Tauri backend)
 - Tauri 2 commands para proxy HTTP al daemon
 - Keyring para almacenamiento seguro de tokens (backend sync-secret-service en Linux)

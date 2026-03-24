@@ -281,9 +281,9 @@ async function toggleServer() {
   text-transform: uppercase;
 }
 
-.badge.ok { background: rgba(78, 201, 176, 0.15); color: var(--success); }
+.badge.ok { background: var(--success-soft); color: var(--success); }
 .badge.off { background: rgba(162, 176, 180, 0.15); color: var(--text-secondary); }
-.badge.warn { background: rgba(220, 220, 170, 0.15); color: var(--warning); }
+.badge.warn { background: var(--warning-soft); color: var(--warning); }
 
 .mode-badge {
   display: inline-block;
@@ -295,9 +295,9 @@ async function toggleServer() {
   margin-right: 4px;
 }
 
-.mode-badge.active { background: rgba(78, 201, 176, 0.15); color: var(--success); }
-.mode-badge.silent { background: rgba(220, 220, 170, 0.15); color: var(--warning); }
-.mode-badge.paused { background: rgba(241, 76, 76, 0.15); color: var(--error); }
+.mode-badge.active { background: var(--success-soft); color: var(--success); }
+.mode-badge.silent { background: var(--warning-soft); color: var(--warning); }
+.mode-badge.paused { background: var(--error-soft); color: var(--error); }
 
 .btn {
   padding: 8px 20px;
@@ -313,6 +313,6 @@ async function toggleServer() {
 .btn-success { background: var(--success); color: white; }
 .btn-success:hover:not(:disabled) { opacity: 0.85; }
 .btn-danger { background: transparent; color: var(--error); border: 1px solid var(--error); }
-.btn-danger:hover:not(:disabled) { background: rgba(241, 76, 76, 0.1); }
+.btn-danger:hover:not(:disabled) { background: var(--error-soft); }
 .btn:disabled { opacity: 0.5; }
 </style>

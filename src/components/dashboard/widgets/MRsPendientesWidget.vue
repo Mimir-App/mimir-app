@@ -47,6 +47,6 @@ onMounted(() => mrStore.fetchMergeRequests());
 .mr-project { color: var(--text-secondary); font-size: 12px; min-width: 150px; }
 .mr-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mr-badge { font-size: 10px; padding: 2px 6px; border-radius: 3px; font-weight: 600; }
-.mr-badge.conflict { background: rgba(241, 76, 76, 0.15); color: var(--error); }
-.mr-badge.failed { background: rgba(220, 220, 170, 0.15); color: var(--warning); }
+.mr-badge.conflict { background: var(--error-soft); color: var(--error); }
+.mr-badge.failed { background: var(--warning-soft); color: var(--warning); }
 </style>

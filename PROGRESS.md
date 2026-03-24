@@ -1,8 +1,8 @@
 # Mimir - Progreso del Proyecto
 
 Asistente inteligente de imputacion de horas.
-Ultima actualizacion: 2026-03-22
-Version actual: v0.5.1
+Ultima actualizacion: 2026-03-24
+Version actual: v0.6.0
 
 ---
 
@@ -10,12 +10,74 @@ Version actual: v0.5.1
 
 | Componente | Tecnologia | Estado |
 |---|---|---|
-| Frontend desktop | Tauri 2 + Vue 3 + TypeScript + Vite | v0.5.1 |
-| Backend desktop | Rust (Tauri commands) | v0.5.1 |
-| Capture daemon | Python 3.10+ (asyncio + poller + signals) | v0.5.1 |
-| Server daemon | Python 3.10+ (FastAPI + uvicorn) | v0.5.1 |
+| Frontend desktop | Tauri 2 + Vue 3 + TypeScript + Vite | v0.6.0 |
+| Backend desktop | Rust (Tauri commands) | v0.6.0 |
+| Capture daemon | Python 3.10+ (asyncio + poller + signals) | v0.6.0 |
+| Server daemon | Python 3.10+ (FastAPI + uvicorn) | v0.6.0 |
 | Base de datos local | SQLite (aiosqlite), compartida capture/server | Operativa |
 | CI/CD | GitHub Actions (release en tag) | Operativo |
+
+---
+
+## v0.6.0 — Auditoria UX profesional + Accesibilidad
+
+**Fecha:** 2026-03-24
+**Tests: ~156 pasando, 0 errores TS, 0 errores Rust**
+**34 archivos modificados, +911/-302 lineas**
+
+### Accesibilidad (ARIA)
+
+| Tarea | Estado |
+|---|---|
+| ARIA labels en todos los botones de icono, modales, alertas, navegacion | Completado |
+| role="dialog" + aria-modal en ModalDialog | Completado |
+| role="alert" + aria-live en StatusBanner, LoadingState, version-mismatch-banner | Completado |
+| role="navigation" + aria-current="page" en sidebar | Completado |
+| role="combobox" + role="listbox" + role="option" en CustomSelect | Completado |
+| role="menu" + role="menuitem" en NotificationBell | Completado |
+| aria-expanded + aria-haspopup en dropdowns | Completado |
+| Focus trap + Escape en ModalDialog | Completado |
+| Keyboard navigation (Arrow/Enter/Escape/Home/End) en CustomSelect | Completado |
+| prefers-reduced-motion media query global | Completado |
+| Focus-visible global con --focus-ring token | Completado |
+
+### Iconos (emojis → SVG)
+
+| Tarea | Estado |
+|---|---|
+| NotificationBell: emojis → Lucide (Bell, MessageCircle, XCircle, etc.) | Completado |
+| CollapsibleGroup: Unicode triangles → ChevronRight Lucide | Completado |
+| ModalDialog: &times; → X Lucide | Completado |
+| FilterBar: icono Search anadido | Completado |
+| CustomSelect: Unicode arrows → ChevronDown Lucide | Completado |
+| MRDetailModal: &#10003; y &#9888; → CheckCircle2 y AlertTriangle | Completado |
+| IssuesView/GitLabTab: &times; en chips → X Lucide | Completado |
+| BlockRow: X → Trash2 para delete (semantica) | Completado |
+
+### Design system y tokens
+
+| Tarea | Estado |
+|---|---|
+| Z-index scale tokenizada (--z-base a --z-toast) en 8 componentes | Completado |
+| Raw rgba → tokens semanticos en 15+ componentes (~37 reemplazos) | Completado |
+| Contraste --text-muted mejorado (#5c6170 → #7a7f8e) | Completado |
+| settings-shared.css migrado a design tokens | Completado |
+| Active/pressed state global (scale 0.97) | Completado |
+
+### Interacciones y feedback visual
+
+| Tarea | Estado |
+|---|---|
+| LoadingState con spinner animado (Loader2) | Completado |
+| EmptyState con icono + subtitulo + slot accion | Completado |
+| Confirmacion 2-step para eliminar bloques | Completado |
+| Feedback visual al confirmar (pulse animation) | Completado |
+| Spinning icon durante retry sync | Completado |
+| Modal con transicion fade+scale+backdrop-blur | Completado |
+| Dropdown notificaciones con transicion | Completado |
+| Iconos en estados de la toolbar (Clock, CheckCircle2, AlertTriangle, Upload) | Completado |
+| StatusBanner con iconos por tipo | Completado |
+| Iconos coloreados por tipo en notificaciones | Completado |
 
 ---
 

@@ -39,8 +39,8 @@ function toggleCollapse() {
 </script>
 
 <template>
-  <aside class="sidebar" :class="{ collapsed }">
-    <div class="sidebar-header" @click="toggleCollapse" title="Colapsar/expandir sidebar">
+  <aside class="sidebar" :class="{ collapsed }" role="navigation" aria-label="Navegacion principal">
+    <div class="sidebar-header" @click="toggleCollapse" role="button" tabindex="0" :aria-label="collapsed ? 'Expandir sidebar' : 'Colapsar sidebar'" @keydown.enter="toggleCollapse" @keydown.space.prevent="toggleCollapse">
       <div class="logo-mark">
         <img src="../../assets/mimir-silhouette.svg" alt="Mimir" class="logo-icon" />
       </div>
@@ -49,17 +49,19 @@ function toggleCollapse() {
       </transition>
     </div>
 
-    <nav class="sidebar-nav">
+    <nav class="sidebar-nav" aria-label="Menu principal">
       <button
         v-for="item in navItems"
         :key="item.path"
         class="nav-item"
         :class="{ active: currentPath === item.path }"
         :title="collapsed ? item.label : undefined"
+        :aria-label="item.label"
+        :aria-current="currentPath === item.path ? 'page' : undefined"
         @click="navigate(item.path)"
       >
-        <span class="nav-indicator"></span>
-        <component :is="item.icon" class="nav-icon" :size="18" :stroke-width="1.75" />
+        <span class="nav-indicator" aria-hidden="true"></span>
+        <component :is="item.icon" class="nav-icon" :size="18" :stroke-width="1.75" aria-hidden="true" />
         <transition name="fade">
           <span v-if="!collapsed" class="nav-label">{{ item.label }}</span>
         </transition>
@@ -67,8 +69,8 @@ function toggleCollapse() {
     </nav>
 
     <div class="sidebar-footer">
-      <div class="daemon-status" :class="daemonStore.statusClass" :title="daemonStore.statusText">
-        <span class="status-dot"></span>
+      <div class="daemon-status" :class="daemonStore.statusClass" :title="daemonStore.statusText" role="status" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
         <transition name="fade">
           <span v-if="!collapsed" class="status-text">{{ daemonStore.statusText }}</span>
         </transition>
@@ -89,7 +91,7 @@ function toggleCollapse() {
   flex-shrink: 0;
   transition: width var(--duration-slow) var(--ease-out);
   position: relative;
-  z-index: 10;
+  z-index: var(--z-sidebar);
 }
 
 .sidebar.collapsed {

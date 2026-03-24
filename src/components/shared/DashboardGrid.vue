@@ -243,7 +243,7 @@ function onDragEnd() { dragId.value = null; dragOverId.value = null; }
   border-radius: var(--radius-md);
   padding: var(--space-3);
   box-shadow: var(--shadow-lg);
-  z-index: 50;
+  z-index: var(--z-dropdown);
 }
 
 .menu-title {
@@ -266,7 +266,7 @@ function onDragEnd() { dragId.value = null; dragOverId.value = null; }
   padding: 4px; cursor: pointer; transition: all 0.1s; width: 42px;
 }
 .size-cell:hover { border-color: var(--accent); background: var(--bg-hover); }
-.size-cell.active { border-color: var(--accent); background: rgba(203, 27, 33, 0.15); }
+.size-cell.active { border-color: var(--accent); background: var(--accent-glow); }
 
 .cell-preview { display: flex; gap: 1px; }
 .preview-col { display: flex; flex-direction: column; gap: 1px; }

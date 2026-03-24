@@ -65,7 +65,7 @@ const visible = ref(false);
   width: max-content;
   max-width: 280px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  z-index: 200;
+  z-index: var(--z-sticky);
   pointer-events: none;
 }
 

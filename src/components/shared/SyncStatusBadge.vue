@@ -46,17 +46,17 @@ const tooltip = computed(() => {
 }
 
 .sync-badge.confirmed {
-  background: rgba(86, 156, 214, 0.15);
+  background: var(--info-soft);
   color: #569cd6;
 }
 
 .sync-badge.synced {
-  background: rgba(78, 201, 176, 0.15);
+  background: var(--success-soft);
   color: var(--success);
 }
 
 .sync-badge.error {
-  background: rgba(241, 76, 76, 0.15);
+  background: var(--error-soft);
   color: var(--error);
   cursor: help;
 }

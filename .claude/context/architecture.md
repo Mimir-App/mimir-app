@@ -1,6 +1,6 @@
 ## Arquitectura
 
-Version actual: v0.5.1. Multi-source (GitHub + GitLab) + Descubrir + auto-asignacion + context affinity.
+Version actual: v0.6.0. Multi-source (GitHub + GitLab) + Descubrir + auto-asignacion + context affinity.
 
 ### Procesos
 
@@ -51,7 +51,7 @@ Version actual: v0.5.1. Multi-source (GitHub + GitLab) + Descubrir + auto-asigna
 ### Dashboard
 
 Sistema de widgets configurable:
-- Widget registry (`src/lib/widget-registry.ts`) con 7 tipos registrados
+- Widget registry (`src/lib/widget-registry.ts`) con 10 tipos registrados
 - Cada widget es un componente independiente en `src/components/dashboard/widgets/`
 - DashboardGrid soporta drag & drop, resize, add/remove
 - Config persistente por widget en `dashboard_widgets` de AppConfig

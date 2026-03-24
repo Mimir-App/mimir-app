@@ -268,4 +268,5 @@ export interface AppConfig {
   notification_changes_requested: boolean;
   notification_conflicts: boolean;
   notification_todos: boolean;
+  odoo_refresh_interval_minutes: number;
 }

@@ -41,6 +41,7 @@ const emit = defineEmits<{ refresh: []; toggleCollapse: [] }>();
       v-if="showCollapse"
       class="btn btn-ghost btn-collapse"
       @click="emit('toggleCollapse')"
+      :aria-label="allExpanded ? 'Colapsar todos los grupos' : 'Expandir todos los grupos'"
     >
       <ChevronsUpDown :size="14" :stroke-width="2" />
       {{ allExpanded ? 'Colapsar' : 'Expandir' }}
@@ -52,6 +53,7 @@ const emit = defineEmits<{ refresh: []; toggleCollapse: [] }>();
       @click="emit('refresh')"
       :disabled="refreshing || loading"
       title="Refrescar"
+      aria-label="Refrescar datos"
     >
       <RefreshCw :size="15" :stroke-width="2" :class="{ spinning: refreshing }" />
     </button>

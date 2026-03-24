@@ -50,6 +50,7 @@ const DEFAULT_CONFIG: AppConfig = {
   notification_changes_requested: true,
   notification_conflicts: true,
   notification_todos: true,
+  odoo_refresh_interval_minutes: 60,
 };
 
 export const useConfigStore = defineStore('config', () => {

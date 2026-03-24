@@ -87,17 +87,17 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 .score-badge.critical {
-  background: rgba(241, 76, 76, 0.2);
+  background: var(--error-soft);
   color: var(--error);
 }
 
 .score-badge.high {
-  background: rgba(220, 220, 170, 0.2);
+  background: var(--warning-soft);
   color: var(--warning);
 }
 
 .score-badge.medium {
-  background: rgba(86, 156, 214, 0.2);
+  background: var(--info-soft);
   color: var(--accent);
 }
 

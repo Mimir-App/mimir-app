@@ -176,12 +176,12 @@ function labelStyle(label: { name: string; color: string }) {
 }
 
 .type-issue {
-  background: rgba(78, 201, 176, 0.15);
+  background: var(--success-soft);
   color: var(--success);
 }
 
 .type-pr {
-  background: rgba(86, 156, 214, 0.15);
+  background: var(--info-soft);
   color: #569cd6;
 }
 

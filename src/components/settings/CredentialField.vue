@@ -93,6 +93,6 @@ function handleSave() {
 .btn-secondary { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); }
 .btn-secondary:hover:not(:disabled) { background: var(--bg-hover); }
 .btn-danger { background: transparent; color: var(--error); border: 1px solid var(--error); }
-.btn-danger:hover:not(:disabled) { background: rgba(241, 76, 76, 0.1); }
+.btn-danger:hover:not(:disabled) { background: var(--error-soft); }
 .btn:disabled { opacity: 0.5; }
 </style>

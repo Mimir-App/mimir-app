@@ -43,7 +43,7 @@ const pageTitle = computed(() => titles[route.path] ?? 'Mimir');
   flex-shrink: 0;
   box-shadow: var(--shadow-sm);
   position: relative;
-  z-index: 5;
+  z-index: var(--z-header);
 }
 
 .header-left {
