@@ -11,10 +11,12 @@ const props = withDefaults(defineProps<{
   testing?: boolean;
   testResult?: 'ok' | 'fail' | null;
   testMessage?: string;
+  hideEdit?: boolean;
 }>(), {
   testing: false,
   testResult: null,
   testMessage: '',
+  hideEdit: false,
 });
 
 const emit = defineEmits<{
@@ -56,7 +58,7 @@ const dcLabel = computed(() => props.disconnectLabel || 'Desconectar');
     <!-- Footer con acciones -->
     <div class="card-footer">
       <template v-if="connected">
-        <button type="button" class="btn btn-sm btn-secondary" @click="emit('edit')">
+        <button v-if="!hideEdit" type="button" class="btn btn-sm btn-secondary" @click="emit('edit')">
           Editar
         </button>
         <button type="button" class="btn btn-sm btn-secondary" @click="emit('test')" :disabled="testing">

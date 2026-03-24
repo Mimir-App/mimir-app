@@ -10,7 +10,7 @@
 - `logging` module a nivel INFO; loggear cada refresh, error y cambio de config
 - Patron adaptador en todo: IA, integracion, notificaciones, fuentes externas
 - VCS sources: GitLabSource y GitHubSource normalizan datos al mismo formato
-- GitLab list endpoints (`/merge_requests`, `/issues`) devuelven datos incompletos (sin `head_pipeline`, `approved_by`). Siempre enriquecer con llamadas individuales post-fetch (`_enrich_mrs`/`_enrich_prs`) usando `asyncio.Semaphore(10)` + `gather`
+- GitLab list endpoints (`/merge_requests`, `/issues`) devuelven datos incompletos (sin `head_pipeline`, `approved_by`). Siempre enriquecer con llamadas individuales post-fetch (`_enrich_mrs`/`_enrich_prs`) usando `asyncio.Semaphore(10)` + `gather`. MR enrichment intenta primero el detalle individual y si `approved_by` sigue vacio, usa el endpoint `/approvals` como fallback
 - Tokens OAuth NUNCA salen del ordenador local
 - SQLite local: nunca queries sobre campos dentro de JSON blobs
 - Todo codigo OS-specific va en `platform/`. Si aparece fuera, es un bug de arquitectura
@@ -24,9 +24,12 @@
 - Componentes shared: CustomSelect, CustomDatePicker, CollapsibleGroup, ViewToolbar, DashboardGrid, StatusBanner, LoadingState, EmptyState, HelpTooltip, FilterBar, ScoreBadge, IntegrationCard, ModalDialog, NotificationBell, ContextMenu, SourceIcon, ConfidenceBadge, SyncStatusBadge
 - Componentes settings: SettingGroup, SettingRow, CredentialField + tabs individuales (GeneralTab, CaptureTab, OdooTab, GitLabTab, AITab, GoogleTab, ServicesTab, NotificationsTab)
 - Componentes dashboard/widgets: JornadaWidget, ServiciosWidget, HorasHoyWidget, ProgresoWidget, TopIssuesWidget, MRsPendientesWidget, TodosWidget, CalendarioWidget, HorasSemanaWidget, IssuesProyectoWidget + WidgetGallery, WidgetConfigModal
+- Componentes blocks: BlockRow, BlockTable, BlockEditor
 - Componentes issues: IssueTable, IssueDetail, IssueDetailModal
 - Componentes merge_requests: MRTable, MRDetail, MRDetailModal
 - Componentes discover: DiscoverTable
+- Componentes layout: AppHeader, AppSidebar, TrayStatus
+- Componentes timesheets: TimesheetEditModal
 - Composables en `composables/` para logica reutilizable:
   - `useFormatting` — formatos de horas, fechas y timestamps (obligatorio, nunca `.toFixed()` o `.toLocaleDateString()` directo)
   - `useSortable` — sorting por click en cabeceras de tabla
@@ -37,7 +40,7 @@
   - `useOdooProjects` — carga de proyectos/tareas Odoo
   - `useDaemon` — estado y control del daemon
   - `useScoring` — scoring de issues/MRs
-- Pinia: un store por dominio (`blocks`, `config`, `daemon`, `issues`, `merge_requests`, `timesheets`)
+- Pinia: un store por dominio (`blocks`, `config`, `daemon`, `issues`, `merge_requests`, `timesheets`, `odoo`)
 - El store `blocks` incluye signals state (fetchSignals, splitBlock, mergeBlocks)
 - Comunicacion con daemon via Tauri invoke commands (proxy HTTP en Rust)
 - No usar `<select>` nativo — usar `CustomSelect` para consistencia visual

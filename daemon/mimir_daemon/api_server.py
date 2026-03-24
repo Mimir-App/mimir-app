@@ -59,11 +59,15 @@ async def run_server(args: argparse.Namespace) -> None:
     source_registry = SourceRegistry()
     ai_service = AIService(db=db, provider=None)
 
+    from .integrations.google_calendar import GoogleCalendarClient
+    calendar_client = GoogleCalendarClient()
+
     app = create_server_app(
         db=db,
         registry=registry,
         ai_service=ai_service,
         source_registry=source_registry,
+        calendar_client=calendar_client,
         version=VERSION,
     )
 

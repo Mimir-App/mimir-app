@@ -42,7 +42,7 @@ const { colStyle, startResize } = useColumnWidths();
       </tr>
     </thead>
     <tbody>
-      <tr v-for="mr in sorted" :key="mr.id" class="data-row clickable-row" :class="{ 'row-conflict': mr.has_conflicts, 'row-approved': !mr.has_conflicts && mr.approved_by?.length }" @click="emit('select', mr)" @contextmenu.prevent="emit('contextmenu', mr, $event)">
+      <tr v-for="mr in sorted" :key="mr.id" class="data-row clickable-row" :class="{ 'row-conflict': mr.has_conflicts, 'row-pipeline-failed': !mr.has_conflicts && mr.pipeline_status === 'failed', 'row-approved': !mr.has_conflicts && mr.pipeline_status !== 'failed' && mr.approved_by?.length }" @click="emit('select', mr)" @contextmenu.prevent="emit('contextmenu', mr, $event)">
         <td class="icon-cell">
           <SourceIcon :source="mr._source" :size="16" />
           <button v-if="followedKeys?.has(`${mr.project_path}#${mr.iid}`)" class="followed-dot" title="Dejar de seguir" @click.stop="emit('unfollow', mr.id)"></button>
@@ -158,6 +158,10 @@ const { colStyle, startResize } = useColumnWidths();
 .row-conflict td { border-left: 3px solid var(--error); }
 .row-conflict td:first-child { border-left: 3px solid var(--error); }
 .row-conflict td:not(:first-child) { border-left: none; }
+
+.row-pipeline-failed td { border-left: 3px solid var(--error); }
+.row-pipeline-failed td:first-child { border-left: 3px solid var(--error); }
+.row-pipeline-failed td:not(:first-child) { border-left: none; }
 
 .row-approved td { border-left: 3px solid var(--success); }
 .row-approved td:first-child { border-left: 3px solid var(--success); }

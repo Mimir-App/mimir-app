@@ -2,7 +2,7 @@
 
 Asistente inteligente de imputacion de horas.
 Ultima actualizacion: 2026-03-24
-Version actual: v0.6.0
+Version actual: v0.7.0
 
 ---
 
@@ -10,12 +10,33 @@ Version actual: v0.6.0
 
 | Componente | Tecnologia | Estado |
 |---|---|---|
-| Frontend desktop | Tauri 2 + Vue 3 + TypeScript + Vite | v0.6.0 |
-| Backend desktop | Rust (Tauri commands) | v0.6.0 |
-| Capture daemon | Python 3.10+ (asyncio + poller + signals) | v0.6.0 |
-| Server daemon | Python 3.10+ (FastAPI + uvicorn) | v0.6.0 |
+| Frontend desktop | Tauri 2 + Vue 3 + TypeScript + Vite | v0.7.0 |
+| Backend desktop | Rust (Tauri commands) | v0.7.0 |
+| Capture daemon | Python 3.10+ (asyncio + poller + signals) | v0.7.0 |
+| Server daemon | Python 3.10+ (FastAPI + uvicorn) | v0.7.0 |
 | Base de datos local | SQLite (aiosqlite), compartida capture/server | Operativa |
 | CI/CD | GitHub Actions (release en tag) | Operativo |
+
+---
+
+## v0.7.0 — MR approvals enrichment + GitHub OAuth + cache Odoo
+
+**Fecha:** 2026-03-24
+**Tests: ~155 pasando, 0 errores TS, 0 errores Rust**
+
+### Cambios principales
+
+| Tarea | Estado |
+|---|---|
+| MR approvals enrichment: fallback a endpoint /approvals cuando detalle individual no tiene approved_by | Completado |
+| GitHub OAuth Device Flow (start + poll endpoints) | Completado |
+| Store Odoo dedicado con cache periodico de proyectos | Completado |
+| Server refactorizado con FastAPI routers modulares (10 routers) | Completado |
+| Vista ReviewDay para revision diaria de bloques | Completado |
+| Componentes blocks (BlockRow, BlockTable, BlockEditor) extraidos | Completado |
+| Componentes layout (AppHeader, AppSidebar, TrayStatus) extraidos | Completado |
+| TimesheetEditModal para edicion de entradas Odoo | Completado |
+| Modulo AI con providers (Claude, Gemini, OpenAI) | Completado |
 
 ---
 
@@ -110,7 +131,7 @@ Version actual: v0.6.0
 | Iconos SVG reales (SourceIcon.vue) para GitHub y GitLab | Completado |
 | Icono dinamico Odoo (logo de la empresa) | Completado |
 | github_token_stored en AppConfig + keyring + push config | Completado |
-| GitHub OAuth (opcion OAuth o token) | Pendiente |
+| GitHub OAuth Device Flow | Completado (v0.7.0) |
 
 ### Issues/MRs Multi-Source
 
@@ -224,16 +245,15 @@ Separacion en dos procesos (capture 9476, server 9477). Componentes UI compartid
 
 ## Pendiente
 
-1. GitHub OAuth (opcion OAuth o token en Settings)
-2. NotificationService: deteccion real de cambios (actualmente stub)
-3. Widgets placeholder: IssuesProyecto, HorasSemana, Calendario
-4. Desktop notifications (tauri-plugin-notification)
-5. Vista Kanban/cards en Descubrir
-6. UI gestion de servicios (activar capture, instalar extension)
-7. Google Cloud Console OAuth2
-8. Busqueda de repos/usuarios en Descubrir
-9. Optimizar followed items (evitar get_issues() completo)
-10. Modelo de monetizacion
+1. NotificationService: deteccion real de cambios (actualmente stub)
+2. Widgets placeholder: IssuesProyecto, HorasSemana, Calendario
+3. Desktop notifications (tauri-plugin-notification)
+4. Vista Kanban/cards en Descubrir
+5. UI gestion de servicios (activar capture, instalar extension)
+6. Google Cloud Console OAuth2
+7. Busqueda de repos/usuarios en Descubrir
+8. Optimizar followed items (evitar get_issues() completo)
+9. Modelo de monetizacion
 
 ---
 

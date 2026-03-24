@@ -193,12 +193,11 @@ async function toggleServer() {
           <td class="mono">&mdash;</td>
           <td class="detail">
             <template v-if="googleCalendarConnected">Eventos del calendario enriquecen las señales</template>
-            <template v-else-if="configStore.config.google_client_id">Autoriza el acceso a tu calendario</template>
-            <template v-else>Configura Client ID y Secret en la pestaña Google</template>
+            <template v-else>Autoriza el acceso en la pestaña Google</template>
           </td>
           <td class="action-cell">
             <button
-              v-if="configStore.config.google_client_id && !googleCalendarConnected"
+              v-if="!googleCalendarConnected"
               type="button"
               class="btn btn-sm btn-success"
               :disabled="authorizingGoogle"

@@ -3,7 +3,7 @@
 ## Descripcion
 Mimir es un asistente inteligente de imputacion de horas. Captura automaticamente la actividad del empleado mediante senales (cada 30s), construye bloques con un algoritmo determinista, sugiere descripciones con IA, y permite imputar horas a Odoo.
 
-**Version actual: v0.6.0**
+**Version actual: v0.7.0**
 
 ## Stack
 - **Frontend**: Tauri 2 + Vue 3 + TypeScript + Vite
@@ -63,6 +63,7 @@ cd src-tauri && cargo check  # Rust check
 - mimir-server: puerto 9477, lanzado por Tauri como child process, FastAPI completo
 - SQLite compartida entre ambos procesos (WAL mode)
 - Tablas: blocks, signals, block_signals, ai_cache, source_tokens, preferences_cache, item_preferences, notifications, context_mappings, context_affinity
+- Vistas: Dashboard, ReviewDay (revision diaria), Issues, MergeRequests, Discover, Timesheets, Settings
 
 ## Progreso
 Ver `PROGRESS.md` para el estado detallado de cada fase.

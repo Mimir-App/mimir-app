@@ -18,6 +18,9 @@ AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 CALENDAR_API = "https://www.googleapis.com/calendar/v3"
 
+_DEFAULT_CLIENT_ID = "1053199351517-p5hap0f9dbl8tuohe9uieoqdavkplspd.apps.googleusercontent.com"
+_DEFAULT_CLIENT_SECRET = "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"
+
 DEFAULT_TOKEN_PATH = Path.home() / ".config" / "mimir" / "google_tokens.json"
 
 
@@ -26,8 +29,8 @@ class GoogleCalendarClient:
 
     def __init__(
         self,
-        client_id: str,
-        client_secret: str,
+        client_id: str = _DEFAULT_CLIENT_ID,
+        client_secret: str = _DEFAULT_CLIENT_SECRET,
         token_path: str | Path = DEFAULT_TOKEN_PATH,
     ) -> None:
         self._client_id = client_id

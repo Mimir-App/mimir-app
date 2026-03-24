@@ -1,6 +1,6 @@
 ## Arquitectura
 
-Version actual: v0.6.0. Multi-source (GitHub + GitLab) + Descubrir + auto-asignacion + context affinity.
+Version actual: v0.7.0. Multi-source (GitHub + GitLab) + Descubrir + auto-asignacion + context affinity + GitHub OAuth.
 
 ### Procesos
 
@@ -16,8 +16,9 @@ Version actual: v0.6.0. Multi-source (GitHub + GitLab) + Descubrir + auto-asigna
 
 **mimir-server** (puerto 9477)
 - Lanzado por Tauri como child process al abrir la app
-- FastAPI completo: CRUD blocks, signals, split/merge, sync Odoo, GitLab, GitHub, IA, config
+- FastAPI con routers modulares (routers/blocks, vcs, odoo, google, items, signals, notifications, config_router, context_mappings, github_oauth)
 - Google Calendar OAuth2 + consulta de eventos
+- GitHub OAuth Device Flow (start + poll)
 - NotificationService como background task (asyncio, lifespan)
 - Context mappings: CRUD + suggest + aprendizaje al confirmar
 - Se mata al cerrar la app Tauri
@@ -35,7 +36,7 @@ Version actual: v0.6.0. Multi-source (GitHub + GitLab) + Descubrir + auto-asigna
 | Odoo v11 | XMLRPC + password | Timesheets, proyectos, tareas, fichaje |
 | Odoo v16+ | REST + API key | Timesheets, proyectos, tareas, fichaje |
 | GitLab | Personal Access Token | Issues, MRs, TODOs, scoring, notas, conflictos, labels |
-| GitHub | Personal Access Token | Issues, PRs, search, comments, reviews, files, notifications, labels |
+| GitHub | PAT o OAuth Device Flow | Issues, PRs, search, comments, reviews, files, notifications, labels |
 | Google Calendar | OAuth2 | Eventos actuales, deteccion reuniones |
 | Gemini/Claude/OpenAI | API key | Descripciones automaticas de bloques |
 
