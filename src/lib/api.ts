@@ -280,6 +280,12 @@ export const api = {
     return httpPost(`/blocks/${blockId}/generate-description`);
   },
 
+  async generateBlocksWithAgent(date: string) {
+    if (await isTauri()) return tauriInvoke('generate_blocks_with_agent', { date });
+    // Fallback HTTP: no disponible sin Tauri (requiere claude CLI)
+    throw new Error('Generación de bloques solo disponible en la app de escritorio');
+  },
+
   async getIntegrationStatus() {
     if (await isTauri()) return tauriInvoke('get_integration_status');
     return httpGet('/config/integration-status');

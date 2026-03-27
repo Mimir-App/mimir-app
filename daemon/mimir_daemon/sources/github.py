@@ -627,6 +627,115 @@ class GitHubSource(VCSSource):
             )
             return []
 
+    async def get_user_events(self, date: str) -> list[dict[str, Any]]:
+        """Obtiene eventos/actividad del usuario para una fecha.
+
+        Usa GET /users/{username}/events filtrando por fecha.
+        Tipos: PushEvent, IssueCommentEvent, PullRequestEvent, PullRequestReviewEvent, etc.
+
+        Args:
+            date: Fecha en formato YYYY-MM-DD.
+
+        Returns:
+            Lista de eventos con type, action, repo, payload, timestamp.
+        """
+        try:
+            user = await self.get_current_user()
+            username = user.get("username") or user.get("login")
+            if not username:
+                logger.error("No se pudo obtener username de GitHub")
+                return []
+
+            events: list[dict[str, Any]] = []
+            page = 1
+            while page <= 10:
+                resp = await self._client.get(
+                    f"/users/{username}/events",
+                    params={"per_page": 100, "page": page},
+                )
+                resp.raise_for_status()
+                data: list[dict[str, Any]] = resp.json()
+                if not data:
+                    break
+
+                found_older = False
+                for event in data:
+                    created = event.get("created_at", "")
+                    # Solo eventos del día solicitado
+                    if not created.startswith(date):
+                        # Si el evento es anterior al día, no hay más
+                        if created < date:
+                            found_older = True
+                        continue
+
+                    repo = event.get("repo", {})
+                    repo_name = repo.get("name", "")
+                    event_type = event.get("type", "")
+                    payload = event.get("payload", {})
+
+                    # Extraer resumen según tipo de evento
+                    summary = ""
+                    target_type = ""
+                    target_id = None
+
+                    if event_type == "PushEvent":
+                        commits = payload.get("commits", [])
+                        summary = f"{len(commits)} commit(s)"
+                        if commits:
+                            summary += f": {commits[-1].get('message', '')[:100]}"
+                        target_type = "push"
+                    elif event_type in ("IssueCommentEvent", "CommitCommentEvent"):
+                        comment = payload.get("comment", {})
+                        summary = comment.get("body", "")[:200]
+                        issue = payload.get("issue", {})
+                        target_type = "comment"
+                        target_id = issue.get("number")
+                    elif event_type == "IssuesEvent":
+                        issue = payload.get("issue", {})
+                        summary = issue.get("title", "")
+                        target_type = "issue"
+                        target_id = issue.get("number")
+                    elif event_type == "PullRequestEvent":
+                        pr = payload.get("pull_request", {})
+                        summary = pr.get("title", "")
+                        target_type = "pull_request"
+                        target_id = pr.get("number")
+                    elif event_type == "PullRequestReviewEvent":
+                        review = payload.get("review", {})
+                        pr = payload.get("pull_request", {})
+                        summary = f"Review ({review.get('state', '')}): {pr.get('title', '')}"
+                        target_type = "review"
+                        target_id = pr.get("number")
+                    elif event_type == "PullRequestReviewCommentEvent":
+                        comment = payload.get("comment", {})
+                        summary = comment.get("body", "")[:200]
+                        target_type = "review_comment"
+                        target_id = payload.get("pull_request", {}).get("number")
+                    else:
+                        summary = event_type
+                        target_type = event_type
+
+                    events.append({
+                        "type": event_type,
+                        "action": payload.get("action", ""),
+                        "target_type": target_type,
+                        "target_title": summary,
+                        "target_id": target_id,
+                        "repo": repo_name,
+                        "created_at": created,
+                        "_source": "github",
+                    })
+
+                if found_older:
+                    break
+                page += 1
+
+            logger.info("GitHub: %d eventos de usuario obtenidos para %s", len(events), date)
+            return events
+        except Exception as e:
+            logger.error("Error obteniendo eventos de usuario GitHub: %s", e)
+            return []
+
     async def close(self) -> None:
         """Cierra el cliente HTTP subyacente."""
         await self._client.aclose()

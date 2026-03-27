@@ -72,3 +72,27 @@ class OdooEntryUpdateRequest(BaseModel):
     description: str | None = None
     hours: float | None = None
     date: str | None = None
+
+
+class GeneratedBlock(BaseModel):
+    """Bloque generado por el agente Claude Code CLI."""
+
+    start_time: str
+    end_time: str
+    duration_minutes: float
+    type: str = "development"
+    description: str = ""
+    odoo_project_id: int | None = None
+    odoo_project_name: str | None = None
+    odoo_task_id: int | None = None
+    odoo_task_name: str | None = None
+    confidence: float = 0.0
+    context_key: str | None = None
+    sources: dict | None = None
+
+
+class GenerateBlocksRequest(BaseModel):
+    """Resultado del agente: bloques generados para un día."""
+
+    date: str
+    blocks: list[GeneratedBlock]

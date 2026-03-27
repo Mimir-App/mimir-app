@@ -1,4 +1,8 @@
-"""Tests end-to-end del poller con plataforma mock."""
+"""Tests end-to-end del poller con plataforma mock.
+
+Nota: Los bloques se generan bajo demanda (no automaticamente).
+El poller solo captura senales y las guarda en SQLite.
+"""
 
 import asyncio
 from datetime import datetime, timezone
@@ -43,8 +47,8 @@ async def db(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_poller_creates_blocks(db):
-    """El poller crea bloques cuando hay ventana activa."""
+async def test_poller_saves_signals_without_blocks(db):
+    """El poller guarda senales pero no crea bloques (generacion bajo demanda)."""
     platform = FakePlatform()
     platform.windows = [
         WindowInfo(pid=100, app_name="code", window_title="file.py - VSCode"),
@@ -59,17 +63,19 @@ async def test_poller_creates_blocks(db):
     for _ in range(3):
         await poller._poll_once()
 
-    blocks = await db.get_blocks_by_date(
-        datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    )
-    assert len(blocks) == 1
-    assert blocks[0]["app_name"] == "code"
-    assert blocks[0]["duration_minutes"] >= 0
+    # Debe haber senales pero NO bloques
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    signals = await db.get_signals_by_date(today)
+    assert len(signals) == 3
+    assert signals[0]["app_name"] == "code"
+
+    blocks = await db.get_blocks_by_date(today)
+    assert len(blocks) == 0
 
 
 @pytest.mark.asyncio
 async def test_poller_no_block_without_window(db):
-    """El poller no crea bloques sin ventana activa."""
+    """El poller no crea senales sin ventana activa."""
     platform = FakePlatform()
     platform.windows = [None, None]
 
@@ -87,8 +93,8 @@ async def test_poller_no_block_without_window(db):
 
 
 @pytest.mark.asyncio
-async def test_poller_handles_lock_event(db):
-    """El poller cierra bloque al recibir evento lock."""
+async def test_poller_handles_lock_event_without_crash(db):
+    """El poller maneja eventos lock/unlock sin crash (solo logging)."""
     platform = FakePlatform()
     platform.windows = [
         WindowInfo(pid=100, app_name="code", window_title="file.py"),
@@ -99,11 +105,10 @@ async def test_poller_handles_lock_event(db):
     agg = SignalAggregator(db=db, inactivity_threshold=900)
     poller = Poller(config=config, db=db, platform=platform, aggregator=agg)
 
-    # Primer poll: crea bloque
+    # Primer poll: crea senal
     await poller._poll_once()
-    assert agg._current_block_id is not None
 
-    # Inyectar evento lock y hacer poll
+    # Inyectar evento lock y hacer poll — no debe crashear
     platform.events = [
         SessionEvent(
             event_type="lock",
@@ -111,6 +116,7 @@ async def test_poller_handles_lock_event(db):
         )
     ]
     await poller._poll_once()
+    # El aggregator no tiene bloque activo (generacion bajo demanda)
     assert agg._current_block_id is None
 
 
@@ -157,8 +163,8 @@ async def test_poller_run_loop_stops(db):
 
 
 @pytest.mark.asyncio
-async def test_poller_context_change_creates_new_block(db):
-    """Cambio de app durante polls consecutivos crea bloque nuevo."""
+async def test_poller_different_apps_save_signals(db):
+    """Cambio de app guarda senales con context_key diferente."""
     platform = FakePlatform()
     platform.windows = [
         WindowInfo(pid=100, app_name="code", window_title="file.py"),
@@ -172,12 +178,15 @@ async def test_poller_context_change_creates_new_block(db):
     await poller._poll_once()
     await poller._poll_once()
 
-    blocks = await db.get_blocks_by_date(
-        datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    )
-    assert len(blocks) == 2
-    assert blocks[0]["app_name"] == "code"
-    assert blocks[1]["app_name"] == "slack"
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    signals = await db.get_signals_by_date(today)
+    assert len(signals) == 2
+    assert signals[0]["app_name"] == "code"
+    assert signals[1]["app_name"] == "slack"
+
+    # No debe haber bloques (generacion bajo demanda)
+    blocks = await db.get_blocks_by_date(today)
+    assert len(blocks) == 0
 
 
 @pytest.mark.asyncio

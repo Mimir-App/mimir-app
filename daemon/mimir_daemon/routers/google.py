@@ -53,6 +53,16 @@ async def get_current_event(request: Request) -> dict:
     return {"event": event}
 
 
+@router.get("/google/calendar/events")
+async def get_calendar_events(request: Request, date: str = Query(...)) -> dict:
+    """Obtiene todos los eventos del calendario para una fecha."""
+    calendar_client = request.app.state.calendar_client
+    if not calendar_client or not calendar_client.is_configured:
+        return {"events": []}
+    events = await calendar_client.get_events_by_date(date)
+    return {"events": events}
+
+
 @router.post("/google/calendar/disconnect")
 async def disconnect_google_calendar(request: Request) -> dict:
     """Desconecta Google Calendar eliminando tokens."""

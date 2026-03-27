@@ -212,6 +212,77 @@ class GoogleCalendarClient:
             logger.debug("Error obteniendo evento actual: %s", e)
             return None
 
+    async def get_events_by_date(self, date: str) -> list[dict]:
+        """Obtiene todos los eventos de un día concreto.
+
+        Args:
+            date: Fecha en formato YYYY-MM-DD.
+
+        Returns:
+            Lista de eventos con summary, start, end, attendees, meet_link, is_meeting.
+        """
+        if not await self._ensure_valid_token():
+            return []
+
+        try:
+            time_min = f"{date}T00:00:00Z"
+            time_max = f"{date}T23:59:59Z"
+
+            resp = await self._http.get(
+                f"{CALENDAR_API}/calendars/primary/events",
+                headers={"Authorization": f"Bearer {self._access_token}"},
+                params={
+                    "timeMin": time_min,
+                    "timeMax": time_max,
+                    "singleEvents": "true",
+                    "orderBy": "startTime",
+                    "maxResults": "50",
+                },
+            )
+            if resp.status_code != 200:
+                logger.debug("Error consultando eventos del día: %s", resp.status_code)
+                return []
+
+            data = resp.json()
+            events = []
+            for event in data.get("items", []):
+                # Solo eventos aceptados o sin respuesta (no rechazados)
+                attendees = event.get("attendees", [])
+                my_status = "accepted"
+                for a in attendees:
+                    if a.get("self"):
+                        my_status = a.get("responseStatus", "accepted")
+                        break
+
+                if my_status == "declined":
+                    continue
+
+                # Extraer meet link
+                meet_link = None
+                conference = event.get("conferenceData", {})
+                entry_points = conference.get("entryPoints", [])
+                for ep in entry_points:
+                    if ep.get("entryPointType") == "video":
+                        meet_link = ep.get("uri")
+                        break
+
+                events.append({
+                    "summary": event.get("summary", "Sin titulo"),
+                    "start": event.get("start", {}).get("dateTime", event.get("start", {}).get("date", "")),
+                    "end": event.get("end", {}).get("dateTime", event.get("end", {}).get("date", "")),
+                    "attendees": [
+                        a.get("email", "") for a in attendees if not a.get("self")
+                    ],
+                    "meet_link": meet_link,
+                    "is_meeting": len(attendees) > 1 or meet_link is not None,
+                })
+
+            logger.info("Google Calendar: %d eventos obtenidos para %s", len(events), date)
+            return events
+        except Exception as e:
+            logger.debug("Error obteniendo eventos del día %s: %s", date, e)
+            return []
+
     async def disconnect(self) -> None:
         """Elimina tokens y desconecta."""
         self._access_token = None

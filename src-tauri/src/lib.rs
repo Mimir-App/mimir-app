@@ -40,6 +40,7 @@ pub fn run() {
             daemon::get_merge_requests,
             daemon::push_config_to_daemon,
             daemon::generate_block_description,
+            daemon::generate_blocks_with_agent,
             daemon::get_integration_status,
             daemon::get_signals,
             daemon::split_block,

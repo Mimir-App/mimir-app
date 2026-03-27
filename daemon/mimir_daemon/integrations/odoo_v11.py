@@ -100,12 +100,12 @@ class OdooV11Client(TimesheetClient):
             return []
 
     async def get_tasks(self, project_id: int) -> list[dict[str, Any]]:
-        """Obtiene tareas de un proyecto en Odoo."""
+        """Obtiene tareas abiertas de un proyecto en Odoo (más recientes primero)."""
         try:
             result = await self._execute(
                 "project.task", "search_read",
-                [[("project_id", "=", project_id)]],
-                {"fields": ["id", "name", "project_id", "effective_hours"], "limit": 500},
+                [[("project_id", "=", project_id), ("stage_id.fold", "=", False)]],
+                {"fields": ["id", "name", "project_id", "effective_hours"], "limit": 500, "order": "id desc"},
             )
             tasks = [
                 {

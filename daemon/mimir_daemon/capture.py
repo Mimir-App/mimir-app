@@ -84,7 +84,8 @@ async def run_capture(args: argparse.Namespace) -> None:
         transient_apps=set(config.transient_apps) if config.transient_apps else None,
     )
 
-    await aggregator.recover_open_blocks()
+    # Bloques se generan bajo demanda, no se recuperan bloques abiertos
+    # await aggregator.recover_open_blocks()
 
     poller = Poller(
         config=config,

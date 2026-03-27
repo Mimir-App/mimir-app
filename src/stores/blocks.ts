@@ -102,6 +102,24 @@ export const useBlocksStore = defineStore('blocks', () => {
 
   // --- Signals ---
 
+  const generating = ref(false);
+  const generateError = ref<string | null>(null);
+
+  async function generateBlocks(date?: string) {
+    generating.value = true;
+    generateError.value = null;
+    try {
+      const d = date ?? selectedDate.value;
+      await api.generateBlocksWithAgent(d);
+      await fetchBlocks(d);
+    } catch (e) {
+      generateError.value = e instanceof Error ? e.message : String(e);
+      throw e;
+    } finally {
+      generating.value = false;
+    }
+  }
+
   const signals = ref<Signal[]>([]);
   const signalsLoading = ref(false);
 
@@ -142,6 +160,9 @@ export const useBlocksStore = defineStore('blocks', () => {
     syncToOdoo,
     retrySync,
     closedBlocks,
+    generating,
+    generateError,
+    generateBlocks,
     signals,
     signalsLoading,
     fetchSignals,

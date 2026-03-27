@@ -375,5 +375,89 @@ class GitLabSource(VCSSource):
             logger.error("Error obteniendo labels de GitLab: %s", e)
             return []
 
+    async def get_user_events(self, date: str) -> list[dict[str, Any]]:
+        """Obtiene eventos/actividad del usuario para una fecha.
+
+        Usa GET /users/{id}/events filtrando por fecha.
+        Tipos: pushed, commented, merged, opened, closed, approved, etc.
+
+        Args:
+            date: Fecha en formato YYYY-MM-DD.
+
+        Returns:
+            Lista de eventos con type, action, project, target, timestamp.
+        """
+        try:
+            user = await self.get_current_user()
+            user_id = user.get("id")
+            if not user_id:
+                logger.error("No se pudo obtener ID de usuario GitLab")
+                return []
+
+            events: list[dict[str, Any]] = []
+            # after/before son fechas simples (YYYY-MM-DD) y exclusivas
+            # Para obtener eventos del día X: after=X-1, before=X+1
+            from datetime import datetime as dt, timedelta
+            target = dt.strptime(date, "%Y-%m-%d")
+            after_date = (target - timedelta(days=1)).strftime("%Y-%m-%d")
+            before_date = (target + timedelta(days=1)).strftime("%Y-%m-%d")
+
+            page = 1
+            while page <= 10:
+                resp = await self._client.get(
+                    f"/users/{user_id}/events",
+                    params={
+                        "after": after_date,
+                        "before": before_date,
+                        "per_page": 100,
+                        "page": page,
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                if not data:
+                    break
+
+                for event in data:
+                    created = event.get("created_at", "")
+
+                    target = event.get("target_title", "")
+                    target_type = event.get("target_type", "")
+                    action = event.get("action_name", "")
+                    project_id = event.get("project_id")
+
+                    # Extraer project_path desde push_data o note
+                    project_path = ""
+                    push_data = event.get("push_data")
+                    if push_data:
+                        # Para push events, necesitamos obtener project path
+                        target = push_data.get("commit_title", "")
+
+                    note = event.get("note")
+                    if note:
+                        noteable_type = note.get("noteable_type", "")
+                        target = note.get("body", "")[:200]
+                        target_type = noteable_type
+
+                    events.append({
+                        "type": event.get("action_name", ""),
+                        "target_type": target_type,
+                        "target_title": target,
+                        "target_id": event.get("target_id"),
+                        "target_iid": event.get("target_iid"),
+                        "project_id": project_id,
+                        "created_at": created,
+                        "push_data": push_data,
+                        "_source": "gitlab",
+                    })
+
+                page += 1
+
+            logger.info("GitLab: %d eventos de usuario obtenidos para %s", len(events), date)
+            return events
+        except Exception as e:
+            logger.error("Error obteniendo eventos de usuario GitLab: %s", e)
+            return []
+
     async def close(self) -> None:
         await self._client.aclose()

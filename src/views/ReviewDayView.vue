@@ -10,7 +10,7 @@ import CollapsibleGroup from '../components/shared/CollapsibleGroup.vue';
 import StatusBanner from '../components/shared/StatusBanner.vue';
 import LoadingState from '../components/shared/LoadingState.vue';
 import CustomDatePicker from '../components/shared/CustomDatePicker.vue';
-import { ChevronLeft, ChevronRight, RefreshCw, CheckCheck, Send, Clock, CheckCircle2, AlertTriangle, Upload } from 'lucide-vue-next';
+import { ChevronLeft, ChevronRight, RefreshCw, CheckCheck, Send, Clock, CheckCircle2, AlertTriangle, Upload, Sparkles, Loader2 } from 'lucide-vue-next';
 
 const blocksStore = useBlocksStore();
 const daemonStore = useDaemonStore();
@@ -102,6 +102,19 @@ async function syncToOdoo() {
   }
 }
 
+async function generateBlocks() {
+  syncMessage.value = '';
+  try {
+    await blocksStore.generateBlocks();
+    syncMessage.value = 'Bloques generados correctamente';
+    syncMessageType.value = 'success';
+    fetchOdooEntries();
+  } catch (e) {
+    syncMessage.value = `Error generando bloques: ${blocksStore.generateError || e}`;
+    syncMessageType.value = 'error';
+  }
+}
+
 function refresh() {
   syncMessage.value = '';
   blocksStore.fetchBlocks();
@@ -179,6 +192,16 @@ const isToday = computed(() =>
           <RefreshCw :size="15" :stroke-width="2" />
         </button>
         <button
+          class="btn btn-generate"
+          @click="generateBlocks"
+          :disabled="blocksStore.generating"
+          title="Genera bloques analizando señales, actividad VCS y calendario"
+        >
+          <Loader2 v-if="blocksStore.generating" :size="15" :stroke-width="2" class="spin" />
+          <Sparkles v-else :size="15" :stroke-width="2" />
+          {{ blocksStore.generating ? 'Generando...' : 'Generar bloques' }}
+        </button>
+        <button
           class="btn btn-secondary"
           @click="confirmAll"
           :disabled="autoBlocksCount === 0"
@@ -208,7 +231,11 @@ const isToday = computed(() =>
       Daemon no conectado. Los bloques se pueden revisar pero no enviar a Odoo.
     </StatusBanner>
 
-    <LoadingState v-if="blocksStore.loading" text="Cargando bloques..." />
+    <StatusBanner v-if="blocksStore.generating" type="info">
+      Analizando señales, actividad VCS y calendario... Esto puede tardar hasta 60 segundos.
+    </StatusBanner>
+
+    <LoadingState v-if="blocksStore.loading && !blocksStore.generating" text="Cargando bloques..." />
 
     <BlockTable v-else :blocks="blocksStore.blocks" />
 
@@ -386,6 +413,30 @@ const isToday = computed(() =>
 .btn-icon {
   padding: 6px;
   border-radius: var(--radius-md);
+}
+
+.btn-generate {
+  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  color: white;
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.3);
+}
+
+.btn-generate:hover:not(:disabled) {
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-generate:disabled {
+  opacity: 0.7;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 /* ── Tables ── */

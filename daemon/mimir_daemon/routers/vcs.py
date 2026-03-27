@@ -1,6 +1,7 @@
 """Router de integraciones VCS (GitLab y GitHub) — excepto OAuth."""
 
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Query, Request
 
@@ -131,6 +132,22 @@ async def get_gitlab_todos(request: Request) -> list:
         return []
 
 
+@router.get("/gitlab/user/events")
+async def get_gitlab_user_events(request: Request, date: str = Query(default=None)) -> list:
+    """Obtiene actividad del usuario en GitLab para una fecha."""
+    if not date:
+        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    source_registry = request.app.state.source_registry
+    try:
+        gitlab = source_registry.get_gitlab()
+        if not gitlab:
+            return []
+        return await gitlab.get_user_events(date)
+    except Exception as e:
+        logger.error("Error obteniendo eventos de usuario GitLab: %s", e)
+        return []
+
+
 @router.get("/gitlab/user")
 async def get_gitlab_user(request: Request) -> dict:
     """Obtiene info del usuario actual de GitLab."""
@@ -252,6 +269,20 @@ async def get_github_notifications(request: Request) -> list:
         return await gh.get_todos() if gh else []
     except Exception as e:
         logger.error("Error obteniendo notificaciones de GitHub: %s", e)
+        return []
+
+
+@router.get("/github/user/events")
+async def get_github_user_events(request: Request, date: str = Query(default=None)) -> list:
+    """Obtiene actividad del usuario en GitHub para una fecha."""
+    if not date:
+        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    source_registry = request.app.state.source_registry
+    try:
+        gh = source_registry.get_github()
+        return await gh.get_user_events(date) if gh else []
+    except Exception as e:
+        logger.error("Error obteniendo eventos de usuario GitHub: %s", e)
         return []
 
 

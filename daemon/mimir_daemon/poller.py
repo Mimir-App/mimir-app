@@ -73,13 +73,13 @@ class Poller:
     async def _poll_once(self) -> None:
         """Ejecuta un ciclo de polling."""
         try:
-            # Verificar eventos de sesion
+            # Verificar eventos de sesion (solo logging, bloques se generan bajo demanda)
             events = await self._platform.get_session_events()
             for event in events:
                 if event.event_type == "lock":
-                    await self._aggregator.handle_lock()
+                    logger.debug("Sesion bloqueada")
                 elif event.event_type == "unlock":
-                    await self._aggregator.handle_unlock()
+                    logger.debug("Sesion desbloqueada")
 
             # Capturar ventana activa
             if not self._config.capture_window:
@@ -164,18 +164,8 @@ class Poller:
                 calendar_attendees=calendar_attendees,
             )
 
-            # Procesar en aggregator
-            signal = {
-                "id": signal_id,
-                "timestamp": now,
-                "app_name": window.app_name,
-                "window_title": window.window_title,
-                "project_path": context.project_path if context else None,
-                "git_branch": context.git_branch if context else None,
-                "git_remote": context.git_remote if context else None,
-                "context_key": context_key,
-            }
-            await self._aggregator.process_signal(signal)
+            # Bloques se generan bajo demanda (no automaticamente)
+            # La senal ya fue guardada en SQLite por create_signal()
 
             self._last_poll = datetime.now(timezone.utc)
 

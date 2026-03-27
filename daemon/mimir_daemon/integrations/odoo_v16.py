@@ -140,12 +140,12 @@ class OdooV16Client(TimesheetClient):
             return []
 
     async def get_tasks(self, project_id: int) -> list[dict[str, Any]]:
-        """Obtiene tareas de un proyecto en Odoo v16."""
+        """Obtiene tareas abiertas de un proyecto en Odoo v16 (más recientes primero)."""
         try:
             result = await self._jsonrpc(
                 "project.task", "search_read",
-                [[("project_id", "=", project_id)], ["id", "name", "project_id", "effective_hours"]],
-                {"limit": 500},
+                [[("project_id", "=", project_id), ("stage_id.fold", "=", False)], ["id", "name", "project_id", "effective_hours"]],
+                {"limit": 500, "order": "id desc"},
             )
             tasks = [
                 {
