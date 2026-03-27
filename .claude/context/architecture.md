@@ -1,17 +1,17 @@
 ## Arquitectura
 
-Version actual: v0.7.0. Multi-source (GitHub + GitLab) + Descubrir + auto-asignacion + context affinity + GitHub OAuth.
+Version actual: v0.7.0. Multi-source (GitHub + GitLab) + Descubrir + auto-asignacion + context affinity + GitHub OAuth + generacion de bloques bajo demanda con agente Claude Code CLI.
 
 ### Procesos
 
 **mimir-capture** (puerto 9476)
 - Proceso independiente, corre como systemd user service
-- Poller (ciclo cada 30s), SignalAggregator, Context Enricher, Tray Icon
+- Poller (ciclo cada 30s), Context Enricher, Tray Icon
+- Solo captura senales — NO genera bloques (generacion bajo demanda)
 - Platform layer: X11 (xdotool) + Wayland (GNOME Shell extension D-Bus) + D-Bus logind
 - Deteccion automatica de entorno via $XDG_SESSION_TYPE
 - Context enricher: baja al proceso hijo mas profundo para detectar git repo en terminales
 - System context: idle time (Mutter), audio/reuniones (pactl), workspace
-- Auto-asignacion: consulta context_mappings al crear bloque
 - Endpoint /health y /status (incluye backend activo)
 
 **mimir-server** (puerto 9477)
@@ -37,7 +37,8 @@ Version actual: v0.7.0. Multi-source (GitHub + GitLab) + Descubrir + auto-asigna
 | Odoo v16+ | REST + API key | Timesheets, proyectos, tareas, fichaje |
 | GitLab | Personal Access Token | Issues, MRs, TODOs, scoring, notas, conflictos, labels |
 | GitHub | PAT o OAuth Device Flow | Issues, PRs, search, comments, reviews, files, notifications, labels |
-| Google Calendar | OAuth2 | Eventos actuales, deteccion reuniones |
+| Google Calendar | OAuth2 | Eventos actuales, eventos por fecha, deteccion reuniones |
+| Claude Code CLI | Suscripcion | Generacion de bloques bajo demanda (agente timesheet-generator) |
 | Gemini/Claude/OpenAI | API key | Descripciones automaticas de bloques |
 
 ### Multi-source VCS
@@ -66,10 +67,37 @@ Sistema de widgets configurable:
 - Configurable por tipo de evento en Settings > Notificaciones
 - Pendiente: instanciar NotificationService, desktop notifications (tauri-plugin-notification), deteccion real de cambios
 
+### Generacion de bloques bajo demanda
+
+Flujo: usuario pulsa "Generar bloques" en ReviewDay → Tauri recopila datos via `/blocks/generation-data` → invoca `claude --print` con agente timesheet-generator.md → parsea JSON → POST `/blocks/generate`.
+
+**Fuentes de datos:**
+- Senales de mimir-capture (actividad desktop cada 30s)
+- Actividad VCS: GitLab (`/users/{id}/events`) y GitHub (`/users/{username}/events`)
+- Google Calendar: eventos del dia (`/calendars/primary/events`)
+- Proyectos y tareas Odoo (filtrados por relevancia)
+
+**Agente Claude Code CLI:**
+- `.claude/agents/timesheet-generator.md`: instrucciones del agente
+- `~/.config/mimir/timesheet-rules.md`: reglas de matching configurables por usuario
+- Modelo: haiku (optimizado para velocidad, ~2.5 min)
+- Sin tool calls: datos pre-recopilados en el prompt
+- Sin plugins MCP: `--disable-slash-commands --mcp-config empty`
+
+**Estrategia incremental:**
+- Bloques confirmed/synced/error se preservan
+- Bloques auto/closed se reemplazan al regenerar
+
+**Matching Odoo:**
+- branch_task_hints: extrae patron `<proyecto>_<tarea>` de ramas VCS
+- tasks_by_project: tareas abiertas de proyectos relevantes (filtradas por mes para tareas mensuales)
+- context_mappings: mapeos aprendidos como referencia
+- Reglas de usuario: reuniones → tareas mensuales en "Temas internos"
+
 ### Empaquetado
 
 Dos paquetes .deb + AppImage:
-- `mimir` (.deb): app Tauri + mimir-server en /usr/bin/
+- `mimir` (.deb): app Tauri + mimir-server + agente timesheet-generator en /usr/share/mimir/agents/
 - `mimir-capture` (.deb): captura + systemd service + extension GNOME Shell
 - Version bump bot: /bump patch|minor|major en PRs
 - Version check obligatorio en CI
@@ -102,5 +130,16 @@ Frontend (Vue 3 + Tauri)
     |      |
     |   Context Enricher (git, SSH, child processes)
     |      |
-    |   SignalAggregator -> SQLite (signals + blocks + auto-assign)
+    |   Poller -> SQLite (solo signals, bloques bajo demanda)
+    |
+    |
+    |--- Generacion de bloques (bajo demanda) ---
+    |
+    |   Tauri command: generate_blocks_with_agent
+    |      |
+    |      | GET /blocks/generation-data (signals + VCS + calendar + Odoo)
+    |      |
+    |      | claude --print --model haiku (agente timesheet-generator.md)
+    |      |
+    |      | POST /blocks/generate (JSON -> SQLite)
 ```

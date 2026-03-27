@@ -214,15 +214,69 @@ async def get_generation_data(request: Request, date: str = Query(...)) -> dict:
         len(tasks_by_project), len(preserved_blocks), branch_task_hints,
     )
 
+    # Compactar datos para reducir tokens enviados al LLM
+    # Señales: solo campos relevantes
+    compact_signals = [
+        {
+            "t": s["timestamp"][11:19],  # solo HH:MM:SS
+            "app": s.get("app_name", ""),
+            "title": (s.get("window_title") or "")[:80],
+            "ctx": s.get("context_key", ""),
+            "proj": s.get("project_path", ""),
+            "branch": s.get("git_branch", ""),
+            "meet": s.get("is_meeting", 0),
+            "cal": s.get("calendar_event", ""),
+        }
+        for s in signals
+    ]
+
+    # GitLab events: solo campos relevantes
+    compact_gitlab = [
+        {
+            "t": (e.get("created_at") or "")[11:19],
+            "type": e.get("type", ""),
+            "target": e.get("target_type", ""),
+            "title": (e.get("target_title") or "")[:120],
+            "iid": e.get("target_iid"),
+            "pid": e.get("project_id"),
+            "push": {
+                "ref": e["push_data"]["ref"],
+                "action": e["push_data"].get("action", ""),
+                "commits": e["push_data"].get("commit_count", 0),
+            } if e.get("push_data") else None,
+        }
+        for e in gitlab_events
+    ]
+
+    # Proyectos: solo id y name
+    compact_projects = [{"id": p["id"], "name": p["name"]} for p in matched_projects]
+
+    # Tareas: solo id y name
+    compact_tasks = {
+        pid: [{"id": t["id"], "name": t["name"]} for t in tasks]
+        for pid, tasks in tasks_by_project.items()
+    }
+
+    # Bloques preservados: solo rangos y proyecto
+    compact_preserved = [
+        {
+            "start": b["start_time"][:16],
+            "end": b["end_time"][:16],
+            "project": b.get("odoo_project_name", ""),
+            "task": b.get("odoo_task_name", ""),
+        }
+        for b in preserved_blocks
+    ]
+
     return {
         "date": date,
-        "signals": signals,
-        "gitlab_events": gitlab_events,
+        "signals": compact_signals,
+        "gitlab_events": compact_gitlab,
         "github_events": github_events,
         "calendar_events": calendar_events,
-        "projects": matched_projects,
-        "tasks_by_project": tasks_by_project,
-        "preserved_blocks": preserved_blocks,
+        "projects": compact_projects,
+        "tasks_by_project": compact_tasks,
+        "preserved_blocks": compact_preserved,
         "context_mappings": mappings,
         "branch_task_hints": branch_task_hints,
     }

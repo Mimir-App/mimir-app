@@ -41,7 +41,7 @@
   - `useDaemon` — estado y control del daemon
   - `useScoring` — scoring de issues/MRs
 - Pinia: un store por dominio (`blocks`, `config`, `daemon`, `issues`, `merge_requests`, `timesheets`, `odoo`)
-- El store `blocks` incluye signals state (fetchSignals, splitBlock, mergeBlocks)
+- El store `blocks` incluye signals state (fetchSignals, splitBlock, mergeBlocks) + generacion bajo demanda (generateBlocks, generating, generateError)
 - Comunicacion con daemon via Tauri invoke commands (proxy HTTP en Rust)
 - No usar `<select>` nativo — usar `CustomSelect` para consistencia visual
 - Formatos de horas y fechas siempre via `useFormatting` (nunca `.toFixed()` o `.toLocaleDateString()` directo)

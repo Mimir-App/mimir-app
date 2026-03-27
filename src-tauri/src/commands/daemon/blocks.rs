@@ -81,7 +81,12 @@ pub async fn generate_blocks_with_agent(date: String) -> Result<serde_json::Valu
     let gen_data: serde_json::Value = client.get(&data_url).await
         .map_err(|e| format!("Error recopilando datos: {}", e))?;
 
-    let data_context = serde_json::to_string_pretty(&gen_data).unwrap_or_default();
+    // JSON compacto (no pretty-print) para reducir tokens
+    let data_context = serde_json::to_string(&gen_data).unwrap_or_default();
+
+    // LOG: datos recopilados
+    eprintln!("[mimir-agent] Datos recopilados para {}: {} bytes", date, data_context.len());
+    eprintln!("[mimir-agent] Data JSON:\n{}", serde_json::to_string_pretty(&gen_data).unwrap_or_default());
 
     // 2. Buscar agente y reglas de matching
     let home = std::env::var("HOME").unwrap_or_default();
@@ -124,24 +129,47 @@ pub async fn generate_blocks_with_agent(date: String) -> Result<serde_json::Valu
         data = data_context
     );
 
-    // 3. Ejecutar claude CLI (sin tool calls, solo razonamiento)
+    eprintln!("[mimir-agent] System prompt: {} bytes", system_prompt.len());
+    eprintln!("[mimir-agent] Prompt total: {} bytes", prompt.len());
+    eprintln!("[mimir-agent] Lanzando claude CLI...");
+
+    let cli_start = std::time::Instant::now();
+
+    // 3. Ejecutar claude CLI optimizado:
+    //    --no-session-persistence: no guarda sesión a disco
+    //    --permission-mode plan: sin tool calls
+    //    --debug-file: log detallado para diagnostico
+    let debug_file = format!("/tmp/mimir-claude-debug-{}.log", date);
     let output = Command::new("claude")
         .args([
             "--print",
+            "--no-session-persistence",
             "--system-prompt", &system_prompt,
             "--permission-mode", "plan",
             "--model", "haiku",
+            "--disable-slash-commands",
+            "--mcp-config", "/tmp/mimir-empty-mcp.json",
+            "--debug-file", &debug_file,
             "-p", &prompt,
         ])
         .output()
         .map_err(|e| format!("Error ejecutando claude CLI: {}. ¿Está instalado?", e))?;
 
+    let cli_elapsed = cli_start.elapsed();
+    eprintln!("[mimir-agent] Claude CLI terminó en {:.1}s", cli_elapsed.as_secs_f64());
+
+    let stderr_str = String::from_utf8_lossy(&output.stderr);
+    if !stderr_str.is_empty() {
+        eprintln!("[mimir-agent] Claude stderr: {}", &stderr_str[..stderr_str.len().min(500)]);
+    }
+    eprintln!("[mimir-agent] Debug log en: {}", debug_file);
+
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("Claude CLI falló: {}", stderr));
+        return Err(format!("Claude CLI falló (exit {}): {}", output.status, stderr_str));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
+    eprintln!("[mimir-agent] Stdout: {} bytes", stdout.len());
 
     // 4. Extraer y enviar JSON
     let json_str = extract_json(&stdout)

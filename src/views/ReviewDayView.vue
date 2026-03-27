@@ -196,6 +196,7 @@ const isToday = computed(() =>
           @click="generateBlocks"
           :disabled="blocksStore.generating"
           title="Genera bloques analizando señales, actividad VCS y calendario"
+          aria-label="Generar bloques de imputación"
         >
           <Loader2 v-if="blocksStore.generating" :size="15" :stroke-width="2" class="spin" />
           <Sparkles v-else :size="15" :stroke-width="2" />
@@ -437,6 +438,10 @@ const isToday = computed(() =>
 @keyframes spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin { animation: none; }
 }
 
 /* ── Tables ── */

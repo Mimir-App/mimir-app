@@ -1,7 +1,7 @@
 # CLAUDE.md — Mimir
 
 ## Descripcion
-Mimir es un asistente inteligente de imputacion de horas. Captura automaticamente la actividad del empleado mediante senales (cada 30s), construye bloques con un algoritmo determinista, sugiere descripciones con IA, y permite imputar horas a Odoo.
+Mimir es un asistente inteligente de imputacion de horas. Captura automaticamente la actividad del empleado mediante senales (cada 30s), genera bloques bajo demanda usando un agente Claude Code CLI que analiza senales + actividad VCS + calendario, y permite imputar horas a Odoo.
 
 **Version actual: v0.7.0**
 
@@ -25,7 +25,7 @@ python -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 python -m mimir_daemon      # Arranca daemon (capture + server)
-pytest tests/ -v            # Tests del daemon (~156 tests)
+pytest tests/ -v            # Tests del daemon (~155 tests)
 
 # Build
 bash scripts/build.sh capture   # Solo capture
@@ -59,8 +59,9 @@ cd src-tauri && cargo check  # Rust check
 - `src/` — Frontend Vue 3 + TypeScript
 - `src-tauri/` — Backend Rust (Tauri 2)
 - `daemon/` — Daemon Python (dos procesos: capture y server)
-- mimir-capture: puerto 9476, systemd user service, poller + signals + tray + health
+- mimir-capture: puerto 9476, systemd user service, poller + signals + tray + health (solo captura senales, no genera bloques)
 - mimir-server: puerto 9477, lanzado por Tauri como child process, FastAPI completo
+- Agente Claude Code CLI: genera bloques bajo demanda invocado desde Tauri (`timesheet-generator.md`)
 - SQLite compartida entre ambos procesos (WAL mode)
 - Tablas: blocks, signals, block_signals, ai_cache, source_tokens, preferences_cache, item_preferences, notifications, context_mappings, context_affinity
 - Vistas: Dashboard, ReviewDay (revision diaria), Issues, MergeRequests, Discover, Timesheets, Settings
