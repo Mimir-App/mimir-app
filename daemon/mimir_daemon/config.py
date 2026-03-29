@@ -37,6 +37,8 @@ class DaemonConfig:
     capture_idle: bool = True
     capture_audio: bool = True
     capture_ssh: bool = True
+    capture_browser_history: bool = False
+    browser_history_browsers: list[str] | None = None  # None = todos los detectados
 
     @classmethod
     def load(cls, path: Path | None = None) -> "DaemonConfig":

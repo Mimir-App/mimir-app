@@ -12,6 +12,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("/config/detected-browsers")
+async def get_detected_browsers() -> list[dict]:
+    """Detecta navegadores instalados comprobando rutas conocidas de historial."""
+    from ..browser_history import detect_browsers
+    return detect_browsers()
+
+
 @router.get("/config")
 async def get_config(request: Request) -> dict:
     """Devuelve la configuracion actual del daemon recibida desde Tauri."""

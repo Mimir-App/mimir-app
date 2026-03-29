@@ -586,6 +586,13 @@ onUnmounted(() => {
             </div>
             <input type="checkbox" v-model="configStore.config.capture_ssh" />
           </label>
+          <label class="toggle-row">
+            <div class="toggle-info">
+              <span class="toggle-name">Historial del navegador</span>
+              <span class="toggle-hint">Lee el historial al generar bloques (Chrome, Firefox, etc.)</span>
+            </div>
+            <input type="checkbox" v-model="configStore.config.capture_browser_history" />
+          </label>
         </div>
       </div>
 

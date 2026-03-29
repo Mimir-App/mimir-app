@@ -22,6 +22,19 @@ const daemonStore = useDaemonStore();
 const togglingCapture = ref(false);
 const togglingServer = ref(false);
 
+// Claude CLI status
+const cliStatus = ref<{ installed: boolean; authenticated: boolean; version: string | null; account: string | null } | null>(null);
+
+async function checkCli() {
+  try {
+    cliStatus.value = await api.checkClaudeCli();
+  } catch {
+    cliStatus.value = null;
+  }
+}
+
+checkCli();
+
 interface OdooStatus { configured: boolean; client_type: string | null; }
 
 const odooIntegrationStatus = computed((): OdooStatus => {
@@ -214,6 +227,25 @@ async function toggleServer() {
               Desconectar
             </button>
           </td>
+        </tr>
+        <tr>
+          <td class="service-name">Agente Claude Code <HelpTooltip text="Genera bloques de imputacion analizando señales, actividad VCS y calendario usando Claude Code CLI. Configurar en la pestaña Agente." /></td>
+          <td>
+            <span v-if="!cliStatus" class="badge off">Comprobando...</span>
+            <span v-else-if="cliStatus.installed && cliStatus.authenticated" class="badge ok">Activo</span>
+            <span v-else-if="cliStatus.installed" class="badge warn">Sin sesion</span>
+            <span v-else class="badge off">No instalado</span>
+          </td>
+          <td class="mono">&mdash;</td>
+          <td class="detail">
+            <template v-if="cliStatus?.installed && cliStatus?.authenticated">
+              {{ cliStatus.version }} — {{ cliStatus.account || 'Sesion activa' }}
+              <template v-if="configStore.config.agents_repo_enabled"> — Repo activo</template>
+            </template>
+            <template v-else-if="cliStatus?.installed">Ejecuta: claude auth login</template>
+            <template v-else>Instalar desde claude.ai/code</template>
+          </td>
+          <td></td>
         </tr>
       </tbody>
     </table>

@@ -44,6 +44,8 @@ pub struct AppConfig {
     pub capture_idle: bool,
     pub capture_audio: bool,
     pub capture_ssh: bool,
+    pub capture_browser_history: bool,
+    pub browser_history_browsers: Vec<String>,
     pub inactivity_threshold_minutes: u32,
     pub gitlab_priority_labels: Vec<PriorityLabelMapping>,
     pub issue_notes_count: u32,
@@ -110,6 +112,8 @@ impl Default for AppConfig {
             capture_idle: true,
             capture_audio: true,
             capture_ssh: true,
+            capture_browser_history: false,
+            browser_history_browsers: vec![],
             inactivity_threshold_minutes: 5,
             gitlab_priority_labels: vec![
                 PriorityLabelMapping { label: "priority::critical".to_string(), weight: 100 },

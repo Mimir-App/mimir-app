@@ -64,3 +64,9 @@ pub async fn push_config_to_daemon(config: AppConfig) -> Result<serde_json::Valu
 pub async fn get_integration_status() -> Result<serde_json::Value, String> {
     get_client().get("/config/integration-status").await
 }
+
+/// Detecta navegadores instalados en el sistema.
+#[tauri::command]
+pub async fn get_detected_browsers() -> Result<serde_json::Value, String> {
+    get_client().get("/config/detected-browsers").await
+}

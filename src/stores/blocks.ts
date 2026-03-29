@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { ActivityBlock, Signal } from '../lib/types';
+import type { ActivityBlock, Signal, ReviewResult } from '../lib/types';
 import { api } from '../lib/api';
 
 export const useBlocksStore = defineStore('blocks', () => {
@@ -120,6 +120,32 @@ export const useBlocksStore = defineStore('blocks', () => {
     }
   }
 
+  // --- Review ---
+
+  const reviewing = ref(false);
+  const reviewError = ref<string | null>(null);
+  const reviewResult = ref<ReviewResult | null>(null);
+
+  async function reviewBlocks(date?: string) {
+    reviewing.value = true;
+    reviewError.value = null;
+    reviewResult.value = null;
+    try {
+      const d = date ?? selectedDate.value;
+      reviewResult.value = await api.reviewBlocksWithAgent(d) as ReviewResult;
+    } catch (e) {
+      reviewError.value = e instanceof Error ? e.message : String(e);
+      throw e;
+    } finally {
+      reviewing.value = false;
+    }
+  }
+
+  function clearReview() {
+    reviewResult.value = null;
+    reviewError.value = null;
+  }
+
   const signals = ref<Signal[]>([]);
   const signalsLoading = ref(false);
 
@@ -168,5 +194,10 @@ export const useBlocksStore = defineStore('blocks', () => {
     fetchSignals,
     splitBlock,
     mergeBlocks,
+    reviewing,
+    reviewError,
+    reviewResult,
+    reviewBlocks,
+    clearReview,
   };
 });
