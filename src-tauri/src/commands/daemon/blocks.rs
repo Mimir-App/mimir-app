@@ -88,72 +88,98 @@ pub async fn generate_blocks_with_agent(date: String) -> Result<serde_json::Valu
     eprintln!("[mimir-agent] Datos recopilados para {}: {} bytes", date, data_context.len());
     eprintln!("[mimir-agent] Data JSON:\n{}", serde_json::to_string_pretty(&gen_data).unwrap_or_default());
 
-    // 2. Buscar agente y reglas de matching
+    // 2. Determinar modo de ejecución: repo de agentes o agente por defecto
     let home = std::env::var("HOME").unwrap_or_default();
-    let agent_paths = [
-        "/usr/share/mimir/agents/timesheet-generator.md".to_string(),
-        format!("{}/.local/share/mimir/agents/timesheet-generator.md", home),
-        std::env::current_dir()
-            .unwrap_or_default()
-            .join(".claude/agents/timesheet-generator.md")
-            .to_string_lossy()
-            .to_string(),
-        "/opt/Mimir/mimir-app/.claude/agents/timesheet-generator.md".to_string(),
-    ];
-    let agent_path = agent_paths.into_iter()
-        .find(|p| std::path::Path::new(p).exists())
-        .ok_or_else(|| "No se encontró timesheet-generator.md".to_string())?;
+    let agents_repo_dir = format!("{}/.config/mimir/agents", home);
+    let agents_repo_exists = std::path::Path::new(&agents_repo_dir).join(".git").exists();
 
-    let agent_content = std::fs::read_to_string(&agent_path)
-        .map_err(|e| format!("Error leyendo agente: {}", e))?;
-
-    // Leer reglas de matching (opcional)
-    let rules_paths = [
-        format!("{}/.config/mimir/timesheet-rules.md", home),
-        "/usr/share/mimir/agents/timesheet-rules.md".to_string(),
-    ];
-    let rules = rules_paths.iter()
-        .find(|p| std::path::Path::new(p).exists())
-        .and_then(|p| std::fs::read_to_string(p).ok())
-        .unwrap_or_default();
-
-    let system_prompt = if rules.is_empty() {
-        agent_content
-    } else {
-        format!("{}\n\n## Reglas de matching del usuario\n\n{}", agent_content, rules)
-    };
+    // Leer config para saber si usar repo
+    let config = crate::commands::config::get_config().unwrap_or_default();
+    let use_repo = config.agents_repo_enabled && agents_repo_exists;
 
     let prompt = format!(
-        "Genera bloques para {date}. NO ejecutes comandos. Datos:\n\n{data}",
+        "Genera bloques para {date}. NO ejecutes comandos. Devuelve SOLO JSON. Datos:\n\n{data}",
         date = date,
         data = data_context
     );
 
-    eprintln!("[mimir-agent] System prompt: {} bytes", system_prompt.len());
-    eprintln!("[mimir-agent] Prompt total: {} bytes", prompt.len());
-    eprintln!("[mimir-agent] Lanzando claude CLI...");
-
     let cli_start = std::time::Instant::now();
-
-    // 3. Ejecutar claude CLI optimizado:
-    //    --no-session-persistence: no guarda sesión a disco
-    //    --permission-mode plan: sin tool calls
-    //    --debug-file: log detallado para diagnostico
     let debug_file = format!("/tmp/mimir-claude-debug-{}.log", date);
-    let output = Command::new("claude")
-        .args([
-            "--print",
-            "--no-session-persistence",
-            "--system-prompt", &system_prompt,
-            "--permission-mode", "plan",
-            "--model", "haiku",
-            "--disable-slash-commands",
-            "--mcp-config", "/tmp/mimir-empty-mcp.json",
-            "--debug-file", &debug_file,
-            "-p", &prompt,
-        ])
-        .output()
-        .map_err(|e| format!("Error ejecutando claude CLI: {}. ¿Está instalado?", e))?;
+
+    let output = if use_repo {
+        // Modo repo: usar el repo como working directory.
+        // Claude lee CLAUDE.md y .claude/ del repo automaticamente.
+        eprintln!("[mimir-agent] Usando repo de agentes: {}", agents_repo_dir);
+        eprintln!("[mimir-agent] Prompt: {} bytes", prompt.len());
+        eprintln!("[mimir-agent] Lanzando claude CLI (modo repo)...");
+
+        Command::new("claude")
+            .args([
+                "--print",
+                "--no-session-persistence",
+                "--permission-mode", "plan",
+                "--model", "haiku",
+                "--disable-slash-commands",
+                "--mcp-config", "/tmp/mimir-empty-mcp.json",
+                "--debug-file", &debug_file,
+                "-p", &prompt,
+            ])
+            .current_dir(&agents_repo_dir)
+            .output()
+    } else {
+        // Modo por defecto: buscar agente en rutas conocidas + system prompt
+        let agent_paths = [
+            "/usr/share/mimir/agents/timesheet-generator.md".to_string(),
+            format!("{}/.local/share/mimir/agents/timesheet-generator.md", home),
+            std::env::current_dir()
+                .unwrap_or_default()
+                .join(".claude/agents/timesheet-generator.md")
+                .to_string_lossy()
+                .to_string(),
+            "/opt/Mimir/mimir-app/.claude/agents/timesheet-generator.md".to_string(),
+        ];
+        let agent_path = agent_paths.into_iter()
+            .find(|p| std::path::Path::new(p).exists())
+            .ok_or_else(|| "No se encontró timesheet-generator.md".to_string())?;
+
+        let agent_content = std::fs::read_to_string(&agent_path)
+            .map_err(|e| format!("Error leyendo agente: {}", e))?;
+
+        // Leer reglas de matching (opcional)
+        let rules_paths = [
+            format!("{}/.config/mimir/timesheet-rules.md", home),
+            "/usr/share/mimir/agents/timesheet-rules.md".to_string(),
+        ];
+        let rules = rules_paths.iter()
+            .find(|p| std::path::Path::new(p).exists())
+            .and_then(|p| std::fs::read_to_string(p).ok())
+            .unwrap_or_default();
+
+        let system_prompt = if rules.is_empty() {
+            agent_content
+        } else {
+            format!("{}\n\n## Reglas de matching del usuario\n\n{}", agent_content, rules)
+        };
+
+        eprintln!("[mimir-agent] Usando agente por defecto: system prompt {} bytes", system_prompt.len());
+        eprintln!("[mimir-agent] Prompt: {} bytes", prompt.len());
+        eprintln!("[mimir-agent] Lanzando claude CLI (modo default)...");
+
+        Command::new("claude")
+            .args([
+                "--print",
+                "--no-session-persistence",
+                "--system-prompt", &system_prompt,
+                "--permission-mode", "plan",
+                "--model", "haiku",
+                "--disable-slash-commands",
+                "--mcp-config", "/tmp/mimir-empty-mcp.json",
+                "--debug-file", &debug_file,
+                "-p", &prompt,
+            ])
+            .output()
+    }
+    .map_err(|e| format!("Error ejecutando claude CLI: {}. ¿Está instalado?", e))?;
 
     let cli_elapsed = cli_start.elapsed();
     eprintln!("[mimir-agent] Claude CLI terminó en {:.1}s", cli_elapsed.as_secs_f64());

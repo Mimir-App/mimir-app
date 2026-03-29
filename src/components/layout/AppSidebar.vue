@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDaemonStore } from '../../stores/daemon';
+import { useConfigStore } from '../../stores/config';
 import {
   LayoutDashboard,
   ClipboardCheck,
@@ -15,17 +16,22 @@ import {
 const route = useRoute();
 const router = useRouter();
 const daemonStore = useDaemonStore();
+const configStore = useConfigStore();
 const collapsed = ref(false);
 
-const navItems = [
-  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/review', label: 'Revisar Día', icon: ClipboardCheck },
-  { path: '/issues', label: 'Tareas', icon: CircleDot },
-  { path: '/merge-requests', label: 'Ramas', icon: GitBranch },
-  { path: '/discover', label: 'Descubrir', icon: Compass },
-  { path: '/timesheets', label: 'Parte de horas', icon: Clock },
-  { path: '/settings', label: 'Ajustes', icon: Settings },
+const allNavItems = [
+  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, configKey: 'section_dashboard' as const },
+  { path: '/review', label: 'Revisar Día', icon: ClipboardCheck, configKey: null },
+  { path: '/issues', label: 'Tareas', icon: CircleDot, configKey: 'section_issues' as const },
+  { path: '/merge-requests', label: 'Ramas', icon: GitBranch, configKey: 'section_merge_requests' as const },
+  { path: '/discover', label: 'Descubrir', icon: Compass, configKey: 'section_discover' as const },
+  { path: '/timesheets', label: 'Parte de horas', icon: Clock, configKey: 'section_timesheets' as const },
+  { path: '/settings', label: 'Ajustes', icon: Settings, configKey: null },
 ];
+
+const navItems = computed(() =>
+  allNavItems.filter(item => !item.configKey || configStore.config[item.configKey])
+);
 
 const currentPath = computed(() => route.path);
 

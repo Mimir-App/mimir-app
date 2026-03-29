@@ -58,7 +58,7 @@ async function loadNotes(mr: GitLabMergeRequest) {
   loadingNotes.value = true;
   try {
     const perPage = configStore.config.issue_notes_count || 5;
-    const projectId = encodeURIComponent(mr.project_path);
+    const projectId = mr.project_path;
     notes.value = await api.getMRNotes(projectId, mr.iid, perPage);
   } catch {
     notes.value = [];
@@ -75,7 +75,7 @@ async function loadConflicts(mr: GitLabMergeRequest) {
   }
   loadingConflicts.value = true;
   try {
-    const projectId = encodeURIComponent(mr.project_path);
+    const projectId = mr.project_path;
     conflicts.value = await api.getMRConflicts(projectId, mr.iid);
   } catch {
     conflicts.value = [];

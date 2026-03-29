@@ -62,7 +62,7 @@ async def get_gitlab_labels(request: Request) -> list:
         return []
 
 
-@router.get("/gitlab/issues/{project_id}/{issue_iid}/notes")
+@router.get("/gitlab/issues/{project_id:path}/{issue_iid}/notes")
 async def get_gitlab_issue_notes(request: Request, project_id: str, issue_iid: int) -> list:
     """Obtiene notas de usuario de una issue de GitLab."""
     source_registry = request.app.state.source_registry
@@ -90,7 +90,7 @@ async def search_gitlab_merge_requests(request: Request, q: str = Query(..., min
         return []
 
 
-@router.get("/gitlab/merge_requests/{project_id}/{mr_iid}/notes")
+@router.get("/gitlab/merge_requests/{project_id:path}/{mr_iid}/notes")
 async def get_gitlab_mr_notes(request: Request, project_id: str, mr_iid: int) -> list:
     """Obtiene notas de usuario de un MR de GitLab."""
     source_registry = request.app.state.source_registry
@@ -104,7 +104,7 @@ async def get_gitlab_mr_notes(request: Request, project_id: str, mr_iid: int) ->
         return []
 
 
-@router.get("/gitlab/merge_requests/{project_id}/{mr_iid}/conflicts")
+@router.get("/gitlab/merge_requests/{project_id:path}/{mr_iid}/conflicts")
 async def get_gitlab_mr_conflicts(request: Request, project_id: str, mr_iid: int) -> list:
     """Obtiene archivos en conflicto de un MR."""
     source_registry = request.app.state.source_registry

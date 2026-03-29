@@ -209,9 +209,11 @@ class GitLabSource(VCSSource):
         self, project_id: str, issue_iid: int, per_page: int = 5
     ) -> list[dict]:
         """Obtiene notas de usuario de una issue (excluye system notes)."""
+        from urllib.parse import quote
+        encoded_pid = quote(project_id, safe="")
         try:
             resp = await self._client.get(
-                f"/projects/{project_id}/issues/{issue_iid}/notes",
+                f"/projects/{encoded_pid}/issues/{issue_iid}/notes",
                 params={"sort": "desc", "per_page": per_page * 2},
             )
             resp.raise_for_status()
@@ -268,9 +270,11 @@ class GitLabSource(VCSSource):
         self, project_id: str, mr_iid: int, per_page: int = 5
     ) -> list[dict]:
         """Obtiene notas de usuario de un MR (excluye system notes)."""
+        from urllib.parse import quote
+        encoded_pid = quote(project_id, safe="")
         try:
             resp = await self._client.get(
-                f"/projects/{project_id}/merge_requests/{mr_iid}/notes",
+                f"/projects/{encoded_pid}/merge_requests/{mr_iid}/notes",
                 params={"sort": "desc", "per_page": per_page * 2},
             )
             resp.raise_for_status()
@@ -282,9 +286,11 @@ class GitLabSource(VCSSource):
 
     async def get_mr_conflicts(self, project_id: str, mr_iid: int) -> list[dict]:
         """Obtiene archivos en conflicto de un MR."""
+        from urllib.parse import quote
+        encoded_pid = quote(project_id, safe="")
         try:
             resp = await self._client.get(
-                f"/projects/{project_id}/merge_requests/{mr_iid}/changes",
+                f"/projects/{encoded_pid}/merge_requests/{mr_iid}/changes",
             )
             resp.raise_for_status()
             data = resp.json()

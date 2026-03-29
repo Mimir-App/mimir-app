@@ -269,4 +269,21 @@ export interface AppConfig {
   notification_conflicts: boolean;
   notification_todos: boolean;
   odoo_refresh_interval_minutes: number;
+  // Onboarding
+  onboarding_completed: boolean;
+  // Agente Claude Code CLI
+  generation_fallback: 'disabled' | 'api';
+  agents_repo_url: string;
+  agents_repo_enabled: boolean;
+  agents_custom_prompt: string;
+  agents_auto_update: boolean;
+  agents_update_mode: 'startup_interval' | 'fixed_time';
+  agents_update_interval_hours: number;
+  agents_update_time: string;
+  // Visibilidad de secciones
+  section_dashboard: boolean;
+  section_issues: boolean;
+  section_merge_requests: boolean;
+  section_discover: boolean;
+  section_timesheets: boolean;
 }

@@ -6,7 +6,8 @@ import App from './App.vue';
 const router = createRouter({
   history: createWebHistory(),
   routes: [
-    { path: '/', redirect: '/dashboard' },
+    { path: '/', redirect: '/review' },
+    { path: '/onboarding', component: () => import('./views/OnboardingView.vue') },
     { path: '/dashboard', component: () => import('./views/DashboardView.vue') },
     { path: '/review', component: () => import('./views/ReviewDayView.vue') },
     { path: '/issues', component: () => import('./views/IssuesView.vue') },
