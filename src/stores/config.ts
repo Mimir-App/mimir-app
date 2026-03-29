@@ -37,6 +37,8 @@ const DEFAULT_CONFIG: AppConfig = {
   capture_idle: true,
   capture_audio: true,
   capture_ssh: true,
+  capture_browser_history: false,
+  browser_history_browsers: [] as string[],
   inactivity_threshold_minutes: 5,
   gitlab_priority_labels: [],
   issue_notes_count: 5,

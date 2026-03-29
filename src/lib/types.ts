@@ -36,6 +36,36 @@ export interface ContextMapping {
   match?: 'exact' | 'partial' | 'history';
 }
 
+// --- Review ---
+
+export type ReviewIssueSeverity = 'error' | 'warning' | 'info';
+
+export interface ReviewIssue {
+  block_index: number;
+  type: string;
+  severity: ReviewIssueSeverity;
+  message: string;
+  suggestion: string;
+}
+
+export interface ReviewSummary {
+  total_blocks: number;
+  issues_found: number;
+  errors: number;
+  warnings: number;
+  info: number;
+  coverage_percent: number;
+  total_hours: number;
+  blocks_with_project: number;
+  blocks_with_task: number;
+  avg_confidence: number;
+}
+
+export interface ReviewResult {
+  issues: ReviewIssue[];
+  summary: ReviewSummary;
+}
+
 // --- Signals ---
 
 export interface Signal {
@@ -255,6 +285,8 @@ export interface AppConfig {
   capture_idle: boolean;
   capture_audio: boolean;
   capture_ssh: boolean;
+  capture_browser_history: boolean;
+  browser_history_browsers: string[];
   inactivity_threshold_minutes: number;
   gitlab_priority_labels: Array<{ label: string; weight: number }>;
   issue_notes_count: number;

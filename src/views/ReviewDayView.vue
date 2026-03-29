@@ -6,11 +6,12 @@ import { formatHours, formatTime } from '../composables/useFormatting';
 import { api } from '../lib/api';
 import type { TimesheetEntry } from '../lib/types';
 import BlockTable from '../components/blocks/BlockTable.vue';
+import ReviewPanel from '../components/blocks/ReviewPanel.vue';
 import CollapsibleGroup from '../components/shared/CollapsibleGroup.vue';
 import StatusBanner from '../components/shared/StatusBanner.vue';
 import LoadingState from '../components/shared/LoadingState.vue';
 import CustomDatePicker from '../components/shared/CustomDatePicker.vue';
-import { ChevronLeft, ChevronRight, RefreshCw, CheckCheck, Send, Clock, CheckCircle2, AlertTriangle, Upload, Sparkles, Loader2 } from 'lucide-vue-next';
+import { ChevronLeft, ChevronRight, RefreshCw, CheckCheck, Send, Clock, CheckCircle2, AlertTriangle, Upload, Sparkles, Loader2, ClipboardCheck } from 'lucide-vue-next';
 
 const blocksStore = useBlocksStore();
 const daemonStore = useDaemonStore();
@@ -65,6 +66,7 @@ watch(() => blocksStore.selectedDate, () => {
   blocksStore.fetchBlocks();
   blocksStore.fetchSignals();
   fetchOdooEntries();
+  blocksStore.clearReview();
   syncMessage.value = '';
 });
 
@@ -111,6 +113,16 @@ async function generateBlocks() {
     fetchOdooEntries();
   } catch (e) {
     syncMessage.value = `Error generando bloques: ${blocksStore.generateError || e}`;
+    syncMessageType.value = 'error';
+  }
+}
+
+async function reviewBlocks() {
+  syncMessage.value = '';
+  try {
+    await blocksStore.reviewBlocks();
+  } catch {
+    syncMessage.value = `Error revisando bloques: ${blocksStore.reviewError}`;
     syncMessageType.value = 'error';
   }
 }
@@ -203,6 +215,17 @@ const isToday = computed(() =>
           {{ blocksStore.generating ? 'Generando...' : 'Generar bloques' }}
         </button>
         <button
+          class="btn btn-review"
+          @click="reviewBlocks"
+          :disabled="blocksStore.reviewing || blocksStore.blocks.length === 0 || blocksStore.generating"
+          title="Revisa los bloques generados con IA"
+          aria-label="Revisar bloques de imputacion"
+        >
+          <Loader2 v-if="blocksStore.reviewing" :size="15" :stroke-width="2" class="spin" />
+          <ClipboardCheck v-else :size="15" :stroke-width="2" />
+          {{ blocksStore.reviewing ? 'Revisando...' : 'Revisar' }}
+        </button>
+        <button
           class="btn btn-secondary"
           @click="confirmAll"
           :disabled="autoBlocksCount === 0"
@@ -233,8 +256,18 @@ const isToday = computed(() =>
     </StatusBanner>
 
     <StatusBanner v-if="blocksStore.generating" type="info">
-      Analizando señales, actividad VCS y calendario... Esto puede tardar hasta 60 segundos.
+      Analizando señales, actividad VCS y calendario... Esto puede tardar 2-3 minutos.
     </StatusBanner>
+
+    <StatusBanner v-if="blocksStore.reviewing" type="info">
+      Revisando bloques... Esto puede tardar 2-3 minutos.
+    </StatusBanner>
+
+    <ReviewPanel
+      v-if="blocksStore.reviewResult"
+      :result="blocksStore.reviewResult"
+      @dismiss="blocksStore.clearReview()"
+    />
 
     <LoadingState v-if="blocksStore.loading && !blocksStore.generating" text="Cargando bloques..." />
 
@@ -428,6 +461,21 @@ const isToday = computed(() =>
 }
 
 .btn-generate:disabled {
+  opacity: 0.7;
+}
+
+.btn-review {
+  background: linear-gradient(135deg, #059669, #0d9488);
+  color: white;
+  box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
+}
+
+.btn-review:hover:not(:disabled) {
+  box-shadow: 0 4px 16px rgba(5, 150, 105, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-review:disabled {
   opacity: 0.7;
 }
 

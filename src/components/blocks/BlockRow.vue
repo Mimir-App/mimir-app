@@ -204,13 +204,15 @@ async function retry() {
 
 .col-desc {
   max-width: 300px;
+  overflow: hidden;
 }
 
 .description {
-  display: inline;
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 
 .no-desc {

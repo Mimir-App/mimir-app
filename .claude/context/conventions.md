@@ -16,6 +16,8 @@
 - Todo codigo OS-specific va en `platform/`. Si aparece fuera, es un bug de arquitectura
 - No usar `from __future__ import annotations` — causa problemas con evaluacion lazy de type hints en algunos contextos
 - Version centralizada en `__init__.py`, importada por api_server.py y capture.py
+- `mappings_toml.py`: funciones puras (sin async, sin DB) para resolver reglas TOML. Importar `tomli` con fallback a `tomllib` (3.11+)
+- `browser_history.py`: funciones puras para detectar navegadores y leer historial. Copiar DB a tempfile antes de leer (browser locks). Ejecutar en `run_in_executor` desde async
 
 ### TypeScript / Vue (frontend)
 - TypeScript strict mode
@@ -24,7 +26,7 @@
 - Componentes shared: CustomSelect, CustomDatePicker, CollapsibleGroup, ViewToolbar, DashboardGrid, StatusBanner, LoadingState, EmptyState, HelpTooltip, FilterBar, ScoreBadge, IntegrationCard, ModalDialog, NotificationBell, ContextMenu, SourceIcon, ConfidenceBadge, SyncStatusBadge
 - Componentes settings: SettingGroup, SettingRow, CredentialField + tabs individuales (GeneralTab, CaptureTab, OdooTab, GitLabTab, AITab, GoogleTab, ServicesTab, NotificationsTab)
 - Componentes dashboard/widgets: JornadaWidget, ServiciosWidget, HorasHoyWidget, ProgresoWidget, TopIssuesWidget, MRsPendientesWidget, TodosWidget, CalendarioWidget, HorasSemanaWidget, IssuesProyectoWidget + WidgetGallery, WidgetConfigModal
-- Componentes blocks: BlockRow, BlockTable, BlockEditor
+- Componentes blocks: BlockRow, BlockTable, BlockEditor, ReviewPanel
 - Componentes issues: IssueTable, IssueDetail, IssueDetailModal
 - Componentes merge_requests: MRTable, MRDetail, MRDetailModal
 - Componentes discover: DiscoverTable
@@ -41,7 +43,7 @@
   - `useDaemon` — estado y control del daemon
   - `useScoring` — scoring de issues/MRs
 - Pinia: un store por dominio (`blocks`, `config`, `daemon`, `issues`, `merge_requests`, `timesheets`, `odoo`)
-- El store `blocks` incluye signals state (fetchSignals, splitBlock, mergeBlocks) + generacion bajo demanda (generateBlocks, generating, generateError)
+- El store `blocks` incluye signals state (fetchSignals, splitBlock, mergeBlocks) + generacion bajo demanda (generateBlocks, generating, generateError) + revision (reviewBlocks, reviewing, reviewResult, clearReview)
 - Comunicacion con daemon via Tauri invoke commands (proxy HTTP en Rust)
 - No usar `<select>` nativo — usar `CustomSelect` para consistencia visual
 - Formatos de horas y fechas siempre via `useFormatting` (nunca `.toFixed()` o `.toLocaleDateString()` directo)
@@ -84,6 +86,8 @@
 - Server daemon lanzado como child process, matado al cerrar la app
 - DaemonClient timeout 30s (endpoints externos pueden ser lentos)
 - urlencoding crate para encode de parametros en URLs
+- Agentes CLI: helpers `find_agent()`, `build_full_prompt()`, `invoke_claude()` en `blocks.rs`. Siempre `--system-prompt`, repo como `cwd` si tiene el agente o CLAUDE.md
+- MCP config vacio: `invoke_claude` crea `/tmp/mimir-empty-mcp.json` automaticamente
 
 ### General
 - Tests: para cada adaptador, al menos un test con mock del servicio externo (~156 tests en daemon)

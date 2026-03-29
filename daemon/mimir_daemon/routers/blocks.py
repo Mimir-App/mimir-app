@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from ..integrations.base import TimesheetEntryData
+from ..mappings_toml import load_mappings, resolve_all
 from ..server_models import (
     BlockUpdateRequest,
     GenerateBlocksRequest,
@@ -18,6 +19,11 @@ from ..server_models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _strip_empty(d: dict) -> dict:
+    """Elimina campos con valor falsy (vacío, 0, None) de un dict."""
+    return {k: v for k, v in d.items() if v}
 
 router = APIRouter()
 
@@ -38,18 +44,17 @@ async def get_blocks_summary(request: Request, date: str = Query(default=None)) 
     return await db.get_blocks_summary(date)
 
 
-@router.get("/blocks/generation-data")
-async def get_generation_data(request: Request, date: str = Query(...)) -> dict:
-    """Recopila todos los datos necesarios para generar bloques.
+async def _build_generation_data(
+    db, source_registry, registry, calendar_client, date: str,
+    app_config: dict | None = None,
+) -> dict:
+    """Recopila y compacta todos los datos necesarios para generar bloques.
 
+    Reutilizable por generation-data y review-data endpoints.
     Incluye señales, actividad VCS, calendario, proyectos Odoo,
-    tareas de proyectos relevantes, bloques existentes y context mappings.
+    tareas de proyectos relevantes, bloques existentes, context mappings,
+    resolución de mapeos TOML y opcionalmente historial de navegador.
     """
-    db = request.app.state.db
-    source_registry = request.app.state.source_registry
-    registry = request.app.state.registry
-    calendar_client = getattr(request.app.state, "calendar_client", None)
-
     # 1. Recopilar datos base en paralelo
     signals_task = db.get_signals_by_date(date)
     blocks_task = db.get_blocks_by_date(date)
@@ -95,11 +100,27 @@ async def get_generation_data(request: Request, date: str = Query(...)) -> dict:
             logger.error("Error Odoo projects: %s", e)
             return []
 
-    signals, blocks, mappings, gitlab_events, github_events, calendar_events, projects = (
+    async def get_browser_history():
+        if not (app_config or {}).get("capture_browser_history", False):
+            return []
+        try:
+            from ..browser_history import get_history_for_date
+            only = (app_config or {}).get("browser_history_browsers") or None
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                None, get_history_for_date, date, only,
+            )
+        except Exception as e:
+            logger.error("Error browser history: %s", e)
+            return []
+
+    (signals, blocks, mappings, gitlab_events, github_events,
+     calendar_events, projects, browser_history) = (
         await asyncio.gather(
             signals_task, blocks_task, mappings_task,
             get_gitlab_events(), get_github_events(),
             get_calendar_events(), get_projects(),
+            get_browser_history(),
         )
     )
 
@@ -130,38 +151,6 @@ async def get_generation_data(request: Request, date: str = Query(...)) -> dict:
             if clean and clean != branch:
                 branch_prefixes.add(clean.split("_")[0].split("/")[0].lower())
 
-    # 3. Filtrar solo proyectos Odoo relevantes (no enviar los 167)
-    matched_projects = []
-    matched_project_ids = set()
-    for proj in projects:
-        proj_name = (proj.get("name") or "").lower()
-        matched = False
-        for prefix in branch_prefixes:
-            if prefix in proj_name:
-                matched = True
-                break
-        if not matched:
-            for m in mappings:
-                if m.get("odoo_project_id") == proj["id"]:
-                    matched = True
-                    break
-        # Incluir siempre "temas internos" (reuniones)
-        if not matched and "temas internos" in proj_name:
-            matched = True
-        if matched:
-            matched_projects.append(proj)
-            matched_project_ids.add(proj["id"])
-
-    # Si no hay matches, enviar solo los 20 primeros como fallback
-    if not matched_projects:
-        matched_projects = projects[:20]
-        matched_project_ids = {p["id"] for p in matched_projects}
-
-    # 4. Obtener tareas SOLO de proyectos relevantes
-    #    Para "Temas internos" (tareas mensuales), filtrar por mes del date
-    tasks_by_project = {}
-    odoo_client = registry.timesheet if registry else None
-
     # Calcular nombre del mes en español para filtrar tareas mensuales
     _MESES = {
         1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
@@ -176,6 +165,120 @@ async def get_generation_data(request: Request, date: str = Query(...)) -> dict:
         target_month = ""
         target_year = ""
 
+    # --- Señales compactadas (necesarias para resolución TOML) ---
+    spans: list[dict] = []
+    for s in signals:
+        t = s["timestamp"][11:16]  # HH:MM
+        app = s.get("app_name", "")
+        ctx = s.get("context_key", "")
+        branch = s.get("git_branch", "")
+        meet = s.get("is_meeting", 0)
+        cal = s.get("calendar_event", "")
+        title = (s.get("window_title") or "")[:80]
+
+        parts = t.split(":")
+        t_min = int(parts[0]) * 60 + int(parts[1])
+
+        if spans:
+            cur = spans[-1]
+            cur_end_parts = cur["to"].split(":")
+            cur_end_min = int(cur_end_parts[0]) * 60 + int(cur_end_parts[1])
+            same_group = (
+                cur.get("app") == app
+                and cur.get("ctx") == ctx
+                and cur.get("branch") == branch
+                and cur.get("meet") == meet
+                and (t_min - cur_end_min) <= 5
+            )
+            if same_group:
+                cur["to"] = t
+                cur["n"] += 1
+                if title and title not in cur["_titles_set"]:
+                    cur["_titles_set"].add(title)
+                    cur["titles"].append(title)
+                if cal and not cur.get("cal"):
+                    cur["cal"] = cal
+                continue
+
+        span: dict = {
+            "from": t, "to": t, "app": app, "n": 1,
+            "ctx": ctx, "branch": branch, "meet": meet, "cal": cal,
+            "titles": [title] if title else [],
+            "_titles_set": {title} if title else set(),
+        }
+        spans.append(span)
+
+    compact_signals = []
+    for sp in spans:
+        del sp["_titles_set"]
+        sp["titles"] = sp["titles"][:5]
+        compact_signals.append(_strip_empty(sp))
+
+    # --- Calendar events: compactar ---
+    compact_calendar = [
+        _strip_empty({
+            "name": e.get("summary", ""),
+            "from": (e.get("start") or "")[11:16],
+            "to": (e.get("end") or "")[11:16],
+            "meet": 1 if e.get("is_meeting") else 0,
+        })
+        for e in calendar_events
+    ]
+
+    # --- Resolución TOML (si existe ~/.config/mimir/mappings.toml) ---
+    toml_data = load_mappings()
+    toml_result = None
+    if toml_data:
+        toml_result = resolve_all(
+            toml_data, compact_signals, compact_calendar,
+            mappings, branch_task_hints, target_month, target_year,
+        )
+        logger.info(
+            "TOML mappings resueltos: %d extra_mappings, %d project_ids",
+            len(toml_result.get("extra_mappings", [])),
+            len(toml_result.get("matched_project_ids", set())),
+        )
+
+    # 3. Filtrar solo proyectos Odoo relevantes (no enviar los 167)
+    matched_projects = []
+    matched_project_ids: set[int] = set()
+    for proj in projects:
+        proj_name = (proj.get("name") or "").lower()
+        matched = False
+        for prefix in branch_prefixes:
+            if prefix in proj_name:
+                matched = True
+                break
+        if not matched:
+            for m in mappings:
+                if m.get("odoo_project_id") == proj["id"]:
+                    matched = True
+                    break
+        if not matched and "temas internos" in proj_name:
+            matched = True
+        if matched:
+            matched_projects.append(proj)
+            matched_project_ids.add(proj["id"])
+
+    # Añadir proyectos referenciados por TOML
+    if toml_result:
+        for pid in toml_result.get("matched_project_ids", set()):
+            if pid not in matched_project_ids:
+                for proj in projects:
+                    if proj["id"] == pid:
+                        matched_projects.append(proj)
+                        matched_project_ids.add(pid)
+                        break
+
+    # Si no hay matches, enviar solo los 20 primeros como fallback
+    if not matched_projects:
+        matched_projects = projects[:20]
+        matched_project_ids = {p["id"] for p in matched_projects}
+
+    # 4. Obtener tareas SOLO de proyectos relevantes
+    tasks_by_project: dict = {}
+    odoo_client = registry.timesheet if registry else None
+
     if odoo_client and matched_project_ids:
         sem = asyncio.Semaphore(5)
 
@@ -183,8 +286,6 @@ async def get_generation_data(request: Request, date: str = Query(...)) -> dict:
             async with sem:
                 try:
                     tasks = await odoo_client.get_tasks(pid)
-                    # Para proyectos con tareas mensuales (ej: Temas internos),
-                    # filtrar solo las del mes/año relevante
                     if len(tasks) > 100 and target_month:
                         monthly = [
                             t for t in tasks
@@ -214,66 +315,8 @@ async def get_generation_data(request: Request, date: str = Query(...)) -> dict:
         len(tasks_by_project), len(preserved_blocks), branch_task_hints,
     )
 
-    # --- Compactar datos para reducir tokens enviados al LLM ---
+    # --- Compactar datos restantes ---
 
-    def _strip_empty(d: dict) -> dict:
-        """Elimina campos con valor falsy (vacío, 0, None) de un dict."""
-        return {k: v for k, v in d.items() if v}
-
-    # Señales: agregar en spans (misma app+ctx+branch, gap <= 5min)
-    spans: list[dict] = []
-    for s in signals:
-        t = s["timestamp"][11:16]  # HH:MM
-        app = s.get("app_name", "")
-        ctx = s.get("context_key", "")
-        branch = s.get("git_branch", "")
-        meet = s.get("is_meeting", 0)
-        cal = s.get("calendar_event", "")
-        title = (s.get("window_title") or "")[:80]
-
-        # Calcular minutos para detectar gaps
-        parts = t.split(":")
-        t_min = int(parts[0]) * 60 + int(parts[1])
-
-        # Intentar extender el span actual
-        if spans:
-            cur = spans[-1]
-            cur_end_parts = cur["to"].split(":")
-            cur_end_min = int(cur_end_parts[0]) * 60 + int(cur_end_parts[1])
-            same_group = (
-                cur.get("app") == app
-                and cur.get("ctx") == ctx
-                and cur.get("branch") == branch
-                and cur.get("meet") == meet
-                and (t_min - cur_end_min) <= 5
-            )
-            if same_group:
-                cur["to"] = t
-                cur["n"] += 1
-                if title and title not in cur["_titles_set"]:
-                    cur["_titles_set"].add(title)
-                    cur["titles"].append(title)
-                if cal and not cur.get("cal"):
-                    cur["cal"] = cal
-                continue
-
-        # Nuevo span
-        span: dict = {
-            "from": t, "to": t, "app": app, "n": 1,
-            "ctx": ctx, "branch": branch, "meet": meet, "cal": cal,
-            "titles": [title] if title else [],
-            "_titles_set": {title} if title else set(),
-        }
-        spans.append(span)
-
-    # Limpiar spans: quitar set interno, truncar titles, eliminar campos vacíos
-    compact_signals = []
-    for sp in spans:
-        del sp["_titles_set"]
-        sp["titles"] = sp["titles"][:5]  # max 5 títulos únicos por span
-        compact_signals.append(_strip_empty(sp))
-
-    # GitLab events: solo campos relevantes, sin vacíos
     compact_gitlab = [
         _strip_empty({
             "t": (e.get("created_at") or "")[11:16],
@@ -291,7 +334,6 @@ async def get_generation_data(request: Request, date: str = Query(...)) -> dict:
         for e in gitlab_events
     ]
 
-    # GitHub events: compactar (antes se enviaban crudos)
     compact_github = [
         _strip_empty({
             "t": (e.get("created_at") or "")[11:16],
@@ -303,27 +345,17 @@ async def get_generation_data(request: Request, date: str = Query(...)) -> dict:
         for e in github_events
     ]
 
-    # Calendar events: compactar (antes se enviaban crudos)
-    compact_calendar = [
-        _strip_empty({
-            "name": e.get("summary", ""),
-            "from": (e.get("start") or "")[11:16],
-            "to": (e.get("end") or "")[11:16],
-            "meet": 1 if e.get("is_meeting") else 0,
-        })
-        for e in calendar_events
-    ]
+    # Calendar: usar eventos enriquecidos por TOML si existen
+    if toml_result and toml_result.get("enriched_calendar"):
+        compact_calendar = toml_result["enriched_calendar"]
 
-    # Proyectos: solo id y name
     compact_projects = [{"id": p["id"], "name": p["name"]} for p in matched_projects]
 
-    # Tareas: solo id y name
     compact_tasks = {
         pid: [{"id": t["id"], "name": t["name"]} for t in tasks]
         for pid, tasks in tasks_by_project.items()
     }
 
-    # Bloques preservados: solo rangos y proyecto, sin vacíos
     compact_preserved = [
         _strip_empty({
             "start": b["start_time"][:16],
@@ -334,7 +366,7 @@ async def get_generation_data(request: Request, date: str = Query(...)) -> dict:
         for b in preserved_blocks
     ]
 
-    # Context mappings: compactar (antes se enviaban crudos)
+    # Context mappings: DB compactados
     compact_mappings = [
         _strip_empty({
             "ctx": m.get("context_key", ""),
@@ -344,7 +376,13 @@ async def get_generation_data(request: Request, date: str = Query(...)) -> dict:
         for m in mappings
     ]
 
-    return {
+    # Mergear TOML extra_mappings (TOML overrides DB para mismo ctx)
+    if toml_result:
+        toml_ctx_set = {m["ctx"] for m in toml_result.get("extra_mappings", [])}
+        compact_mappings = [m for m in compact_mappings if m.get("ctx") not in toml_ctx_set]
+        compact_mappings.extend(toml_result["extra_mappings"])
+
+    result = {
         "date": date,
         "signals": compact_signals,
         "gitlab_events": compact_gitlab,
@@ -355,6 +393,68 @@ async def get_generation_data(request: Request, date: str = Query(...)) -> dict:
         "preserved_blocks": compact_preserved,
         "context_mappings": compact_mappings,
         "branch_task_hints": branch_task_hints,
+    }
+
+    # Añadir defaults del TOML si existen
+    if toml_result and toml_result.get("defaults"):
+        result["defaults"] = toml_result["defaults"]
+
+    if browser_history:
+        result["browser_history"] = browser_history
+        logger.info("Browser history: %d dominios para %s", len(browser_history), date)
+
+    return result
+
+
+@router.get("/blocks/generation-data")
+async def get_generation_data(request: Request, date: str = Query(...)) -> dict:
+    """Recopila todos los datos necesarios para generar bloques."""
+    return await _build_generation_data(
+        db=request.app.state.db,
+        source_registry=request.app.state.source_registry,
+        registry=request.app.state.registry,
+        calendar_client=getattr(request.app.state, "calendar_client", None),
+        date=date,
+        app_config=request.app.state.app_config,
+    )
+
+
+@router.get("/blocks/review-data")
+async def get_review_data(request: Request, date: str = Query(...)) -> dict:
+    """Devuelve generation-data + bloques actuales para el agente reviewer."""
+    db = request.app.state.db
+
+    gen_data = await _build_generation_data(
+        db=db,
+        source_registry=request.app.state.source_registry,
+        registry=request.app.state.registry,
+        calendar_client=getattr(request.app.state, "calendar_client", None),
+        date=date,
+        app_config=request.app.state.app_config,
+    )
+
+    blocks = await db.get_blocks_by_date(date)
+    compact_blocks = [
+        _strip_empty({
+            "start": b["start_time"][:16],
+            "end": b["end_time"][:16],
+            "dur": b.get("duration_minutes", 0),
+            "type": b.get("app_name", ""),
+            "desc": b.get("ai_description") or b.get("user_description") or "",
+            "pid": b.get("odoo_project_id"),
+            "pname": b.get("odoo_project_name", ""),
+            "tid": b.get("odoo_task_id"),
+            "tname": b.get("odoo_task_name", ""),
+            "conf": b.get("ai_confidence"),
+            "ctx": b.get("context_key", ""),
+            "status": b.get("status", ""),
+        })
+        for b in blocks
+    ]
+
+    return {
+        "blocks": compact_blocks,
+        "generation_data": gen_data,
     }
 
 

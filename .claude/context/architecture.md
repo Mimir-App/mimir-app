@@ -1,6 +1,6 @@
 ## Arquitectura
 
-Version actual: v0.7.0. Multi-source (GitHub + GitLab) + Descubrir + auto-asignacion + context affinity + GitHub OAuth + generacion de bloques bajo demanda con agente Claude Code CLI.
+Version actual: v0.8.0. Multi-source (GitHub + GitLab) + Descubrir + auto-asignacion + context affinity + GitHub OAuth + generacion de bloques bajo demanda + revision de bloques + mapeos TOML + historial de navegador.
 
 ### Procesos
 
@@ -38,7 +38,7 @@ Version actual: v0.7.0. Multi-source (GitHub + GitLab) + Descubrir + auto-asigna
 | GitLab | Personal Access Token | Issues, MRs, TODOs, scoring, notas, conflictos, labels |
 | GitHub | PAT o OAuth Device Flow | Issues, PRs, search, comments, reviews, files, notifications, labels |
 | Google Calendar | OAuth2 | Eventos actuales, eventos por fecha, deteccion reuniones |
-| Claude Code CLI | Suscripcion | Generacion de bloques bajo demanda (agente timesheet-generator) |
+| Claude Code CLI | Suscripcion | Generacion y revision de bloques bajo demanda (timesheet-generator + timesheet-reviewer) |
 | Gemini/Claude/OpenAI | API key | Descripciones automaticas de bloques |
 
 ### Multi-source VCS
@@ -76,13 +76,18 @@ Flujo: usuario pulsa "Generar bloques" en ReviewDay → Tauri recopila datos via
 - Actividad VCS: GitLab (`/users/{id}/events`) y GitHub (`/users/{username}/events`)
 - Google Calendar: eventos del dia (`/calendars/primary/events`)
 - Proyectos y tareas Odoo (filtrados por relevancia)
+- Historial de navegador: Chrome/Firefox/Brave/etc. agrupado por dominio (on-demand, configurable)
+- Mapeos TOML: `~/.config/mimir/mappings.toml` con reglas admin
 
-**Agente Claude Code CLI:**
-- `.claude/agents/timesheet-generator.md`: instrucciones del agente
+**Agentes Claude Code CLI:**
+- `.claude/agents/timesheet-generator.md`: genera bloques de imputacion
+- `.claude/agents/timesheet-reviewer.md`: revisa bloques generados y detecta problemas
 - `~/.config/mimir/timesheet-rules.md`: reglas de matching configurables por usuario
-- Modelo: haiku (optimizado para velocidad, ~2.5 min)
+- Modelo: haiku (optimizado para velocidad, ~2 min)
 - Sin tool calls: datos pre-recopilados en el prompt
 - Sin plugins MCP: `--disable-slash-commands --mcp-config empty`
+- Helpers Rust: `find_agent()`, `build_full_prompt()`, `invoke_claude()` en `blocks.rs`
+- Prioridad agente: repo clonado > built-in. Si repo no tiene el agente, cae a built-in + CLAUDE.md del repo como contexto
 
 **Estrategia incremental:**
 - Bloques confirmed/synced/error se preservan
@@ -91,8 +96,45 @@ Flujo: usuario pulsa "Generar bloques" en ReviewDay → Tauri recopila datos via
 **Matching Odoo:**
 - branch_task_hints: extrae patron `<proyecto>_<tarea>` de ramas VCS
 - tasks_by_project: tareas abiertas de proyectos relevantes (filtradas por mes para tareas mensuales)
-- context_mappings: mapeos aprendidos como referencia
+- context_mappings: mapeos aprendidos (SQLite) + mapeos TOML admin (prioridad TOML sobre DB)
 - Reglas de usuario: reuniones → tareas mensuales en "Temas internos"
+
+### Mapeos TOML
+
+Archivo `~/.config/mimir/mappings.toml` con reglas admin-managed. Se resuelve en el daemon (`mappings_toml.py`) antes de enviar datos a Claude (mode-agnostic).
+
+**Tipos de reglas:**
+- `[[context_rules]]`: context_key exacto → proyecto + tarea Odoo
+- `[[branch_rules]]`: patron de rama → proyecto (se cruza con senales del dia)
+- `[[calendar_rules]]`: patron de evento → proyecto + tarea (con expansion `{month}`/`{year}`)
+- `[[app_rules]]`: app activa → proyecto (solo si no hay ctx git)
+- `[defaults]`: proyecto y confidence por defecto
+
+**Resolucion:** `_build_generation_data()` en `blocks.py` llama a `resolve_all()` que genera context_mappings virtuales, enriquece calendar_events y recopila project IDs referenciados.
+
+### Historial de navegador
+
+Modulo `browser_history.py`: lee DBs SQLite locales de navegadores Chromium (Chrome, Brave, Vivaldi, Edge) y Firefox.
+
+- Activado por config: `capture_browser_history: bool` (default false)
+- Navegadores seleccionables: `browser_history_browsers: list[str]` (default todos)
+- Deteccion automatica: `detect_browsers()` busca DBs en rutas conocidas + icono del sistema
+- Lectura segura: copia DB a tempfile (browser la bloquea) + WAL
+- Formato compacto: agrupado por dominio, top 50, con rango temporal y titulos
+- Se lee on-demand al generar bloques (no por senal)
+- Endpoint: `GET /config/detected-browsers` retorna navegadores con icono base64
+
+### Revision de bloques
+
+Flujo: usuario pulsa "Revisar" en ReviewDay → Tauri obtiene datos via `/blocks/review-data` → invoca `claude --print` con agente timesheet-reviewer.md → parsea JSON → muestra ReviewPanel.
+
+**Verificaciones del reviewer:**
+- Temporales: solapamientos, gaps, coherencia duracion, orden cronologico
+- Asignacion: confidence baja, proyecto incorrecto, tarea inexistente
+- Contenido: descripcion generica, tipo incorrecto, sources incompletos
+- Cobertura: horas totales razonables, senales sin cubrir
+
+**UI:** ReviewPanel colapsable con barra de resumen + lista de issues por severidad (error/warning/info)
 
 ### Empaquetado
 
@@ -137,9 +179,20 @@ Frontend (Vue 3 + Tauri)
     |
     |   Tauri command: generate_blocks_with_agent
     |      |
-    |      | GET /blocks/generation-data (signals + VCS + calendar + Odoo)
+    |      | GET /blocks/generation-data (signals + VCS + calendar + Odoo + TOML + browser)
     |      |
-    |      | claude --print --model haiku (agente timesheet-generator.md)
+    |      | claude --print --model haiku --system-prompt (timesheet-generator.md + rules)
     |      |
     |      | POST /blocks/generate (JSON -> SQLite)
+    |
+    |
+    |--- Revision de bloques (bajo demanda) ---
+    |
+    |   Tauri command: review_blocks_with_agent
+    |      |
+    |      | GET /blocks/review-data (bloques + generation-data)
+    |      |
+    |      | claude --print --model haiku --system-prompt (timesheet-reviewer.md + rules)
+    |      |
+    |      | JSON -> ReviewPanel (no modifica datos)
 ```
