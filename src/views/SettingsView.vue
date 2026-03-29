@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onMounted, ref, computed } from 'vue';
+import { onMounted, ref, computed, watch } from 'vue';
+import { useRouter, onBeforeRouteLeave } from 'vue-router';
 import { useConfigStore } from '../stores/config';
 import { useDaemonStore } from '../stores/daemon';
 import GeneralTab from '../components/settings/GeneralTab.vue';
@@ -7,10 +8,13 @@ import CaptureTab from '../components/settings/CaptureTab.vue';
 import OdooTab from '../components/settings/OdooTab.vue';
 import GitLabTab from '../components/settings/GitLabTab.vue';
 import AITab from '../components/settings/AITab.vue';
+import AgentTab from '../components/settings/AgentTab.vue';
 import GoogleTab from '../components/settings/GoogleTab.vue';
 import ServicesTab from '../components/settings/ServicesTab.vue';
 import NotificationsTab from '../components/settings/NotificationsTab.vue';
+import ModalDialog from '../components/shared/ModalDialog.vue';
 
+const router = useRouter();
 const configStore = useConfigStore();
 const daemonStore = useDaemonStore();
 const saving = ref(false);
@@ -22,12 +26,74 @@ const daemonPushType = ref<'success' | 'error'>('success');
 const activeTab = ref('general');
 const googleTabRef = ref<InstanceType<typeof GoogleTab> | null>(null);
 
+// --- Dirty check: detectar cambios sin guardar ---
+const savedSnapshot = ref('');
+const showUnsavedModal = ref(false);
+const dirty = ref(false);
+// Acción pendiente: cambio de tab o navegación a ruta
+const pendingAction = ref<{ type: 'tab'; id: string } | { type: 'route'; path: string } | null>(null);
+
+function takeSnapshot() {
+  savedSnapshot.value = JSON.stringify(configStore.config);
+  dirty.value = false;
+}
+
+watch(() => JSON.stringify(configStore.config), (current) => {
+  if (!savedSnapshot.value) return;
+  dirty.value = current !== savedSnapshot.value;
+});
+
+function switchTab(tabId: string) {
+  if (tabId === activeTab.value) return;
+  if (dirty.value) {
+    pendingAction.value = { type: 'tab', id: tabId };
+    showUnsavedModal.value = true;
+  } else {
+    activeTab.value = tabId;
+  }
+}
+
+// Guard de navegación: bloquear salida si hay cambios sin guardar
+onBeforeRouteLeave((to) => {
+  if (dirty.value) {
+    pendingAction.value = { type: 'route', path: to.path };
+    showUnsavedModal.value = true;
+    return false; // bloquear navegación
+  }
+});
+
+function discardAndApply() {
+  const restored = JSON.parse(savedSnapshot.value);
+  Object.assign(configStore.config, restored);
+  showUnsavedModal.value = false;
+  const action = pendingAction.value;
+  pendingAction.value = null;
+  if (action?.type === 'tab') {
+    activeTab.value = action.id;
+  } else if (action?.type === 'route') {
+    router.push(action.path);
+  }
+}
+
+async function saveAndApply() {
+  showUnsavedModal.value = false;
+  await saveConfig();
+  const action = pendingAction.value;
+  pendingAction.value = null;
+  if (action?.type === 'tab') {
+    activeTab.value = action.id;
+  } else if (action?.type === 'route') {
+    router.push(action.path);
+  }
+}
+
 const tabs = computed(() => [
   { id: 'general', label: 'General', enabled: true },
   { id: 'capture', label: 'Captura', enabled: true },
   { id: 'odoo', label: 'Odoo', enabled: true },
   { id: 'vcs', label: 'Repositorios', enabled: true },
   { id: 'ai', label: 'IA', enabled: true },
+  { id: 'agent', label: 'Agente', enabled: true },
   { id: 'google', label: 'Google', enabled: true },
   { id: 'services', label: 'Servicios', enabled: true },
   { id: 'notifications', label: 'Notificaciones', enabled: true },
@@ -35,6 +101,7 @@ const tabs = computed(() => [
 
 onMounted(async () => {
   await configStore.load();
+  takeSnapshot();
   await daemonStore.captureHealthCheck();
   if (daemonStore.connected) {
     await refreshIntegrationStatus();
@@ -51,6 +118,7 @@ async function saveConfig() {
   daemonPushResult.value = null;
   try {
     await configStore.save(configStore.config);
+    takeSnapshot();
     if (daemonStore.connected) {
       const result = await configStore.pushToDaemon();
       if (result.status === 'ok') {
@@ -97,7 +165,7 @@ function handleDisconnectGoogle() {
         <button
           v-for="tab in tabs" :key="tab.id" type="button"
           class="tab" :class="{ active: activeTab === tab.id }"
-          @click="activeTab = tab.id"
+          @click="switchTab(tab.id)"
         >{{ tab.label }}</button>
       </div>
 
@@ -117,6 +185,10 @@ function handleDisconnectGoogle() {
       />
       <AITab
         v-show="activeTab === 'ai'"
+        @message="handleMessage"
+      />
+      <AgentTab
+        v-show="activeTab === 'agent'"
         @message="handleMessage"
       />
       <GoogleTab
@@ -146,6 +218,14 @@ function handleDisconnectGoogle() {
         <span v-if="message" class="save-msg" :class="messageType">{{ message }}</span>
       </div>
     </form>
+
+    <ModalDialog title="Cambios sin guardar" :open="showUnsavedModal" @close="showUnsavedModal = false">
+      <p class="unsaved-text">Hay cambios sin guardar en esta pestana. ¿Que quieres hacer?</p>
+      <template #footer>
+        <button type="button" class="btn btn-secondary" @click="discardAndApply">Descartar</button>
+        <button type="button" class="btn btn-primary" @click="saveAndApply">Guardar y cambiar</button>
+      </template>
+    </ModalDialog>
   </div>
 </template>
 
@@ -221,4 +301,10 @@ function handleDisconnectGoogle() {
 .save-msg { font-size: 13px; }
 .save-msg.success { color: var(--success); }
 .save-msg.error { color: var(--error); }
+
+.unsaved-text {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
 </style>

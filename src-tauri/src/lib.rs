@@ -3,7 +3,7 @@ mod commands;
 mod models;
 mod server_process;
 
-use commands::{auth, config, daemon};
+use commands::{agent, auth, config, daemon};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -93,6 +93,12 @@ pub fn run() {
             auth::store_credential,
             auth::get_credential,
             auth::delete_credential,
+            // Agent
+            agent::check_claude_cli,
+            agent::clone_agents_repo,
+            agent::update_agents_repo,
+            agent::generate_custom_agents,
+            agent::get_agents_repo_info,
             // Service control
             server_process::start_capture_service,
             server_process::stop_capture_service,

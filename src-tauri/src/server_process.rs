@@ -48,12 +48,24 @@ pub fn start_server() {
             }
         }
     } else {
-        match Command::new("python3")
+        // En desarrollo, intentar usar el venv del daemon si existe
+        let venv_python_candidates = [
+            "daemon/.venv/bin/python".to_string(),
+            format!("{}/daemon/.venv/bin/python",
+                std::env::current_dir().unwrap_or_default().display()),
+            "/opt/Mimir/mimir-app/daemon/.venv/bin/python".to_string(),
+        ];
+        let python = venv_python_candidates.iter()
+            .find(|p| std::path::Path::new(p).exists())
+            .cloned()
+            .unwrap_or_else(|| "python3".to_string());
+
+        match Command::new(&python)
             .args(["-m", "mimir_daemon.api_server"])
             .spawn()
         {
             Ok(child) => {
-                eprintln!("[mimir] mimir-server arrancado via python3 (pid: {})", child.id());
+                eprintln!("[mimir] mimir-server arrancado via {} (pid: {})", python, child.id());
                 *guard = Some(child);
             }
             Err(e) => {

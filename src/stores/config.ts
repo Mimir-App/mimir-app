@@ -51,6 +51,20 @@ const DEFAULT_CONFIG: AppConfig = {
   notification_conflicts: true,
   notification_todos: true,
   odoo_refresh_interval_minutes: 60,
+  onboarding_completed: false,
+  generation_fallback: 'disabled' as const,
+  agents_repo_url: '',
+  agents_repo_enabled: false,
+  agents_custom_prompt: '',
+  agents_auto_update: false,
+  agents_update_mode: 'startup_interval' as const,
+  agents_update_interval_hours: 12,
+  agents_update_time: '08:00',
+  section_dashboard: false,
+  section_issues: false,
+  section_merge_requests: false,
+  section_discover: false,
+  section_timesheets: false,
 };
 
 export const useConfigStore = defineStore('config', () => {

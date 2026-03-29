@@ -3,21 +3,22 @@
 Analiza datos de actividad y genera bloques de imputacion para Odoo. NO ejecutes comandos. Devuelve SOLO JSON.
 
 ## Datos de entrada
-- `signals`: señales desktop (t=hora, app, title, ctx=context_key, meet=1 si reunion, cal=evento calendar)
-- `gitlab_events`/`github_events`: actividad VCS (t=hora, type, title, pid=project_id, push.ref=rama)
-- `calendar_events`: reuniones (summary, start, end, is_meeting)
+- `signals`: spans de actividad desktop agrupados (from/to=HH:MM, app, ctx=context_key, branch, n=num señales, titles=titulos unicos max 5, meet=1 si reunion, cal=evento calendar). Campos vacios omitidos
+- `gitlab_events`: actividad GitLab (t=HH:MM, type, target, title, iid, pid=project_id, push={ref,action,commits}). Campos vacios omitidos
+- `github_events`: actividad GitHub (t=HH:MM, type, title, repo, id). Campos vacios omitidos
+- `calendar_events`: reuniones (name, from/to=HH:MM, meet=1 si reunion). Campos vacios omitidos
 - `projects`: proyectos Odoo (id, name)
 - `tasks_by_project`: tareas por project_id (id, name)
 - `branch_task_hints`: ramas detectadas con patron proyecto_tarea (ej: {"gextia":["8119"]})
 - `preserved_blocks`: bloques confirmados — NO solapar
-- `context_mappings`: mapeos aprendidos context_key → proyecto Odoo
+- `context_mappings`: mapeos aprendidos (ctx=context_key, pid=project_id, tid=task_id). Campos vacios omitidos
 
 ## Reglas
 
 ### Agrupacion
-1. Señales con meet=1 consecutivas → bloque "meeting". Nombre viene de calendar_events o campo cal
+1. Spans con meet=1 → bloque "meeting". Nombre viene de calendar_events o campo cal
 2. Eventos VCS agrupados por proyecto. Separar si hueco >30min
-3. Señales asignan duracion (tiempo real). Sin señales, estimar por timestamps VCS
+3. Spans definen duracion real (from→to, n=señales). Sin spans, estimar por timestamps VCS
 
 ### Matching Odoo
 1. `branch_task_hints` ya extrae proyecto_tarea de ramas. Buscar proyecto en `projects` por nombre, tarea en `tasks_by_project` por numero en nombre

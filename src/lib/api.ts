@@ -425,4 +425,20 @@ export const api = {
     if (await isTauri()) return tauriInvoke('mark_all_notifications_read');
     return httpPut('/notifications/read-all', {});
   },
+  // --- Agent / Claude CLI ---
+  async checkClaudeCli(): Promise<{ installed: boolean; authenticated: boolean; version: string | null; account: string | null }> {
+    return tauriInvoke('check_claude_cli');
+  },
+  async cloneAgentsRepo(url: string): Promise<{ success: boolean; path: string; agent_count: number }> {
+    return tauriInvoke('clone_agents_repo', { url });
+  },
+  async updateAgentsRepo(): Promise<{ success: boolean; updated: boolean; message: string }> {
+    return tauriInvoke('update_agents_repo');
+  },
+  async generateCustomAgents(prompt: string): Promise<{ success: boolean; output: string; path: string }> {
+    return tauriInvoke('generate_custom_agents', { prompt });
+  },
+  async getAgentsRepoInfo(): Promise<{ exists: boolean; path?: string; remote_url?: string; last_commit?: string; agent_count?: number; has_claude_md?: boolean; has_claude_dir?: boolean }> {
+    return tauriInvoke('get_agents_repo_info');
+  },
 };

@@ -57,6 +57,21 @@ pub struct AppConfig {
     pub notification_changes_requested: bool,
     pub notification_conflicts: bool,
     pub notification_todos: bool,
+    pub odoo_refresh_interval_minutes: u32,
+    pub onboarding_completed: bool,
+    pub generation_fallback: String,
+    pub agents_repo_url: String,
+    pub agents_repo_enabled: bool,
+    pub agents_custom_prompt: String,
+    pub agents_auto_update: bool,
+    pub agents_update_mode: String,
+    pub agents_update_interval_hours: u32,
+    pub agents_update_time: String,
+    pub section_dashboard: bool,
+    pub section_issues: bool,
+    pub section_merge_requests: bool,
+    pub section_discover: bool,
+    pub section_timesheets: bool,
 }
 
 impl Default for AppConfig {
@@ -114,6 +129,21 @@ impl Default for AppConfig {
             notification_changes_requested: true,
             notification_conflicts: true,
             notification_todos: true,
+            odoo_refresh_interval_minutes: 60,
+            onboarding_completed: false,
+            generation_fallback: "disabled".to_string(),
+            agents_repo_url: String::new(),
+            agents_repo_enabled: false,
+            agents_custom_prompt: String::new(),
+            agents_auto_update: false,
+            agents_update_mode: "startup_interval".to_string(),
+            agents_update_interval_hours: 12,
+            agents_update_time: "08:00".to_string(),
+            section_dashboard: false,
+            section_issues: false,
+            section_merge_requests: false,
+            section_discover: false,
+            section_timesheets: false,
         }
     }
 }

@@ -214,38 +214,104 @@ async def get_generation_data(request: Request, date: str = Query(...)) -> dict:
         len(tasks_by_project), len(preserved_blocks), branch_task_hints,
     )
 
-    # Compactar datos para reducir tokens enviados al LLM
-    # Señales: solo campos relevantes
-    compact_signals = [
-        {
-            "t": s["timestamp"][11:19],  # solo HH:MM:SS
-            "app": s.get("app_name", ""),
-            "title": (s.get("window_title") or "")[:80],
-            "ctx": s.get("context_key", ""),
-            "proj": s.get("project_path", ""),
-            "branch": s.get("git_branch", ""),
-            "meet": s.get("is_meeting", 0),
-            "cal": s.get("calendar_event", ""),
-        }
-        for s in signals
-    ]
+    # --- Compactar datos para reducir tokens enviados al LLM ---
 
-    # GitLab events: solo campos relevantes
+    def _strip_empty(d: dict) -> dict:
+        """Elimina campos con valor falsy (vacío, 0, None) de un dict."""
+        return {k: v for k, v in d.items() if v}
+
+    # Señales: agregar en spans (misma app+ctx+branch, gap <= 5min)
+    spans: list[dict] = []
+    for s in signals:
+        t = s["timestamp"][11:16]  # HH:MM
+        app = s.get("app_name", "")
+        ctx = s.get("context_key", "")
+        branch = s.get("git_branch", "")
+        meet = s.get("is_meeting", 0)
+        cal = s.get("calendar_event", "")
+        title = (s.get("window_title") or "")[:80]
+
+        # Calcular minutos para detectar gaps
+        parts = t.split(":")
+        t_min = int(parts[0]) * 60 + int(parts[1])
+
+        # Intentar extender el span actual
+        if spans:
+            cur = spans[-1]
+            cur_end_parts = cur["to"].split(":")
+            cur_end_min = int(cur_end_parts[0]) * 60 + int(cur_end_parts[1])
+            same_group = (
+                cur.get("app") == app
+                and cur.get("ctx") == ctx
+                and cur.get("branch") == branch
+                and cur.get("meet") == meet
+                and (t_min - cur_end_min) <= 5
+            )
+            if same_group:
+                cur["to"] = t
+                cur["n"] += 1
+                if title and title not in cur["_titles_set"]:
+                    cur["_titles_set"].add(title)
+                    cur["titles"].append(title)
+                if cal and not cur.get("cal"):
+                    cur["cal"] = cal
+                continue
+
+        # Nuevo span
+        span: dict = {
+            "from": t, "to": t, "app": app, "n": 1,
+            "ctx": ctx, "branch": branch, "meet": meet, "cal": cal,
+            "titles": [title] if title else [],
+            "_titles_set": {title} if title else set(),
+        }
+        spans.append(span)
+
+    # Limpiar spans: quitar set interno, truncar titles, eliminar campos vacíos
+    compact_signals = []
+    for sp in spans:
+        del sp["_titles_set"]
+        sp["titles"] = sp["titles"][:5]  # max 5 títulos únicos por span
+        compact_signals.append(_strip_empty(sp))
+
+    # GitLab events: solo campos relevantes, sin vacíos
     compact_gitlab = [
-        {
-            "t": (e.get("created_at") or "")[11:19],
+        _strip_empty({
+            "t": (e.get("created_at") or "")[11:16],
             "type": e.get("type", ""),
             "target": e.get("target_type", ""),
             "title": (e.get("target_title") or "")[:120],
             "iid": e.get("target_iid"),
             "pid": e.get("project_id"),
-            "push": {
+            "push": _strip_empty({
                 "ref": e["push_data"]["ref"],
                 "action": e["push_data"].get("action", ""),
                 "commits": e["push_data"].get("commit_count", 0),
-            } if e.get("push_data") else None,
-        }
+            }) if e.get("push_data") else None,
+        })
         for e in gitlab_events
+    ]
+
+    # GitHub events: compactar (antes se enviaban crudos)
+    compact_github = [
+        _strip_empty({
+            "t": (e.get("created_at") or "")[11:16],
+            "type": e.get("target_type", e.get("type", "")),
+            "title": (e.get("target_title") or "")[:120],
+            "repo": e.get("repo", ""),
+            "id": e.get("target_id"),
+        })
+        for e in github_events
+    ]
+
+    # Calendar events: compactar (antes se enviaban crudos)
+    compact_calendar = [
+        _strip_empty({
+            "name": e.get("summary", ""),
+            "from": (e.get("start") or "")[11:16],
+            "to": (e.get("end") or "")[11:16],
+            "meet": 1 if e.get("is_meeting") else 0,
+        })
+        for e in calendar_events
     ]
 
     # Proyectos: solo id y name
@@ -257,27 +323,37 @@ async def get_generation_data(request: Request, date: str = Query(...)) -> dict:
         for pid, tasks in tasks_by_project.items()
     }
 
-    # Bloques preservados: solo rangos y proyecto
+    # Bloques preservados: solo rangos y proyecto, sin vacíos
     compact_preserved = [
-        {
+        _strip_empty({
             "start": b["start_time"][:16],
             "end": b["end_time"][:16],
             "project": b.get("odoo_project_name", ""),
             "task": b.get("odoo_task_name", ""),
-        }
+        })
         for b in preserved_blocks
+    ]
+
+    # Context mappings: compactar (antes se enviaban crudos)
+    compact_mappings = [
+        _strip_empty({
+            "ctx": m.get("context_key", ""),
+            "pid": m.get("odoo_project_id"),
+            "tid": m.get("odoo_task_id"),
+        })
+        for m in mappings
     ]
 
     return {
         "date": date,
         "signals": compact_signals,
         "gitlab_events": compact_gitlab,
-        "github_events": github_events,
-        "calendar_events": calendar_events,
+        "github_events": compact_github,
+        "calendar_events": compact_calendar,
         "projects": compact_projects,
         "tasks_by_project": compact_tasks,
         "preserved_blocks": compact_preserved,
-        "context_mappings": mappings,
+        "context_mappings": compact_mappings,
         "branch_task_hints": branch_task_hints,
     }
 

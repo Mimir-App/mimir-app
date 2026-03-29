@@ -61,7 +61,7 @@ async function loadNotes(issue: GitLabIssue) {
       const [owner, repo] = issue.project_path.split('/');
       notes.value = await api.getGithubIssueComments(owner, repo, issue.iid, perPage);
     } else {
-      const projectId = encodeURIComponent(issue.project_path);
+      const projectId = issue.project_path;
       notes.value = await api.getIssueNotes(projectId, issue.iid, perPage);
     }
   } catch {

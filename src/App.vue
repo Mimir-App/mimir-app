@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import AppSidebar from './components/layout/AppSidebar.vue';
 import AppHeader from './components/layout/AppHeader.vue';
 import { useDaemonStore } from './stores/daemon';
 import { useConfigStore } from './stores/config';
 import { useOdooStore } from './stores/odoo';
 
+const route = useRoute();
+const router = useRouter();
 const daemonStore = useDaemonStore();
 const configStore = useConfigStore();
 const odooStore = useOdooStore();
@@ -43,6 +46,11 @@ onMounted(async () => {
   await configStore.load();
   applyTheme(configStore.config.theme);
   applyZoomLevel(configStore.config.font_size);
+
+  // Redirect a onboarding si no se ha completado
+  if (!configStore.config.onboarding_completed && route.path !== '/onboarding') {
+    router.push('/onboarding');
+  }
 
   // Health check de ambos procesos + push config con retry
   await daemonStore.captureHealthCheck();
@@ -83,7 +91,10 @@ watch(() => configStore.config.font_size, (size) => {
 </script>
 
 <template>
-  <div class="app-layout">
+  <div v-if="route.path === '/onboarding'">
+    <router-view />
+  </div>
+  <div v-else class="app-layout">
     <AppSidebar />
     <div class="app-main">
       <AppHeader />
