@@ -4,7 +4,13 @@ Analiza datos de actividad y genera bloques de imputacion para Odoo. NO ejecutes
 
 ## Datos de entrada
 
-- `signals`: spans de actividad desktop (from/to=HH:MM, app, ctx=context_key, branch, n=num señales, titles=titulos unicos max 5, meet=1 si reunion, cal=evento calendar). Campos vacios omitidos
+- `signals`: grupos de actividad desktop agrupados por ctx+branch. Campos:
+  - ctx=context_key, branch=rama git, n=numero total de señales acumuladas
+  - from/to=HH:MM (primera/ultima señal del grupo)
+  - ranges=["HH:MM-HH:MM",...] rangos temporales individuales del grupo (usar para calcular start_time/end_time de bloques)
+  - app=nombre app (si una sola) o apps={nombre: conteo} (si varias apps en el grupo)
+  - titles=titulos unicos max 5, meet=1 si reunion, cal=evento calendar
+  - Campos vacios omitidos
 - `gitlab_events`: actividad GitLab (t=HH:MM, type, target, title, iid, pid=project_id, push={ref,action,commits}). Campos vacios omitidos
 - `github_events`: actividad GitHub (t=HH:MM, type, title, repo, id). Campos vacios omitidos
 - `calendar_events`: reuniones (name, from/to=HH:MM, meet=1 si videollamada, pid/pname/task_pattern/type si resueltos por TOML). Campos vacios omitidos
@@ -29,8 +35,8 @@ Identificar intervalos cubiertos por `preserved_blocks`. Ningun bloque generado 
 - Si no tiene datos TOML, buscar tarea mensual en tasks_by_project que coincida con el nombre de la reunion (Daily, Refinamiento, etc.)
 
 ### Paso 3: Actividad de desarrollo
-- Agrupar signals consecutivos por mismo ctx + branch
-- Separar en bloques distintos si hay gap > 30 minutos entre signals del mismo ctx
+- Cada signal ya esta agrupado por ctx+branch. Usar `ranges` para determinar los intervalos de actividad
+- Cada rango en `ranges` puede ser un bloque independiente, o fusionar rangos cercanos (<30 min gap) en un solo bloque
 - Correlacionar gitlab_events/github_events con signals del mismo ctx/repo/branch
 - type=`development` por defecto. Si hay eventos de code review (MR review, comentarios) → type=`review`
 - Si hay `browser_history`, usarlo como evidencia complementaria: visitas a github.com confirman desarrollo, docs.google.com indica documentacion, jira/linear indica gestion. NO genera bloques por si solo — complementa signals existentes
@@ -66,4 +72,6 @@ Identificar intervalos cubiertos por `preserved_blocks`. Ningun bloque generado 
 - Descripcion: patron "[Accion] en [proyecto]: [detalle]" (ej: "Desarrollo en Gextia: migracion modulo stock, 3 commits en rama feat/gextia_8119")
 - No inventar datos que no esten en la entrada
 - start_time y end_time en formato ISO 8601: YYYY-MM-DDTHH:MM:SS
-- duration_minutes debe coincidir con la diferencia entre start_time y end_time
+- **Los minutos de start_time y end_time siempre deben acabar en 0 o 5** (ej: 08:00, 08:05, 08:10, NO 08:03 o 08:17). Redondear al múltiplo de 5 más cercano
+- duration_minutes debe coincidir con la diferencia entre start_time y end_time y ser múltiplo de 5
+- Si el prompt indica un target de horas, los bloques generados deben sumar ese total

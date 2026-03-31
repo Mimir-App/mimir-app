@@ -280,8 +280,8 @@ export const api = {
     return httpPost(`/blocks/${blockId}/generate-description`);
   },
 
-  async generateBlocksWithAgent(date: string) {
-    if (await isTauri()) return tauriInvoke('generate_blocks_with_agent', { date });
+  async generateBlocksWithAgent(date: string, targetHours?: number) {
+    if (await isTauri()) return tauriInvoke('generate_blocks_with_agent', { date, targetHours });
     throw new Error('Generación de bloques solo disponible en la app de escritorio');
   },
 
@@ -346,19 +346,19 @@ export const api = {
     return httpPut(`/items/${type}/${id}/preferences`, body);
   },
 
-  async searchGitlabIssues(q: string): Promise<GitLabIssue[]> {
-    if (await isTauri()) return tauriInvoke('search_gitlab_issues', { q });
-    return httpGet(`/gitlab/issues/search?q=${encodeURIComponent(q)}`);
+  async searchGitlabIssues(q: string, page: number = 1): Promise<GitLabIssue[]> {
+    if (await isTauri()) return tauriInvoke('search_gitlab_issues', { q, page });
+    return httpGet(`/gitlab/issues/search?q=${encodeURIComponent(q)}&page=${page}`);
   },
 
-  async searchGithubIssues(q: string): Promise<GitLabIssue[]> {
-    if (await isTauri()) return tauriInvoke('search_github_issues', { q });
-    return httpGet(`/github/issues/search?q=${encodeURIComponent(q)}`);
+  async searchGithubIssues(q: string, page: number = 1): Promise<GitLabIssue[]> {
+    if (await isTauri()) return tauriInvoke('search_github_issues', { q, page });
+    return httpGet(`/github/issues/search?q=${encodeURIComponent(q)}&page=${page}`);
   },
 
-  async searchGithubPullRequests(q: string): Promise<GitLabMergeRequest[]> {
-    if (await isTauri()) return tauriInvoke('search_github_pull_requests', { q });
-    return httpGet(`/github/pull_requests/search?q=${encodeURIComponent(q)}`);
+  async searchGithubPullRequests(q: string, page: number = 1): Promise<GitLabMergeRequest[]> {
+    if (await isTauri()) return tauriInvoke('search_github_pull_requests', { q, page });
+    return httpGet(`/github/pull_requests/search?q=${encodeURIComponent(q)}&page=${page}`);
   },
 
   async getFollowedIssues(): Promise<GitLabIssue[]> {
@@ -386,9 +386,9 @@ export const api = {
     return httpPut(`/odoo/entries/${entryId}`, body);
   },
 
-  async searchMergeRequests(q: string): Promise<GitLabMergeRequest[]> {
-    if (await isTauri()) return tauriInvoke('search_gitlab_merge_requests', { q });
-    return httpGet(`/gitlab/merge_requests/search?q=${encodeURIComponent(q)}`);
+  async searchMergeRequests(q: string, page: number = 1): Promise<GitLabMergeRequest[]> {
+    if (await isTauri()) return tauriInvoke('search_gitlab_merge_requests', { q, page });
+    return httpGet(`/gitlab/merge_requests/search?q=${encodeURIComponent(q)}&page=${page}`);
   },
   async getFollowedMergeRequests(): Promise<GitLabMergeRequest[]> {
     if (await isTauri()) return tauriInvoke('get_followed_merge_requests');

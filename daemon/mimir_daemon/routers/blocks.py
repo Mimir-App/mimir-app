@@ -165,6 +165,17 @@ async def _build_generation_data(
         target_month = ""
         target_year = ""
 
+    # --- Filtro web: si browser_history activo, excluir señales web (redundantes) ---
+    if (app_config or {}).get("capture_browser_history", False):
+        original_count = len(signals)
+        signals = [s for s in signals if not (s.get("context_key", "").startswith("web:"))]
+        if original_count != len(signals):
+            logger.info(
+                "Filtro web: %d -> %d señales (-%d%%)",
+                original_count, len(signals),
+                round(100 * (original_count - len(signals)) / max(original_count, 1)),
+            )
+
     # --- Señales compactadas (necesarias para resolución TOML) ---
     spans: list[dict] = []
     for s in signals:
@@ -213,6 +224,79 @@ async def _build_generation_data(
         del sp["_titles_set"]
         sp["titles"] = sp["titles"][:5]
         compact_signals.append(_strip_empty(sp))
+
+    # --- Segunda pasada: compactación agresiva por ctx+branch ---
+    agg: dict[str, dict] = {}
+    for sp in compact_signals:
+        ctx = sp.get("ctx", "")
+        branch = sp.get("branch", "")
+        key = f"{ctx}|{branch}"
+
+        if key not in agg:
+            agg[key] = {
+                "ctx": ctx, "branch": branch,
+                "n": 0, "from": sp.get("from", ""), "to": sp.get("to", ""),
+                "intervals": [], "apps": {},
+                "titles": [], "_titles_set": set(),
+                "meet": 0, "cal": "",
+            }
+
+        g = agg[key]
+        g["n"] += sp.get("n", 1)
+        fr, to = sp.get("from", ""), sp.get("to", "")
+        g["intervals"].append((fr, to))
+        if fr < g["from"]:
+            g["from"] = fr
+        if to > g["to"]:
+            g["to"] = to
+
+        app = sp.get("app", "")
+        if app:
+            g["apps"][app] = g["apps"].get(app, 0) + sp.get("n", 1)
+
+        for t in sp.get("titles", []):
+            if t not in g["_titles_set"] and len(g["titles"]) < 5:
+                g["_titles_set"].add(t)
+                g["titles"].append(t)
+
+        if sp.get("meet"):
+            g["meet"] = 1
+        if sp.get("cal") and not g["cal"]:
+            g["cal"] = sp["cal"]
+
+    # Fusionar intervalos adyacentes y construir resultado
+    compact_signals = []
+    for g in sorted(agg.values(), key=lambda x: x.get("from", "")):
+        intervals = sorted(g["intervals"])
+        merged: list[tuple[str, str]] = []
+        for start, end in intervals:
+            s_min = int(start[:2]) * 60 + int(start[3:5]) if len(start) >= 5 else 0
+            if merged:
+                prev_end = merged[-1][1]
+                pe_min = int(prev_end[:2]) * 60 + int(prev_end[3:5]) if len(prev_end) >= 5 else 0
+                if s_min - pe_min <= 30:
+                    merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+                    continue
+            merged.append((start, end))
+
+        ranges = [f"{s}-{e}" if s != e else s for s, e in merged]
+
+        entry: dict = {"ctx": g["ctx"], "n": g["n"], "from": g["from"], "to": g["to"], "ranges": ranges}
+        if g["branch"]:
+            entry["branch"] = g["branch"]
+        if len(g["apps"]) > 1:
+            entry["apps"] = g["apps"]
+        elif g["apps"]:
+            entry["app"] = next(iter(g["apps"]))
+        if g["titles"]:
+            entry["titles"] = g["titles"]
+        if g["meet"]:
+            entry["meet"] = 1
+        if g["cal"]:
+            entry["cal"] = g["cal"]
+        compact_signals.append(_strip_empty(entry))
+
+    logger.info("Compactación: %d señales -> %d spans -> %d grupos", len(signals), len(spans), len(compact_signals))
 
     # --- Calendar events: compactar ---
     compact_calendar = [
@@ -400,8 +484,12 @@ async def _build_generation_data(
         result["defaults"] = toml_result["defaults"]
 
     if browser_history:
-        result["browser_history"] = browser_history
-        logger.info("Browser history: %d dominios para %s", len(browser_history), date)
+        # Limitar a top 5 dominios para reducir tokens del prompt
+        result["browser_history"] = browser_history[:5]
+        logger.info(
+            "Browser history: %d dominios (de %d) para %s",
+            min(5, len(browser_history)), len(browser_history), date,
+        )
 
     return result
 
@@ -574,6 +662,11 @@ async def update_block(request: Request, block_id: int, req: BlockUpdateRequest)
         raise HTTPException(404, "Bloque no encontrado")
     updates = {k: v for k, v in req.model_dump().items() if v is not None}
     if updates:
+        # Recalcular duración si cambian los timestamps
+        if "start_time" in updates or "end_time" in updates:
+            st = updates.get("start_time", block["start_time"])
+            et = updates.get("end_time", block["end_time"])
+            updates["duration_minutes"] = calc_duration(st, et)
         # Si el bloque ya fue sincronizado, marcarlo como pending para reenvio
         if block.get("status") == "synced":
             updates["status"] = "confirmed"

@@ -313,13 +313,14 @@ class GitHubSource(VCSSource):
     # ------------------------------------------------------------------
 
     async def search_issues(
-        self, query: str, per_page: int = 20
+        self, query: str, per_page: int = 20, page: int = 1
     ) -> list[dict[str, Any]]:
         """Busca issues en GitHub usando la API de búsqueda.
 
         Args:
             query: Texto de búsqueda libre.
             per_page: Número máximo de resultados a devolver.
+            page: Número de página (base 1).
 
         Returns:
             Lista de issues normalizadas.
@@ -330,6 +331,7 @@ class GitHubSource(VCSSource):
                 params={
                     "q": f"{query} is:issue is:open",
                     "per_page": per_page,
+                    "page": page,
                 },
             )
             resp.raise_for_status()
@@ -378,13 +380,14 @@ class GitHubSource(VCSSource):
             return []
 
     async def search_pull_requests(
-        self, query: str, per_page: int = 20
+        self, query: str, per_page: int = 20, page: int = 1
     ) -> list[dict[str, Any]]:
         """Busca pull requests en GitHub usando la API de búsqueda.
 
         Args:
             query: Texto de búsqueda libre.
             per_page: Número máximo de resultados a devolver.
+            page: Número de página (base 1).
 
         Returns:
             Lista de pull requests normalizadas.
@@ -395,6 +398,7 @@ class GitHubSource(VCSSource):
                 params={
                     "q": f"{query} is:pr is:open",
                     "per_page": per_page,
+                    "page": page,
                 },
             )
             resp.raise_for_status()

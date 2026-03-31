@@ -11,8 +11,10 @@ import IssueDetailModal from '../components/issues/IssueDetailModal.vue';
 import MRDetailModal from '../components/merge_requests/MRDetailModal.vue';
 import ContextMenu from '../components/shared/ContextMenu.vue';
 import type { MenuEntry } from '../components/shared/ContextMenu.vue';
+import CustomSelect from '../components/shared/CustomSelect.vue';
 import LoadingState from '../components/shared/LoadingState.vue';
 import EmptyState from '../components/shared/EmptyState.vue';
+import { Eye, ExternalLink, XCircle, Star, Link, Hash } from 'lucide-vue-next';
 
 type DiscoverItem = (GitLabIssue | GitLabMergeRequest) & { _type?: string; _source?: string };
 
@@ -31,14 +33,41 @@ const limit = ref(20);
 const allResults = ref<DiscoverItem[]>([]);
 const loading = ref(false);
 const searched = ref(false);
+const currentPage = ref(1);
+const hasMore = ref(false);
 
-const results = computed(() => allResults.value.slice(0, limit.value));
+const results = computed(() => allResults.value);
 const totalCount = computed(() => allResults.value.length);
 
 // Available sources
 const hasGitlab = computed(() => Boolean(configStore.config.gitlab_url && configStore.config.gitlab_token_stored));
 const hasGithub = computed(() => Boolean(configStore.config.github_token_stored));
 const hasBoth = computed(() => hasGitlab.value && hasGithub.value);
+
+// Options para CustomSelect
+const sourceOptions = computed(() => [
+  { value: 'all' as string | null, label: 'Todas' },
+  { value: 'gitlab' as string | null, label: 'GitLab' },
+  { value: 'github' as string | null, label: 'GitHub' },
+]);
+
+const typeOptions = computed(() => [
+  { value: 'all' as string | null, label: 'Todos' },
+  { value: 'issue' as string | null, label: 'Issues' },
+  { value: 'mr' as string | null, label: 'MRs / PRs' },
+]);
+
+const repoOptions = computed(() => [
+  { value: '' as string | null, label: 'Todos los repos' },
+  ...availableRepos.value.map(r => ({ value: r as string | null, label: r })),
+]);
+
+const limitOptions = computed(() => [
+  { value: 10 as number | null, label: '10' },
+  { value: 20 as number | null, label: '20' },
+  { value: 50 as number | null, label: '50' },
+  { value: 100 as number | null, label: '100' },
+]);
 
 // Auto-set source
 if (!hasGitlab.value && hasGithub.value) source.value = 'github';
@@ -72,7 +101,7 @@ function triggerSearch() {
   debounceTimer = setTimeout(() => executeSearch(), 300);
 }
 
-async function executeSearch() {
+async function executeSearch(page: number = 1) {
   loading.value = true;
   searched.value = true;
   try {
@@ -83,29 +112,41 @@ async function executeSearch() {
     const searchGithub = source.value !== 'gitlab' && hasGithub.value;
 
     if (itemType.value !== 'mr') {
-      if (searchGitlab) promises.push(api.searchGitlabIssues(q) as Promise<DiscoverItem[]>);
-      if (searchGithub) promises.push(api.searchGithubIssues(q) as Promise<DiscoverItem[]>);
+      if (searchGitlab) promises.push(api.searchGitlabIssues(q, page) as Promise<DiscoverItem[]>);
+      if (searchGithub) promises.push(api.searchGithubIssues(q, page) as Promise<DiscoverItem[]>);
     }
     if (itemType.value !== 'issue') {
-      if (searchGitlab) promises.push(api.searchMergeRequests(q) as Promise<DiscoverItem[]>);
-      if (searchGithub) promises.push(api.searchGithubPullRequests(q) as Promise<DiscoverItem[]>);
+      if (searchGitlab) promises.push(api.searchMergeRequests(q, page) as Promise<DiscoverItem[]>);
+      if (searchGithub) promises.push(api.searchGithubPullRequests(q, page) as Promise<DiscoverItem[]>);
     }
 
     const arrays = await Promise.all(promises);
     const combined = arrays.flat();
     combined.sort((a, b) => (b.updated_at ?? '').localeCompare(a.updated_at ?? ''));
-    allResults.value = combined;
+
+    if (page === 1) {
+      allResults.value = combined;
+    } else {
+      // Acumular resultados evitando duplicados
+      const existingIds = new Set(allResults.value.map(r => `${r.project_path}#${r.iid}`));
+      const newItems = combined.filter(r => !existingIds.has(`${r.project_path}#${r.iid}`));
+      allResults.value = [...allResults.value, ...newItems];
+    }
+    currentPage.value = page;
+    hasMore.value = combined.length >= 20;
   } catch {
-    allResults.value = [];
+    if (page === 1) allResults.value = [];
   } finally {
     loading.value = false;
   }
 }
 
 watch(query, triggerSearch);
-watch([source, itemType, repo], () => { if (query.value.length >= 2) executeSearch(); });
+watch([source, itemType, repo], () => { if (query.value.length >= 2) { currentPage.value = 1; executeSearch(); } });
 
-function showMore() { limit.value += 20; }
+async function showMore() {
+  await executeSearch(currentPage.value + 1);
+}
 
 async function refresh() {
   if (query.value.length >= 2) await executeSearch();
@@ -195,15 +236,15 @@ function onContextMenu(item: DiscoverItem, e: MouseEvent) {
   }
 
   ctxItems.value = [
-    { label: 'Ver detalle', icon: '\u25B6', action: () => openDetail(item) },
-    { label: `Ir a ${isGithub ? 'GitHub' : 'GitLab'}`, icon: '\u2197', action: () => openUrl(item.web_url) },
+    { label: 'Ver detalle', icon: Eye, action: () => openDetail(item) },
+    { label: `Ir a ${isGithub ? 'GitHub' : 'GitLab'}`, icon: ExternalLink, action: () => openUrl(item.web_url) },
     { separator: true },
     isFollowed
-      ? { label: 'Dejar de seguir', icon: '\u2716', action: () => unfollowItem(item.id), danger: true }
-      : { label: 'Seguir', icon: '\u2605', action: () => followItem(item) },
+      ? { label: 'Dejar de seguir', icon: XCircle, action: () => unfollowItem(item.id), danger: true }
+      : { label: 'Seguir', icon: Star, action: () => followItem(item) },
     { separator: true },
-    { label: 'Copiar enlace', icon: '\u{1F517}', action: () => navigator.clipboard.writeText(item.web_url) },
-    { label: 'Copiar referencia', icon: '#', action: () => navigator.clipboard.writeText(`${item.project_path}#${item.iid}`) },
+    { label: 'Copiar enlace', icon: Link, action: () => navigator.clipboard.writeText(item.web_url) },
+    { label: 'Copiar referencia', icon: Hash, action: () => navigator.clipboard.writeText(`${item.project_path}#${item.iid}`) },
   ];
   ctxX.value = e.clientX;
   ctxY.value = e.clientY;
@@ -222,36 +263,43 @@ function onContextMenu(item: DiscoverItem, e: MouseEvent) {
     >
       <!-- Filter selects inside toolbar -->
       <div class="discover-filters">
-        <select v-if="hasBoth" v-model="source" class="filter-select">
-          <option value="all">Todas</option>
-          <option value="gitlab">GitLab</option>
-          <option value="github">GitHub</option>
-        </select>
+        <CustomSelect
+          v-if="hasBoth"
+          :modelValue="source"
+          @update:modelValue="(v: string | number | null) => source = (v as 'all' | 'github' | 'gitlab')"
+          :options="sourceOptions"
+          class="filter-custom-select"
+        />
 
-        <select v-model="itemType" class="filter-select">
-          <option value="all">Todos</option>
-          <option value="issue">Issues</option>
-          <option value="mr">MRs / PRs</option>
-        </select>
+        <CustomSelect
+          :modelValue="itemType"
+          @update:modelValue="(v: string | number | null) => itemType = (v as 'all' | 'issue' | 'mr')"
+          :options="typeOptions"
+          class="filter-custom-select"
+        />
 
-        <select v-model="repo" class="filter-select">
-          <option value="">Todos los repos</option>
-          <option v-for="r in availableRepos" :key="r" :value="r">{{ r }}</option>
-        </select>
+        <CustomSelect
+          :modelValue="repo"
+          @update:modelValue="(v: string | number | null) => repo = (v as string) ?? ''"
+          :options="repoOptions"
+          :searchable="availableRepos.length > 5"
+          class="filter-custom-select filter-repo"
+        />
 
         <input
           v-model="query"
           type="text"
           class="discover-search"
           placeholder="Buscar..."
+          aria-label="Buscar issues y merge requests"
         />
 
-        <select v-model.number="limit" class="filter-select limit-select">
-          <option :value="10">10</option>
-          <option :value="20">20</option>
-          <option :value="50">50</option>
-          <option :value="100">100</option>
-        </select>
+        <CustomSelect
+          :modelValue="limit"
+          @update:modelValue="(v: string | number | null) => limit = Number(v) || 20"
+          :options="limitOptions"
+          class="filter-custom-select filter-limit"
+        />
       </div>
     </ViewToolbar>
 
@@ -282,9 +330,9 @@ function onContextMenu(item: DiscoverItem, e: MouseEvent) {
     />
 
     <!-- Show more -->
-    <div v-if="results.length < totalCount && results.length > 0" class="show-more">
-      <button class="btn-show-more" @click="showMore">
-        Mostrar mas ({{ totalCount - results.length }} restantes)
+    <div v-if="hasMore && allResults.length > 0" class="show-more">
+      <button class="btn-show-more" @click="showMore" :disabled="loading">
+        {{ loading ? 'Cargando...' : 'Mostrar más' }}
       </button>
     </div>
 
@@ -318,35 +366,23 @@ function onContextMenu(item: DiscoverItem, e: MouseEvent) {
 
 .discover-filters {
   display: flex;
-  gap: 0;
+  gap: 6px;
   flex: 1;
+  align-items: center;
 }
 
-.filter-select {
-  padding: 6px 10px;
+.filter-custom-select {
+  min-width: 100px;
   font-size: 12px;
-  background: var(--bg-card);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-  border-right: none;
-  outline: none;
-  cursor: pointer;
 }
 
-.filter-select:first-child {
-  border-radius: 4px 0 0 4px;
+.filter-custom-select.filter-repo {
+  min-width: 140px;
 }
 
-.filter-select:focus {
-  border-color: var(--accent);
-  z-index: 1;
-  position: relative;
-}
-
-.limit-select {
-  width: 55px;
-  border-right: 1px solid var(--border);
-  border-radius: 0 4px 4px 0;
+.filter-custom-select.filter-limit {
+  min-width: 60px;
+  max-width: 70px;
 }
 
 .discover-search {

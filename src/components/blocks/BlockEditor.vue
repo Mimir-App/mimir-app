@@ -12,6 +12,8 @@ const emit = defineEmits<{ close: [] }>();
 const blocksStore = useBlocksStore();
 const odooStore = useOdooStore();
 const description = ref(props.block.user_description ?? props.block.ai_description ?? '');
+const startTime = ref(props.block.start_time?.slice(0, 16) ?? '');
+const endTime = ref(props.block.end_time?.slice(0, 16) ?? '');
 const selectedProject = ref<number | null>(props.block.odoo_project_id);
 const selectedTask = ref<number | null>(props.block.odoo_task_id);
 const tasks = ref<OdooTask[]>([]);
@@ -106,6 +108,8 @@ async function save() {
       odoo_task_id: selectedTask.value,
       odoo_project_name: projectName,
       odoo_task_name: taskName,
+      start_time: startTime.value !== props.block.start_time?.slice(0, 16) ? startTime.value + ':00' : undefined,
+      end_time: endTime.value !== props.block.end_time?.slice(0, 16) ? endTime.value + ':00' : undefined,
     });
     emit('close');
   } catch (e) {
@@ -128,6 +132,8 @@ async function saveAndConfirm() {
       odoo_task_id: selectedTask.value,
       odoo_project_name: projectName,
       odoo_task_name: taskName,
+      start_time: startTime.value !== props.block.start_time?.slice(0, 16) ? startTime.value + ':00' : undefined,
+      end_time: endTime.value !== props.block.end_time?.slice(0, 16) ? endTime.value + ':00' : undefined,
     });
     await blocksStore.confirmBlock(props.block.id);
     emit('close');
@@ -142,6 +148,14 @@ async function saveAndConfirm() {
 <template>
   <div class="block-editor">
     <div class="editor-fields">
+      <div class="field field-times">
+        <span class="field-label">Horario</span>
+        <div class="time-inputs">
+          <input type="datetime-local" v-model="startTime" class="time-input" aria-label="Hora inicio" />
+          <span class="time-separator">—</span>
+          <input type="datetime-local" v-model="endTime" class="time-input" aria-label="Hora fin" />
+        </div>
+      </div>
       <label class="field">
         <span class="field-label">Descripcion</span>
         <div class="desc-field-wrapper">
@@ -281,6 +295,32 @@ async function saveAndConfirm() {
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 4px 8px;
+  font-size: 12px;
+}
+
+.field-times {
+  align-items: center;
+}
+
+.time-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.time-input {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.time-separator {
+  color: var(--text-secondary);
   font-size: 12px;
 }
 
