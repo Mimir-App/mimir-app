@@ -23,6 +23,8 @@ class BlockUpdateRequest(BaseModel):
     odoo_task_id: int | None = None
     odoo_project_name: str | None = None
     odoo_task_name: str | None = None
+    start_time: str | None = None
+    end_time: str | None = None
 
 
 class SyncRequest(BaseModel):

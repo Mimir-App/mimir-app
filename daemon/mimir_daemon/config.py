@@ -39,6 +39,7 @@ class DaemonConfig:
     capture_ssh: bool = True
     capture_browser_history: bool = False
     browser_history_browsers: list[str] | None = None  # None = todos los detectados
+    signal_persist_interval: int = 300  # segundos (5 min) entre persistencias de señal
 
     @classmethod
     def load(cls, path: Path | None = None) -> "DaemonConfig":

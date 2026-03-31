@@ -105,12 +105,12 @@ export const useBlocksStore = defineStore('blocks', () => {
   const generating = ref(false);
   const generateError = ref<string | null>(null);
 
-  async function generateBlocks(date?: string) {
+  async function generateBlocks(date?: string, targetHours?: number) {
     generating.value = true;
     generateError.value = null;
     try {
       const d = date ?? selectedDate.value;
-      await api.generateBlocksWithAgent(d);
+      await api.generateBlocksWithAgent(d, targetHours);
       await fetchBlocks(d);
     } catch (e) {
       generateError.value = e instanceof Error ? e.message : String(e);

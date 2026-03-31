@@ -35,14 +35,16 @@ async def get_gitlab_merge_requests(request: Request) -> list:
 
 
 @router.get("/gitlab/issues/search")
-async def search_gitlab_issues(request: Request, q: str = Query(..., min_length=2)) -> list:
+async def search_gitlab_issues(
+    request: Request, q: str = Query(..., min_length=2), page: int = Query(default=1),
+) -> list:
     """Busca issues en GitLab por texto."""
     source_registry = request.app.state.source_registry
     try:
         gitlab = source_registry.get_gitlab()
         if not gitlab:
             return []
-        return await gitlab.search_issues(q)
+        return await gitlab.search_issues(q, page=page)
     except Exception as e:
         logger.error("Error buscando issues en GitLab: %s", e)
         return []
@@ -77,14 +79,16 @@ async def get_gitlab_issue_notes(request: Request, project_id: str, issue_iid: i
 
 
 @router.get("/gitlab/merge_requests/search")
-async def search_gitlab_merge_requests(request: Request, q: str = Query(..., min_length=2)) -> list:
+async def search_gitlab_merge_requests(
+    request: Request, q: str = Query(..., min_length=2), page: int = Query(default=1),
+) -> list:
     """Busca merge requests en GitLab por texto."""
     source_registry = request.app.state.source_registry
     try:
         gitlab = source_registry.get_gitlab()
         if not gitlab:
             return []
-        return await gitlab.search_merge_requests(q)
+        return await gitlab.search_merge_requests(q, page=page)
     except Exception as e:
         logger.error("Error buscando MRs en GitLab: %s", e)
         return []
@@ -189,24 +193,28 @@ async def get_github_pull_requests(request: Request) -> list:
 
 
 @router.get("/github/issues/search")
-async def search_github_issues(request: Request, q: str = Query(), per_page: int = Query(default=20)) -> list:
+async def search_github_issues(
+    request: Request, q: str = Query(), per_page: int = Query(default=20), page: int = Query(default=1),
+) -> list:
     """Busca issues en GitHub."""
     source_registry = request.app.state.source_registry
     try:
         gh = source_registry.get_github()
-        return await gh.search_issues(q, per_page) if gh else []
+        return await gh.search_issues(q, per_page, page=page) if gh else []
     except Exception as e:
         logger.error("Error buscando issues en GitHub: %s", e)
         return []
 
 
 @router.get("/github/pull_requests/search")
-async def search_github_pull_requests(request: Request, q: str = Query(), per_page: int = Query(default=20)) -> list:
+async def search_github_pull_requests(
+    request: Request, q: str = Query(), per_page: int = Query(default=20), page: int = Query(default=1),
+) -> list:
     """Busca pull requests en GitHub."""
     source_registry = request.app.state.source_registry
     try:
         gh = source_registry.get_github()
-        return await gh.search_pull_requests(q, per_page) if gh else []
+        return await gh.search_pull_requests(q, per_page, page=page) if gh else []
     except Exception as e:
         logger.error("Error buscando PRs en GitHub: %s", e)
         return []

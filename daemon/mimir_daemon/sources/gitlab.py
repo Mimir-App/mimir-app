@@ -186,16 +186,17 @@ class GitLabSource(VCSSource):
 
         await asyncio.gather(*[_limited(mr) for mr in mrs])
 
-    async def search_issues(self, query: str, per_page: int = 20) -> list[dict]:
+    async def search_issues(self, query: str, per_page: int = 20, page: int = 1) -> list[dict]:
         """Busca issues en todos los proyectos accesibles."""
         try:
             resp = await self._client.get(
                 "/issues",
-                params={"search": query, "scope": "all", "state": "opened", "per_page": per_page},
+                params={"search": query, "scope": "all", "state": "opened", "per_page": per_page, "page": page},
             )
             resp.raise_for_status()
             issues = resp.json()
             for issue in issues:
+                issue["_type"] = "issue"
                 issue["_source"] = "gitlab"
                 ref = issue.get("references", {}).get("full", "")
                 issue["project_path"] = ref.rsplit("#", 1)[0] if "#" in ref else ""
@@ -246,16 +247,17 @@ class GitLabSource(VCSSource):
                 continue
         return results
 
-    async def search_merge_requests(self, query: str, per_page: int = 20) -> list[dict]:
+    async def search_merge_requests(self, query: str, per_page: int = 20, page: int = 1) -> list[dict]:
         """Busca merge requests en todos los proyectos accesibles."""
         try:
             resp = await self._client.get(
                 "/merge_requests",
-                params={"search": query, "scope": "all", "state": "opened", "per_page": per_page},
+                params={"search": query, "scope": "all", "state": "opened", "per_page": per_page, "page": page},
             )
             resp.raise_for_status()
             mrs = resp.json()
             for mr in mrs:
+                mr["_type"] = "merge_request"
                 mr["_source"] = "gitlab"
                 ref = mr.get("references", {}).get("full", "")
                 mr["project_path"] = ref.split("!")[0].rstrip() if "!" in ref else ""

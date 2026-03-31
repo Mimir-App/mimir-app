@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from collections import Counter
 from datetime import datetime, timezone
 
 from .config import DaemonConfig
@@ -14,7 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 class Poller:
-    """Ciclo asyncio que captura actividad cada N segundos."""
+    """Ciclo asyncio que captura actividad cada N segundos.
+
+    Enfoque híbrido: captura en memoria cada polling_interval (30s)
+    y persiste resúmenes en DB cada signal_persist_interval (5 min).
+    """
 
     def __init__(
         self,
@@ -32,6 +37,9 @@ class Poller:
         self._running = False
         self._paused = False
         self._last_poll: datetime | None = None
+        # Buffer híbrido: acumula señales en memoria entre persistencias
+        self._signal_buffer: list[dict] = []
+        self._last_persist_time: datetime | None = None
 
     @property
     def last_poll(self) -> datetime | None:
@@ -55,9 +63,10 @@ class Poller:
         """Bucle principal de polling."""
         self._running = True
         logger.info(
-            "Poller iniciado: intervalo=%ds, inactividad=%ds",
+            "Poller iniciado: intervalo=%ds, inactividad=%ds, persistencia=%ds",
             self._config.polling_interval,
             self._config.inactivity_threshold,
+            self._config.signal_persist_interval,
         )
 
         try:
@@ -68,6 +77,9 @@ class Poller:
         except asyncio.CancelledError:
             logger.info("Poller cancelado")
         finally:
+            # Persistir buffer pendiente antes de salir
+            if self._signal_buffer:
+                await self._persist_summary()
             self._running = False
 
     async def _poll_once(self) -> None:
@@ -143,34 +155,118 @@ class Poller:
                     browser_apps=browser_apps or compute_context_key.__defaults__[0],
                 )
 
-            # Guardar senal
+            # Acumular señal en buffer (no persistir inmediatamente)
             now = datetime.now(timezone.utc).isoformat()
-            signal_id = await self._db.create_signal(
-                timestamp=now,
-                app_name=window.app_name,
-                window_title=window.window_title,
-                project_path=context.project_path if context else None,
-                git_branch=context.git_branch if context else None,
-                git_remote=context.git_remote if context else None,
-                ssh_host=context.ssh_host if context else None,
-                pid=window.pid,
-                context_key=context_key,
-                last_commit_message=context.last_commit_message if context else None,
-                idle_ms=sys_ctx.idle_ms,
-                audio_app=sys_ctx.audio_app,
-                is_meeting=1 if sys_ctx.is_meeting else 0,
-                workspace=sys_ctx.workspace,
-                calendar_event=calendar_event,
-                calendar_attendees=calendar_attendees,
+            self._signal_buffer.append({
+                "timestamp": now,
+                "app_name": window.app_name,
+                "window_title": window.window_title,
+                "project_path": context.project_path if context else None,
+                "git_branch": context.git_branch if context else None,
+                "git_remote": context.git_remote if context else None,
+                "ssh_host": context.ssh_host if context else None,
+                "pid": window.pid,
+                "context_key": context_key,
+                "last_commit_message": context.last_commit_message if context else None,
+                "idle_ms": sys_ctx.idle_ms,
+                "audio_app": sys_ctx.audio_app,
+                "is_meeting": 1 if sys_ctx.is_meeting else 0,
+                "workspace": sys_ctx.workspace,
+                "calendar_event": calendar_event,
+                "calendar_attendees": calendar_attendees,
+            })
+
+            # Persistir resumen si ha pasado el intervalo
+            now_dt = datetime.now(timezone.utc)
+            should_persist = (
+                self._last_persist_time is None
+                or (now_dt - self._last_persist_time).total_seconds()
+                >= self._config.signal_persist_interval
             )
+            if should_persist and self._signal_buffer:
+                await self._persist_summary()
+                self._last_persist_time = now_dt
 
-            # Bloques se generan bajo demanda (no automaticamente)
-            # La senal ya fue guardada en SQLite por create_signal()
-
-            self._last_poll = datetime.now(timezone.utc)
+            self._last_poll = now_dt
 
         except Exception as e:
             logger.error("Error en poll: %s", e, exc_info=True)
+
+    async def _persist_summary(self) -> None:
+        """Persiste un resumen de las señales acumuladas en el buffer.
+
+        Agrupa por context_key y guarda una señal resumen por grupo
+        con la app predominante, primer timestamp y títulos representativos.
+        """
+        if not self._signal_buffer:
+            return
+
+        # Agrupar por context_key
+        groups: dict[str, list[dict]] = {}
+        for s in self._signal_buffer:
+            key = s.get("context_key", "unknown")
+            groups.setdefault(key, []).append(s)
+
+        # Filtrar señales web si browser_history activo (redundantes)
+        if self._config.capture_browser_history:
+            groups = {k: v for k, v in groups.items() if not k.startswith("web:")}
+
+        persisted = 0
+        for ctx_key, signals in groups.items():
+            app_counter = Counter(s.get("app_name", "") for s in signals)
+            app_name = app_counter.most_common(1)[0][0] if app_counter else ""
+
+            # Títulos únicos (top 5 por frecuencia)
+            title_counter = Counter(
+                s.get("window_title", "") for s in signals if s.get("window_title")
+            )
+            top_title = title_counter.most_common(1)[0][0] if title_counter else ""
+
+            first_ts = min(s["timestamp"] for s in signals)
+            git_branch = next((s["git_branch"] for s in signals if s.get("git_branch")), None)
+            git_remote = next((s["git_remote"] for s in signals if s.get("git_remote")), None)
+            project_path = next((s["project_path"] for s in signals if s.get("project_path")), None)
+            ssh_host = next((s["ssh_host"] for s in signals if s.get("ssh_host")), None)
+            is_meeting = 1 if any(s.get("is_meeting") for s in signals) else 0
+            calendar_event = next(
+                (s["calendar_event"] for s in signals if s.get("calendar_event")), None
+            )
+            calendar_attendees = next(
+                (s["calendar_attendees"] for s in signals if s.get("calendar_attendees")), None
+            )
+            min_idle = min(s.get("idle_ms", 0) for s in signals)
+            audio_app = next(
+                (s["audio_app"] for s in signals if s.get("audio_app")), None
+            )
+
+            await self._db.create_signal(
+                timestamp=first_ts,
+                app_name=app_name,
+                window_title=top_title,
+                project_path=project_path,
+                git_branch=git_branch,
+                git_remote=git_remote,
+                ssh_host=ssh_host,
+                pid=signals[-1].get("pid", 0),
+                context_key=ctx_key,
+                last_commit_message=next(
+                    (s["last_commit_message"] for s in signals if s.get("last_commit_message")),
+                    None,
+                ),
+                idle_ms=min_idle,
+                audio_app=audio_app,
+                is_meeting=is_meeting,
+                workspace=signals[-1].get("workspace"),
+                calendar_event=calendar_event,
+                calendar_attendees=calendar_attendees,
+            )
+            persisted += 1
+
+        logger.info(
+            "Persistido resumen: %d señales -> %d grupos",
+            len(self._signal_buffer), persisted,
+        )
+        self._signal_buffer.clear()
 
     def stop(self) -> None:
         """Detiene el poller."""

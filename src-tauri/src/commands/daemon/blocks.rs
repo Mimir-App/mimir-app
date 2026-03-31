@@ -212,7 +212,10 @@ fn invoke_claude(
 /// Recopila todos los datos del día via mimir-server, los pasa en el prompt
 /// para que Claude no necesite hacer tool calls, y parsea el JSON resultante.
 #[tauri::command]
-pub async fn generate_blocks_with_agent(date: String) -> Result<serde_json::Value, String> {
+pub async fn generate_blocks_with_agent(
+    date: String,
+    target_hours: Option<f64>,
+) -> Result<serde_json::Value, String> {
     let client = get_client();
 
     // 1. Recopilar todos los datos via endpoint unificado del server
@@ -228,11 +231,21 @@ pub async fn generate_blocks_with_agent(date: String) -> Result<serde_json::Valu
         serde_json::to_string_pretty(&gen_data).unwrap_or_default()
     );
 
-    let prompt = format!(
-        "Genera bloques para {date}. NO ejecutes comandos. Devuelve SOLO JSON. Datos:\n\n{data}",
-        date = date,
-        data = data_context
-    );
+    let prompt = if let Some(hours) = target_hours {
+        format!(
+            "Genera bloques para {date} que sumen exactamente {hours:.1} horas de trabajo. \
+             NO ejecutes comandos. Devuelve SOLO JSON. Datos:\n\n{data}",
+            date = date,
+            hours = hours,
+            data = data_context
+        )
+    } else {
+        format!(
+            "Genera bloques para {date}. NO ejecutes comandos. Devuelve SOLO JSON. Datos:\n\n{data}",
+            date = date,
+            data = data_context
+        )
+    };
 
     let debug_file = format!("/tmp/mimir-claude-debug-{}.log", date);
     let cli_start = std::time::Instant::now();

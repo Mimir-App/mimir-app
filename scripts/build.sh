@@ -111,7 +111,9 @@ package_deb() {
     AGENTS_DIR="$REPACK_DIR/usr/share/mimir/agents"
     mkdir -p "$AGENTS_DIR"
     cp "$PROJECT_DIR/.claude/agents/timesheet-generator.md" "$AGENTS_DIR/"
+    cp "$PROJECT_DIR/.claude/agents/timesheet-reviewer.md" "$AGENTS_DIR/"
     chmod 644 "$AGENTS_DIR/timesheet-generator.md"
+    chmod 644 "$AGENTS_DIR/timesheet-reviewer.md"
 
     # Inyectar postinst y prerm para el paquete mimir
     cat > "$REPACK_DIR/DEBIAN/postinst" << 'POSTINST'

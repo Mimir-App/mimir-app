@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, type Component } from 'vue';
 
 export interface SelectOption {
   label: string;
@@ -8,7 +8,7 @@ export interface SelectOption {
 
 export interface MenuItem {
   label: string;
-  icon?: string;
+  icon?: string | Component;
   action: () => void;
   separator?: false;
   disabled?: boolean;
@@ -90,7 +90,10 @@ onUnmounted(() => {
         <div v-if="item.separator" class="menu-separator"></div>
         <div v-else-if="item.select" class="menu-item-select">
           <span class="menu-item-label">
-            <span v-if="item.icon" class="menu-icon">{{ item.icon }}</span>
+            <span v-if="item.icon" class="menu-icon">
+              <component v-if="typeof item.icon !== 'string'" :is="item.icon" :size="14" />
+              <template v-else>{{ item.icon }}</template>
+            </span>
             <span>{{ item.label }}</span>
           </span>
           <div class="select-options">
@@ -109,7 +112,10 @@ onUnmounted(() => {
           :class="{ disabled: item.disabled, danger: item.danger }"
           @click="handleClick(item)"
         >
-          <span v-if="item.icon" class="menu-icon">{{ item.icon }}</span>
+          <span v-if="item.icon" class="menu-icon">
+            <component v-if="typeof item.icon !== 'string'" :is="item.icon" :size="14" />
+            <template v-else>{{ item.icon }}</template>
+          </span>
           <span class="menu-label">{{ item.label }}</span>
         </button>
       </template>
